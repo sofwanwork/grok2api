@@ -1,0 +1,2 @@
+# Shell scripts must keep LF endings for Docker builds.
+*.sh text eol=lf

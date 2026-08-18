@@ -2307,8 +2307,9 @@ const storedLanguage = readStoredLanguage();
 
 void i18n.use(initReactI18next).init({
   resources,
-  lng: storedLanguage === "en" ? "en" : "zh-CN",
-  fallbackLng: "zh-CN",
+  // Prefer English by default (user preference). Only use zh-CN when explicitly stored.
+  lng: storedLanguage === "zh-CN" ? "zh-CN" : "en",
+  fallbackLng: "en",
   interpolation: { escapeValue: false },
 });
 
