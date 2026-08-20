@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/chenyme/grok2api/backend/internal/application/adminauth"
@@ -63,6 +64,14 @@ func ClientAuth(service *clientkeyapp.Service) gin.HandlerFunc {
 		if err != nil {
 			writeOpenAIError(c, clientErrorStatus(err), clientErrorCode(err), clientErrorMessage(err))
 			return
+		}
+		// OpenAI-compatible rate limit headers so agents can back off gracefully.
+		if rpm := value.EffectiveRPMLimit(); rpm > 0 {
+			c.Header("X-RateLimit-Limit", strconv.Itoa(rpm))
+			c.Header("X-RateLimit-Remaining", strconv.Itoa(max(0, rpm-1)))
+		}
+		if concurrent := value.EffectiveMaxConcurrent(); concurrent > 0 {
+			c.Header("X-RateLimit-Concurrency-Limit", strconv.Itoa(concurrent))
 		}
 		defer release()
 		c.Set(ClientKey, value)

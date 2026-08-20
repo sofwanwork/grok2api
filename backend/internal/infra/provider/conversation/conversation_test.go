@@ -928,6 +928,49 @@ func TestConvertResponsesStreamMarksChatReasoningStart(t *testing.T) {
 	}
 }
 
+func TestConvertResponsesStreamChatEmitsReasoningOpaque(t *testing.T) {
+	stream := strings.Join([]string{
+		`event: response.created`,
+		`data: {"type":"response.created","response":{"id":"resp_1","model":"grok-4.5"}}`, "",
+		`event: response.output_item.added`,
+		`data: {"type":"response.output_item.added","item":{"id":"rs_1","type":"reasoning","status":"in_progress"}}`, "",
+		`event: response.reasoning_summary_text.delta`,
+		`data: {"type":"response.reasoning_summary_text.delta","item_id":"rs_1","delta":"thinking"}`, "",
+		`event: response.output_item.done`,
+		`data: {"type":"response.output_item.done","item":{"id":"rs_1","type":"reasoning","status":"completed","encrypted_content":"gAAAAABopaque"}}`, "",
+		`event: response.output_text.delta`,
+		`data: {"type":"response.output_text.delta","delta":"answer"}`, "",
+		`event: response.completed`,
+		`data: {"type":"response.completed","response":{"status":"completed"}}`, "", "",
+	}, "\n")
+	converted, err := io.ReadAll(ConvertResponseStream(io.NopCloser(strings.NewReader(stream)), OperationChat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(converted)
+	if !strings.Contains(text, `"reasoning_content":"thinking"`) {
+		t.Fatalf("missing reasoning summary: %s", text)
+	}
+	if !strings.Contains(text, `"reasoning_opaque":"gAAAAABopaque"`) {
+		t.Fatalf("missing reasoning_opaque delta: %s", text)
+	}
+	if !strings.Contains(text, `"content":"answer"`) {
+		t.Fatalf("missing visible content: %s", text)
+	}
+}
+
+func TestChatResponseIncludesReasoningOpaque(t *testing.T) {
+	parsed := parsedResponse{Text: "answer", Reasoning: "thinking", Signature: "gAAAAABopaque"}
+	result := chatResponse(parsed)
+	message := result["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)
+	if message["reasoning_content"] != "thinking" {
+		t.Fatalf("reasoning_content = %#v", message["reasoning_content"])
+	}
+	if message["reasoning_opaque"] != "gAAAAABopaque" {
+		t.Fatalf("reasoning_opaque = %#v", message["reasoning_opaque"])
+	}
+}
+
 func TestConvertResponsesStreamChatPrefersRawReasoningOverSummary(t *testing.T) {
 	stream := strings.Join([]string{
 		`event: response.created`,

@@ -80,6 +80,8 @@ type ServerConfig struct {
 	ReadTimeout           Duration `yaml:"readTimeout"`
 	RequestTimeout        Duration `yaml:"requestTimeout"`
 	SwaggerEnabled        bool     `yaml:"swaggerEnabled"`
+	// CORS controls browser access to /v1/*. Empty means disabled.
+	CORS CORSConfig `yaml:"cors"`
 }
 
 type FrontendConfig struct {
@@ -299,6 +301,12 @@ type QualityGuardRequestRetryConfig struct {
 type ClientKeyDefaultsConfig struct {
 	RPMLimit      int `yaml:"rpmLimit"`
 	MaxConcurrent int `yaml:"maxConcurrent"`
+}
+
+// CORSConfig controls browser access to the public inference API.
+type CORSConfig struct {
+	AllowedOrigins   []string `yaml:"allowedOrigins"`
+	AllowCredentials bool     `yaml:"allowCredentials"`
 }
 
 // AccountsConfig 定义可热加载的账号池维护策略；默认全部关闭。

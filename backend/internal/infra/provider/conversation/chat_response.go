@@ -7,6 +7,12 @@ func chatResponse(value parsedResponse) map[string]any {
 	if value.Reasoning != "" {
 		message["reasoning_content"] = value.Reasoning
 	}
+	// Build pool returns opaque reasoning as encrypted_content. Surface it as
+	// reasoning_opaque so OpenAI-compatible clients can cache, log, or pass it
+	// back for multi-turn continuity instead of silently dropping the payload.
+	if value.Signature != "" {
+		message["reasoning_opaque"] = value.Signature
+	}
 	finishReason := "stop"
 	if len(value.Calls) > 0 {
 		finishReason = "tool_calls"

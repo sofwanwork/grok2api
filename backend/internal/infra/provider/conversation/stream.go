@@ -314,6 +314,12 @@ func (c *streamConverter) handle(event string, data []byte) error {
 					return err
 				}
 			}
+			// Build pool opaque reasoning: emit the encrypted_content blob as a
+			// reasoning_opaque delta so Chat Completions clients can retain it
+			// across turns. Anthropic Messages already has signature_delta.
+			if c.operation == OperationChat && item.Encrypted != "" {
+				return c.chatDelta(map[string]any{"reasoning_opaque": item.Encrypted})
+			}
 			return c.thinkingDone(item)
 		}
 		if item.Type == "web_search_call" && c.operation == OperationMessages && c.options.AnthropicWebSearch {

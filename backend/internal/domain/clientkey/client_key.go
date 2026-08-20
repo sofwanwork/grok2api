@@ -247,6 +247,22 @@ type Key struct {
 	UpdatedAt     time.Time
 }
 
+// EffectiveRPMLimit returns the enforced RPM limit, or the default when unset.
+func (k Key) EffectiveRPMLimit() int {
+	if k.RPMLimit > 0 {
+		return k.RPMLimit
+	}
+	return DefaultRPMLimit
+}
+
+// EffectiveMaxConcurrent returns the enforced concurrency limit, or the default when unset.
+func (k Key) EffectiveMaxConcurrent() int {
+	if k.MaxConcurrent > 0 {
+		return k.MaxConcurrent
+	}
+	return DefaultMaxConcurrent
+}
+
 // IsAvailable 判断客户端 Key 当前是否可用。
 func (k Key) IsAvailable(now time.Time) bool {
 	if !k.Enabled {

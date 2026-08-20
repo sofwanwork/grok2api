@@ -3,6 +3,7 @@ package relational
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -117,6 +118,18 @@ func configureDatabase(ctx context.Context, db *gorm.DB, dialect string, maxOpen
 		return nil, fmt.Errorf("连接 %s: %w", dialect, err)
 	}
 	return &Database{db: db, dialect: dialect}, nil
+}
+
+// PingContext verifies the underlying database connection is alive.
+func (d *Database) PingContext(ctx context.Context) error {
+	if d == nil {
+		return errors.New("database not configured")
+	}
+	sqlDB, err := d.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.PingContext(ctx)
 }
 
 // Close 关闭底层数据库连接。

@@ -601,7 +601,7 @@ func buildImageCompatibilityStream(operation, responseID, model string, parsed *
 		return nil, err
 	}
 	payload := buildOpenAIResult(operation, responseID, model, *parsed, false)
-	writeStreamDone(&stream, operation, responseID, model, *parsed, payload)
+	writeStreamDone(&stream, operation, responseID, model, *parsed, payload, false)
 	return stream.Bytes(), nil
 }
 

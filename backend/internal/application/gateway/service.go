@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	accountapp "github.com/chenyme/grok2api/backend/internal/application/account"
 	clientkeyapp "github.com/chenyme/grok2api/backend/internal/application/clientkey"
@@ -48,6 +49,7 @@ var (
 	ErrVideoParameterInvalid      = errors.New("视频请求参数无效")
 	ErrVideoOperationUnsupported  = errors.New("视频编辑/延长仅支持路由到 Console grok-imagine-video")
 	ErrLedgerUnavailable          = errors.New("计费账本暂不可用")
+	ErrContextLengthExceeded      = errors.New("当前请求超过模型的上下文长度上限")
 )
 
 const responseOwnershipTTL = 30 * 24 * time.Hour
@@ -919,6 +921,17 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 		input.Body, err = rewriteAliasedModel(input.Body, publicModel, aliasEffort, operation)
 		if err != nil {
 			return nil, err
+		}
+	}
+	// Pre-flight context-length guard: reject requests whose estimated prompt
+	// tokens exceed the model's context window so clients get a stable
+	// OpenAI-standard context_length_exceeded error instead of an opaque
+	// upstream 4xx/5xx after a long conversation.
+	if routeErr == nil {
+		if limit := contextWindowForRoute(route); limit > 0 {
+			if estimatePromptTokens(input.Body) > limit {
+				return nil, ErrContextLengthExceeded
+			}
 		}
 	}
 	if routeErr != nil && !errors.Is(routeErr, clientkeyapp.ErrModelNotAllowed) {
@@ -2051,4 +2064,97 @@ func firstError(values ...error) error {
 		}
 	}
 	return errors.New("未知上游错误")
+}
+
+// contextWindowForRoute returns the advertised context window for a route.
+// The values mirror the static metadata exposed on /v1/models so the gateway
+// can reject oversized prompts before they hit an upstream account.
+func contextWindowForRoute(route modeldomain.Route) int {
+	publicID := modeldomain.ExternalPublicID(route.Provider, route.PublicID)
+	if base, _, ok := modeldomain.ParseReasoningModelAlias(publicID); ok {
+		publicID = base
+	}
+	if window, ok := grokRouteContextWindows[publicID]; ok {
+		return window
+	}
+	return 128000
+}
+
+// grokRouteContextWindows mirrors the per-model metadata served on /v1/models.
+// Keep this in sync with lookupGrokCapability / codex_models.go.
+var grokRouteContextWindows = map[string]int{
+	"grok-4.5":                     500000,
+	"grok-4.6":                     500000,
+	"grok-4.3":                     1000000,
+	"grok-build-0.1":               256000,
+	"grok-4.20-0309-reasoning":     2000000,
+	"grok-4.20-0309-non-reasoning": 2000000,
+	"grok-4.20-multi-agent-0309":   2000000,
+	"grok-3-mini":                  131072,
+	"grok-3-mini-fast":             131072,
+	"grok-composer-2.5-fast":       200000,
+	"grok-chat-fast":               128000,
+	"grok-chat-auto":               128000,
+	"grok-chat-expert":             128000,
+	"grok-chat-heavy":              128000,
+}
+
+// estimatePromptTokens gives a conservative token estimate for a request body.
+// It reuses the same ~4-runes-per-token heuristic as the Web provider so the
+// gateway can reject prompts that obviously exceed the model's context window
+// before any upstream account is consumed.
+func estimatePromptTokens(body []byte) int {
+	if len(body) == 0 {
+		return 0
+	}
+	var parsed struct {
+		Messages []struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// Fall back to a coarse byte-based estimate for non-JSON bodies.
+		return len(body) / 4
+	}
+	var total int
+	estimate := func(text string) {
+		runes := utf8.RuneCountInString(text)
+		total += (runes + 3) / 4
+	}
+	for _, message := range parsed.Messages {
+		var text string
+		if json.Unmarshal(message.Content, &text) == nil {
+			estimate(text)
+			continue
+		}
+		// Multipart content (text + image_url etc.)
+		var parts []map[string]any
+		if json.Unmarshal(message.Content, &parts) == nil {
+			for _, part := range parts {
+				if t, _ := part["text"].(string); t != "" {
+					estimate(t)
+				}
+			}
+		}
+	}
+	if len(parsed.Input) > 0 && !bytes.Equal(parsed.Input, []byte("null")) {
+		var text string
+		if json.Unmarshal(parsed.Input, &text) == nil {
+			estimate(text)
+		} else {
+			var items []map[string]any
+			if json.Unmarshal(parsed.Input, &items) == nil {
+				for _, item := range items {
+					if t, _ := item["text"].(string); t != "" {
+						estimate(t)
+					}
+					if t, _ := item["content"].(string); t != "" {
+						estimate(t)
+					}
+				}
+			}
+		}
+	}
+	return total
 }

@@ -571,7 +571,7 @@ func TestWriteStreamDoneChatIncludesServerSideToolUsage(t *testing.T) {
 		t.Fatalf("payload missing server_side_tool_usage: %#v", payload)
 	}
 	var buf strings.Builder
-	writeStreamDone(&buf, "chat", "resp_test", "m", parsed, payload)
+	writeStreamDone(&buf, "chat", "resp_test", "m", parsed, payload, false)
 	out := buf.String()
 	if !strings.Contains(out, `"server_side_tool_usage"`) {
 		t.Fatalf("final chat chunk missing server_side_tool_usage: %s", out)

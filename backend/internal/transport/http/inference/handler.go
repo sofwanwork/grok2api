@@ -120,6 +120,7 @@ type chatCompletionRequest struct {
 	Model          string `json:"model"`
 	Stream         bool   `json:"stream"`
 	PromptCacheKey string `json:"prompt_cache_key"`
+	MaxTokens      *int   `json:"max_tokens"`
 }
 
 type messagesRequest struct {
@@ -196,6 +197,15 @@ type modelListItem struct {
 	OwnedBy    string                 `json:"owned_by"`
 	Provider   account.Provider       `json:"-"`
 	Capability modeldomain.Capability `json:"-"`
+	// OpenAI-compatible capability metadata so agents (Hermes, opencode, …) can
+	// plan context compaction and feature support without probing.
+	ContextWindow     int      `json:"context_window,omitempty"`
+	MaxOutputTokens   int      `json:"max_output_tokens,omitempty"`
+	Capabilities      []string `json:"capabilities,omitempty"`
+	SupportsVision    bool     `json:"supports_vision,omitempty"`
+	SupportsTools     bool     `json:"supports_tools,omitempty"`
+	SupportsStream    bool     `json:"supports_streaming,omitempty"`
+	SupportsReasoning bool     `json:"supports_reasoning,omitempty"`
 }
 
 func (h *Handler) listModels(c *gin.Context) {
@@ -231,6 +241,12 @@ func (h *Handler) listModels(c *gin.Context) {
 		writeCodexModelCatalog(c, newCodexModelCatalog(items))
 		return
 	}
+	// The OpenAI-compatible /v1/models listing advertises conversation models
+	// only. Image / video / audio / realtime media routes stay reachable via
+	// their dedicated endpoints but must not appear as chat models or agents
+	// will attempt text conversations with them.
+	enrichModelListItems(items)
+	items = filterConversationModelListItems(items)
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": items})
 }
 
@@ -287,6 +303,96 @@ func appendReasoningModelAliases(items []modelListItem) []modelListItem {
 	return result
 }
 
+// filterConversationModelListItems keeps chat/responses-capable models and
+// drops pure media routes (image / image_edit / video / tts / stt / realtime)
+// from the OpenAI-compatible /v1/models listing. The Codex catalog keeps them
+// with visibility:"hide" instead because its protocol enumerates every route.
+func filterConversationModelListItems(items []modelListItem) []modelListItem {
+	filtered := make([]modelListItem, 0, len(items))
+	for _, item := range items {
+		switch item.Capability {
+		case modeldomain.CapabilityImage, modeldomain.CapabilityImageEdit,
+			modeldomain.CapabilityVideo, modeldomain.CapabilityTTS,
+			modeldomain.CapabilitySTT, modeldomain.CapabilityRealtime:
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+// enrichModelListItems injects static per-model capability metadata (context
+// window, max output, vision / tool / reasoning support) so OpenAI-compatible
+// agents can plan compaction and feature use. The Codex catalog path builds
+// its own richer metadata and is unaffected.
+func enrichModelListItems(items []modelListItem) {
+	for index := range items {
+		item := &items[index]
+		capability, _ := lookupGrokCapability(item.Provider, item.ID)
+		item.ContextWindow = capability.contextWindow
+		// Reserve headroom for the prompt; mirrors the truncation_policy limit
+		// advertised in the Codex catalog.
+		item.MaxOutputTokens = modelMaxOutputTokens(item.ID, capability.contextWindow)
+		item.SupportsStream = true
+		item.SupportsVision = capability.imageInput
+		item.SupportsReasoning = modeldomain.SupportsReasoningForProvider(item.Provider, item.ID)
+		item.SupportsTools = item.Capability == modeldomain.CapabilityChat ||
+			item.Capability == modeldomain.CapabilityResponses ||
+			(item.Provider == account.ProviderWeb && item.Capability == modeldomain.CapabilityChat)
+		capabilities := make([]string, 0, 5)
+		if item.SupportsStream {
+			capabilities = append(capabilities, "streaming")
+		}
+		if item.SupportsTools {
+			capabilities = append(capabilities, "tools")
+		}
+		if item.SupportsVision {
+			capabilities = append(capabilities, "vision")
+		}
+		if item.SupportsReasoning {
+			capabilities = append(capabilities, "reasoning")
+		}
+		capabilities = append(capabilities, string(item.Capability))
+		item.Capabilities = capabilities
+	}
+}
+
+// modelMaxOutputTokens returns a conservative completion budget per model.
+// Agents use this to bound max_tokens without exceeding the upstream limit.
+func modelMaxOutputTokens(id string, contextWindow int) int {
+	if limit, ok := grokMaxOutputTokens[id]; ok {
+		return limit
+	}
+	// Default: 10% of the context window, capped at 16k, floored at 4k.
+	limit := contextWindow / 10
+	if limit > 16384 {
+		limit = 16384
+	}
+	if limit < 4096 {
+		limit = 4096
+	}
+	return limit
+}
+
+// grokMaxOutputTokens pins explicit completion budgets where the upstream
+// advertised limit is known; everything else falls back to the heuristic.
+var grokMaxOutputTokens = map[string]int{
+	"grok-4.5":                     16384,
+	"grok-4.6":                     16384,
+	"grok-4.3":                     16384,
+	"grok-build-0.1":               16384,
+	"grok-4.20-0309-reasoning":     16384,
+	"grok-4.20-0309-non-reasoning": 16384,
+	"grok-4.20-multi-agent-0309":   16384,
+	"grok-3-mini":                  8192,
+	"grok-3-mini-fast":             8192,
+	"grok-composer-2.5-fast":       8192,
+	"grok-chat-fast":               8192,
+	"grok-chat-auto":               8192,
+	"grok-chat-expert":             8192,
+	"grok-chat-heavy":              8192,
+}
+
 func (h *Handler) createResponse(c *gin.Context) {
 	h.handleCreate(c, false)
 }
@@ -309,6 +415,10 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 	var request chatCompletionRequest
 	if json.Unmarshal(body, &request) != nil || strings.TrimSpace(request.Model) == "" {
 		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Chat Completions 请求缺少有效 model")
+		return
+	}
+	if request.MaxTokens != nil && *request.MaxTokens <= 0 {
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "max_tokens 必须是正整数")
 		return
 	}
 	clientValue, exists := c.Get(middleware.ClientKey)
@@ -2159,13 +2269,21 @@ func writeGatewayError(c *gin.Context, err error) {
 	case errors.Is(err, gateway.ErrVideoOperationUnsupported):
 		status, code = http.StatusBadRequest, "unsupported_model"
 		message = err.Error()
+	case errors.Is(err, gateway.ErrContextLengthExceeded):
+		status, code = http.StatusBadRequest, "context_length_exceeded"
+		message = err.Error()
 	case errors.As(err, &upstreamFailure):
-		if isSanitizedUpstreamAvailabilityFailure(upstreamFailure) {
+		// OpenAI-standard codes agents auto-handle: quota exhaustion becomes
+		// insufficient_quota (402/429), rate limiting becomes rate_limit_exceeded.
+		if upstreamFailure.QuotaExhausted || upstreamFailure.FreeQuotaExhausted || upstreamFailure.HTTPStatus == http.StatusPaymentRequired {
+			status, code = http.StatusTooManyRequests, "insufficient_quota"
+			message = credentialErrorMessage(code)
+		} else if upstreamFailure.HTTPStatus == http.StatusTooManyRequests {
+			status, code = http.StatusTooManyRequests, "rate_limit_exceeded"
+			message = upstreamFailure.PublicMessage
+		} else if isSanitizedUpstreamAvailabilityFailure(upstreamFailure) {
 			// Gateway mid-tier behavior: never expose upstream upgrade/billing prompts to clients.
 			code = upstreamFailure.ClientCredentialErrorCode()
-			if upstreamFailure.QuotaExhausted || upstreamFailure.FreeQuotaExhausted || upstreamFailure.HTTPStatus == http.StatusPaymentRequired {
-				code = "upstream_unavailable"
-			}
 			status, message = http.StatusServiceUnavailable, credentialErrorMessage(code)
 		} else {
 			status, code, message = upstreamFailure.HTTPStatus, upstreamFailure.Code, upstreamFailure.PublicMessage
@@ -2175,6 +2293,9 @@ func writeGatewayError(c *gin.Context, err error) {
 		}
 	case errors.As(err, &selectionFailure):
 		status, code, message = selectionErrorResponse(c, selectionFailure)
+		if status == http.StatusTooManyRequests {
+			code = "rate_limit_exceeded"
+		}
 	case errors.Is(err, gateway.ErrResponseAccountUnavailable), errors.Is(err, gateway.ErrNoAvailableAccount):
 		status, code = http.StatusServiceUnavailable, "upstream_unavailable"
 		message = "当前没有可用的上游账号"

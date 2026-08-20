@@ -249,6 +249,8 @@ Build does not use one global static model list. Account synchronization reads t
 
 Conversation requests are translated to the Build Responses protocol while preserving the tool, reasoning, multi-turn, and prompt-cache compatibility required by Codex and Claude Code. Build currently exposes no image generation or image editing routes.
 
+Build returns opaque reasoning as `encrypted_content` on `reasoning` output items. When translating to Chat Completions, the gateway surfaces this as `reasoning_opaque` on the assistant message (and as a `reasoning_opaque` delta in streaming) so clients can cache, log, or pass it back for multi-turn continuity. Anthropic Messages translation keeps the existing `signature`/`redacted_thinking` contract.
+
 ### Grok Web
 
 Web uses a built-in catalog filtered by account tier; higher tiers inherit lower-tier models.

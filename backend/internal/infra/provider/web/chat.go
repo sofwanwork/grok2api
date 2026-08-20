@@ -41,6 +41,7 @@ const (
 var (
 	errWebAntiBot    = errors.New("Grok Web anti-bot rejection")
 	errWebUsageLimit = errors.New("Grok Web usage limit reached")
+	errWebRateLimit  = errors.New("Grok Web rate limit reached")
 )
 
 var (
@@ -51,6 +52,9 @@ var (
 type openAIRequest struct {
 	Model              string          `json:"model"`
 	Stream             bool            `json:"stream"`
+	StreamOptions      *struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options"`
 	Input              json.RawMessage `json:"input"`
 	Instructions       string          `json:"instructions"`
 	PreviousResponseID string          `json:"previous_response_id"`
@@ -247,6 +251,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 	normalized.Prompt = injectToolPrompt(normalized.Prompt, tools)
 	responseID := newWebID("resp")
 	streaming := input.Stream || request.Streaming
+	includeUsage := input.StreamOptions != nil && input.StreamOptions.IncludeUsage
 	var parsed parsedChat
 	var previous *inferencedomain.WebResponseState
 	for attempt := 0; attempt < 2; attempt++ {
@@ -313,7 +318,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 		if streaming {
 			prepared, preflightErr := preflightUpstream(upstream.Body)
 			if preflightErr == nil {
-				body := a.streamOpenAIResponse(ctx, prepared, lease, request.Credential, responseID, input.Model, request.Operation, normalized.Prompt, previous, tools, parallelTools, conversationOptions)
+				body := a.streamOpenAIResponse(ctx, prepared, lease, request.Credential, responseID, input.Model, request.Operation, normalized.Prompt, previous, tools, parallelTools, conversationOptions, includeUsage)
 				return &provider.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: streamHeaders(), Body: body}, nil
 			}
 			if statsigTarget != "" && errors.Is(preflightErr, errWebAntiBot) && attempt == 0 && a.invalidateSignedStatsig(http.MethodPost, statsigTarget) {
@@ -340,6 +345,14 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 			if errors.Is(consumeErr, errWebAntiBot) {
 				a.feedbackAntiBot(ctx, lease, statsigTarget)
 				return antiBotProviderResponse(), nil
+			}
+			// Map Web usage/rate limits to OpenAI-standard 429 codes so agents
+			// can back off and retry without parsing Chinese/English prose.
+			if errors.Is(consumeErr, errWebUsageLimit) || errors.Is(consumeErr, errWebRateLimit) {
+				a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, http.StatusTooManyRequests, consumeErr)
+				return jsonProviderResponse(http.StatusTooManyRequests, map[string]any{"error": map[string]any{
+					"message": consumeErr.Error(), "type": "rate_limit_error", "code": "rate_limit_exceeded",
+				}}), nil
 			}
 			a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, consumeErr)
 			return nil, consumeErr
@@ -441,7 +454,7 @@ func (a *Adapter) handleResponseResource(ctx context.Context, request provider.R
 	return &provider.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: jsonHeaders(), Body: io.NopCloser(strings.NewReader(state.ResponseJSON))}, nil
 }
 
-func (a *Adapter) streamOpenAIResponse(ctx context.Context, source io.ReadCloser, lease *infraegress.Lease, credential account.Credential, responseID, model, operation, prompt string, previous *inferencedomain.WebResponseState, tools toolConfiguration, parallelTools bool, options conversation.ResponseOptions) io.ReadCloser {
+func (a *Adapter) streamOpenAIResponse(ctx context.Context, source io.ReadCloser, lease *infraegress.Lease, credential account.Credential, responseID, model, operation, prompt string, previous *inferencedomain.WebResponseState, tools toolConfiguration, parallelTools bool, options conversation.ResponseOptions, includeUsage bool) io.ReadCloser {
 	reader, writer := io.Pipe()
 	go func() {
 		defer source.Close()
@@ -457,8 +470,14 @@ func (a *Adapter) streamOpenAIResponse(ctx context.Context, source io.ReadCloser
 		var clientText strings.Builder
 		archivedImages := make(map[string]struct{})
 		var sieve *toolStreamSieve
+		var nlSieve *toolStreamSieve
 		if len(tools.Functions) > 0 && tools.Choice != "none" {
 			sieve = newToolStreamSieve(tools.available)
+			// Pure-prose tool calls (model writes "invoke tool foo with ..." instead
+			// of the XML block) bypass the XML sieve entirely. FeedNL watches for
+			// natural-language invocations while the XML sieve is idle so those
+			// calls become real tool_call deltas instead of leaking as text.
+			nlSieve = newToolStreamSieve(tools.available)
 		}
 		messagesStream := newWebMessagesStream(writer, responseID, model, parsed.InputTokens, options)
 		visiblePhase := webVisibleStreamPhase{}
@@ -559,6 +578,15 @@ func (a *Adapter) streamOpenAIResponse(ctx context.Context, source io.ReadCloser
 					parsed.ToolCalls = result.Calls
 					return writeToolCalls(result.Calls)
 				}
+				// XML sieve is still buffering — feed the same chunk into the NL
+				// sieve so a pure-prose invocation can be detected mid-stream.
+				if nlSieve != nil {
+					nlResult := nlSieve.FeedNL(delta)
+					if len(nlResult.Calls) > 0 {
+						parsed.ToolCalls = nlResult.Calls
+						return writeToolCalls(nlResult.Calls)
+					}
+				}
 				return flushSideChannel()
 			}
 			if kind == "text" {
@@ -590,6 +618,18 @@ func (a *Adapter) streamOpenAIResponse(ctx context.Context, source io.ReadCloser
 			if len(result.Calls) > 0 {
 				parsed.ToolCalls = result.Calls
 				if err := writeToolCalls(result.Calls); err != nil {
+					_ = writer.CloseWithError(err)
+					return
+				}
+			}
+		}
+		// NL fallback: if the XML sieve never matched and no tool calls were
+		// detected, flush the NL sieve one last time so a trailing prose
+		// invocation is still promoted to a real tool_call delta.
+		if len(parsed.ToolCalls) == 0 && nlSieve != nil {
+			if nlResult := nlSieve.Flush(); len(nlResult.Calls) > 0 {
+				parsed.ToolCalls = nlResult.Calls
+				if err := writeToolCalls(nlResult.Calls); err != nil {
 					_ = writer.CloseWithError(err)
 					return
 				}
@@ -636,7 +676,7 @@ func (a *Adapter) streamOpenAIResponse(ctx context.Context, source io.ReadCloser
 				return
 			}
 		} else {
-			writeStreamDone(writer, operation, responseID, model, *parsed, payload)
+			writeStreamDone(writer, operation, responseID, model, *parsed, payload, includeUsage)
 		}
 		_ = writer.Close()
 	}()
@@ -1136,6 +1176,9 @@ func webResponseError(value map[string]any) error {
 	normalized := strings.ToLower(message)
 	if strings.Contains(normalized, "usage limit") || strings.Contains(normalized, "usage quota") {
 		return fmt.Errorf("%w: %s", errWebUsageLimit, message)
+	}
+	if strings.Contains(normalized, "rate limit") || strings.Contains(normalized, "too many requests") {
+		return fmt.Errorf("%w: %s", errWebRateLimit, message)
 	}
 	return errors.New(message)
 }
@@ -1796,6 +1839,7 @@ func buildOpenAIResult(operation, responseID, model string, parsed parsedChat, s
 	if len(responseOptions) > 0 {
 		options = responseOptions[0]
 	}
+	fingerprint := systemFingerprint(model)
 	inputTokens := parsed.InputTokens
 	outputTokens := estimateTokens(parsed.Text.String()) + estimateTokens(parsed.Reasoning.String()) + estimateToolCallTokens(parsed.ToolCalls)
 	if operation == "chat" {
@@ -1814,6 +1858,7 @@ func buildOpenAIResult(operation, responseID, model string, parsed parsedChat, s
 		}
 		value := map[string]any{
 			"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion", "created": created, "model": model,
+			"system_fingerprint": fingerprint,
 			"choices": []any{map[string]any{"index": 0, "message": message, "finish_reason": finishReason}},
 			"usage":   map[string]any{"prompt_tokens": inputTokens, "completion_tokens": outputTokens, "total_tokens": inputTokens + outputTokens},
 		}
@@ -1897,6 +1942,7 @@ func buildOpenAIResult(operation, responseID, model string, parsed parsedChat, s
 	}
 	value := map[string]any{
 		"id": responseID, "object": "response", "created_at": created, "completed_at": created, "status": "completed", "model": model,
+		"system_fingerprint": fingerprint,
 		"output": output, "parallel_tool_calls": parsed.ParallelTools, "tools": tools, "tool_choice": toolChoice, "store": true,
 		"usage": map[string]any{
 			"input_tokens": inputTokens, "output_tokens": outputTokens, "total_tokens": inputTokens + outputTokens,
@@ -2495,7 +2541,7 @@ func (f *webStopFilter) Flush() string {
 
 func writeStreamStart(writer io.Writer, operation, responseID, model string, inputTokens int64) {
 	if operation == "chat" {
-		chunk := map[string]any{"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"role": "assistant"}, "finish_reason": nil}}}
+		chunk := map[string]any{"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "system_fingerprint": systemFingerprint(model), "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"role": "assistant"}, "finish_reason": nil}}}
 		writeSSE(writer, "", chunk)
 		return
 	}
@@ -2539,7 +2585,7 @@ func writeStreamDelta(writer io.Writer, operation, responseID, model, kind, delt
 		if kind == "reasoning" {
 			field = "reasoning_content"
 		}
-		chunk := map[string]any{"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{field: delta}, "finish_reason": nil}}}
+		chunk := map[string]any{"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "system_fingerprint": systemFingerprint(model), "choices": []any{map[string]any{"index": 0, "delta": map[string]any{field: delta}, "finish_reason": nil}}}
 		return writeSSE(writer, "", chunk)
 	}
 	if operation == conversation.OperationMessages {
@@ -2594,7 +2640,7 @@ func writeStreamToolCalls(writer io.Writer, operation, responseID, model string,
 	return errors.New("Responses 流式 tool call 必须通过统一 output 状态机发送")
 }
 
-func writeStreamDone(writer io.Writer, operation, responseID, model string, parsed parsedChat, payload map[string]any) {
+func writeStreamDone(writer io.Writer, operation, responseID, model string, parsed parsedChat, payload map[string]any, includeUsage bool) {
 	if operation == "chat" {
 		finishReason := "stop"
 		if len(parsed.ToolCalls) > 0 {
@@ -2603,7 +2649,12 @@ func writeStreamDone(writer io.Writer, operation, responseID, model string, pars
 		// Progressive annotations were already emitted as deltas. Repeating all of
 		// them here makes clients that accumulate deltas display duplicates.
 		// Top-level citations + server_side_tool_usage match non-stream chat (xAI).
-		chunk := map[string]any{"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": finishReason}}, "usage": payload["usage"]}
+		chunk := map[string]any{"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "system_fingerprint": systemFingerprint(model), "choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": finishReason}}}
+		// OpenAI spec: usage in the final chunk is gated on stream_options.include_usage.
+		// When requested, emit a dedicated usage-only chunk with empty choices.
+		if includeUsage {
+			chunk["usage"] = payload["usage"]
+		}
 		if citations := payload["citations"]; citations != nil {
 			chunk["citations"] = citations
 		}
@@ -2611,6 +2662,14 @@ func writeStreamDone(writer io.Writer, operation, responseID, model string, pars
 			chunk["server_side_tool_usage"] = toolUsage
 		}
 		writeSSE(writer, "", chunk)
+		if includeUsage {
+			usageChunk := map[string]any{
+				"id": strings.Replace(responseID, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk",
+				"created": time.Now().Unix(), "model": model,
+				"choices": []any{}, "usage": payload["usage"],
+			}
+			writeSSE(writer, "", usageChunk)
+		}
 		_, _ = io.WriteString(writer, "data: [DONE]\n\n")
 		return
 	}
@@ -2676,6 +2735,15 @@ func newWebID(prefix string) string {
 	value := make([]byte, 16)
 	_, _ = rand.Read(value)
 	return prefix + "_" + hex.EncodeToString(value)
+}
+
+// systemFingerprint returns a stable fp_ identifier for the model+provider
+// combination. OpenAI clients use this to detect model changes for caching
+// and routing decisions; the value only changes when the upstream model or
+// provider routing changes.
+func systemFingerprint(model string) string {
+	sum := sha256.Sum256([]byte("grok2api:" + model))
+	return "fp_" + hex.EncodeToString(sum[:6])
 }
 
 func streamHeaders() http.Header {

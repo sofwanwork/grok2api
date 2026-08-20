@@ -31,6 +31,7 @@ import (
 	modelhttp "github.com/chenyme/grok2api/backend/internal/transport/http/model"
 	settingshttp "github.com/chenyme/grok2api/backend/internal/transport/http/settings"
 	systemhttp "github.com/chenyme/grok2api/backend/internal/transport/http/system"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -46,6 +47,12 @@ type Dependencies struct {
 	SwaggerEnabled     bool
 	PublicAPIBaseURL   string
 	FrontendStaticPath string
+	// CORSConfig controls browser access to the public inference API.
+	// Empty AllowedOrigins disables CORS headers (default for server-side use).
+	CORSConfig middleware.CORSConfig
+	// HealthCheckers are probed by /healthz. Each entry is named after the
+	// subsystem (database, redis, …) and returns nil when healthy.
+	HealthCheckers map[string]func(context.Context) error
 	// Readiness 返回可观测的分层就绪状态。Ready 仅为旧调用方保留。
 	Readiness              func(context.Context) ReadinessSnapshot
 	Ready                  func(context.Context) bool
@@ -120,7 +127,19 @@ func New(deps Dependencies) *gin.Engine {
 		panic("httpserver: trustedProxies 配置无效: " + err.Error())
 	}
 	router.Use(gin.Recovery(), middleware.RequestID(), middleware.ClientIP(), middleware.SecurityHeaders(), middleware.MaxBodyBytes(deps.MaxBodyBytes), middleware.Timeout(deps.RequestTimeout), middleware.AccessLog(deps.Logger))
-	router.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	router.GET("/healthz", func(c *gin.Context) {
+		status := http.StatusOK
+		components := make(map[string]any, len(deps.HealthCheckers))
+		for name, probe := range deps.HealthCheckers {
+			if err := probe(c.Request.Context()); err != nil {
+				status = http.StatusServiceUnavailable
+				components[name] = gin.H{"status": "fail", "error": err.Error()}
+			} else {
+				components[name] = gin.H{"status": "ok"}
+			}
+		}
+		c.JSON(status, gin.H{"ok": status == http.StatusOK, "components": components})
+	})
 	router.GET("/readyz", func(c *gin.Context) {
 		if deps.Readiness != nil {
 			snapshot := deps.Readiness(c.Request.Context())
@@ -176,6 +195,8 @@ func New(deps Dependencies) *gin.Engine {
 	v1 := router.Group("/v1")
 	v1.Use(deps.ConcurrencyGate.Middleware())
 	v1.Use(middleware.ObserveBodyMemory())
+	v1.Use(middleware.CORS(deps.CORSConfig))
+	v1.Use(gzip.Gzip(gzip.DefaultCompression))
 	if deps.TrafficReady != nil {
 		v1.Use(func(c *gin.Context) {
 			if deps.TrafficReady() {
