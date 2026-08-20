@@ -151,6 +151,43 @@ func TestParseToolCallsBuildsStandardResults(t *testing.T) {
 	}
 }
 
+func TestParseToolCallsNaturalLanguageFallback(t *testing.T) {
+	available := map[string]struct{}{"get_weather": {}}
+
+	// 自然语言整句："invoke tool get_weather with city is Kuala Lumpur"
+	parsed := parseToolCalls(`invoke tool get_weather with city is Kuala Lumpur`, available)
+	if len(parsed.Calls) != 1 || parsed.Calls[0].Name != "get_weather" {
+		t.Fatalf("nl parse = %#v", parsed)
+	}
+	if parsed.Calls[0].Arguments != `{"city":"Kuala Lumpur"}` {
+		t.Fatalf("nl args = %s", parsed.Calls[0].Arguments)
+	}
+
+	// 多个 key/value 对，逗号 + and 分隔
+	parsed2 := parseToolCalls(`call tool get_weather with city is Ipoh and unit is c`, available)
+	if len(parsed2.Calls) != 1 || parsed2.Calls[0].Arguments != `{"city":"Ipoh","unit":"c"}` {
+		t.Fatalf("nl multi args = %#v", parsed2)
+	}
+
+	// 内嵌 JSON 参数
+	parsed3 := parseToolCalls(`use tool get_weather with {"city":"KL","unit":"c"}`, available)
+	if len(parsed3.Calls) != 1 || parsed3.Calls[0].Arguments != `{"city":"KL","unit":"c"}` {
+		t.Fatalf("nl json args = %#v", parsed3)
+	}
+
+	// 未声明的工具名 → 不得产生调用
+	parsed4 := parseToolCalls(`invoke tool unknown_tool with city is KL`, available)
+	if len(parsed4.Calls) != 0 {
+		t.Fatalf("unknown tool must not parse: %#v", parsed4)
+	}
+
+	// 普通文本（不含工具语法）→ SawSyntax 必须为 false，避免误伤正文
+	plain := parseToolCalls(`the weather is nice today`, available)
+	if plain.SawSyntax || len(plain.Calls) != 0 {
+		t.Fatalf("plain text must not parse: %#v", plain)
+	}
+}
+
 func TestBuildMessagesResultPreservesThinkingAndStopSequence(t *testing.T) {
 	parsed := parsedChat{}
 	parsed.Reasoning.WriteString("thought")

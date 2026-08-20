@@ -17,7 +17,7 @@ const (
 
 var (
 	toolNamePattern      = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
-	toolSyntaxPattern    = regexp.MustCompile(`(?i)<tool_calls|<tool_call|<function_call|<invoke\s|"tool_calls"\s*:`)
+	toolSyntaxPattern    = regexp.MustCompile(`(?i)<tool_calls|<tool_call|<function_call|<invoke\s|"tool_calls"\s*:|(?:^|\b)(?:invoke|call(?:ing)?|use|using|run(?:ning)?|execut(?:e|ing))\s+(?:the\s+)?tool\s+[A-Za-z0-9_-]`)
 	toolCallsRootPattern = regexp.MustCompile(`(?is)<tool_calls\s*>(.*?)</tool_calls\s*>`)
 	toolCallPattern      = regexp.MustCompile(`(?is)<tool_call\s*>(.*?)</tool_call\s*>`)
 	toolNameTagPattern   = regexp.MustCompile(`(?is)<tool_name\s*>(.*?)</tool_name\s*>`)
@@ -26,6 +26,11 @@ var (
 	functionNamePattern  = regexp.MustCompile(`(?is)<name\s*>(.*?)</name\s*>`)
 	functionArgsPattern  = regexp.MustCompile(`(?is)<arguments\s*>(.*?)</arguments\s*>`)
 	invokePattern        = regexp.MustCompile(`(?is)<invoke\s+name=["']?([A-Za-z0-9_-]+)["']?\s*>(.*?)</invoke\s*>`)
+	// nlToolCallPattern 匹配自然语言工具调用，例如 "invoke tool get_weather with city is Kuala Lumpur"
+	// 或 "call tool search with {\"q\": \"x\"}"。仅在 XML / JSON 格式全部不匹配时作为最后手段启用。
+	nlToolCallPattern = regexp.MustCompile(`(?is)(?:^|\b)(?:invoke|call(?:ing)?|use|using|run(?:ning)?|execut(?:e|ing))\s+(?:the\s+)?tool\s+([A-Za-z0-9_-]{1,64})\s+with\s+(.+?)\s*$`)
+	// nlArgPairPattern 把 "city is Kuala Lumpur, unit is c" 这类片段拆成 key/value 对。
+	nlArgPairPattern = regexp.MustCompile(`(?is)\s*([A-Za-z0-9_]{1,64})\s+(?:is|=|as|:)\s+(.+?)\s*$`)
 )
 
 type functionTool struct {
@@ -229,7 +234,7 @@ AVAILABLE TOOLS:
 %s
 
 TOOL CALL FORMAT - follow these rules exactly:
-- When calling a tool, output only the XML block below, with no text before or after it.
+- When you decide to call a tool, your FINAL output must be only the XML block below — you may think privately first, but the visible reply must contain nothing except the block.
 - <parameters> must contain one valid JSON object.
 - Put multiple calls inside one <tool_calls> element.
 - Do not use Markdown code fences.
@@ -312,6 +317,18 @@ func parseToolCalls(text string, available map[string]struct{}) toolParseResult 
 		appendParsedToolCall(&result.Calls, text[match[2]:match[3]], text[match[4]:match[5]], available)
 		return result
 	}
+	if match := nlToolCallPattern.FindStringSubmatchIndex(text); match != nil {
+		name := text[match[2]:match[3]]
+		rawArgs := strings.TrimSpace(text[match[4]:match[5]])
+		if _, ok := available[name]; ok {
+			arguments := parseNaturalLanguageArgs(rawArgs)
+			result.Start, result.End = match[0], match[1]
+			appendParsedToolCall(&result.Calls, name, arguments, available)
+			if len(result.Calls) > 0 {
+				return result
+			}
+		}
+	}
 	return parseJSONToolCalls(text, available, result)
 }
 
@@ -367,6 +384,141 @@ func appendParsedToolCall(calls *[]parsedToolCall, name, arguments string, avail
 		return
 	}
 	*calls = append(*calls, parsedToolCall{ID: newWebID("call"), Name: name, Arguments: arguments})
+}
+
+// parseNaturalLanguageArgs 把自然语言参数段转换成 JSON object 字符串。
+// 支持三种形态：
+//  1. 纯 JSON：{"city":"KL"} 原样返回（规范化后）。
+//  2. "key is value" / "key: value" / "key = value"，逗号或 " and " 分隔。
+//  3. 单个无 key 值（如仅 "Kuala Lumpur"）——返回空对象，由 schema 默认值兜底，
+//     避免瞎猜参数名造成 schema 校验失败。
+func parseNaturalLanguageArgs(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "{}"
+	}
+	// 形态 1：直接就是 JSON
+	if strings.HasPrefix(raw, "{") {
+		if json.Valid([]byte(raw)) {
+			return normalizeToolArguments(raw)
+		}
+		// 尝试截取第一个完整 JSON 对象
+		if end := findJSONObjectEnd(raw); end > 0 {
+			candidate := raw[:end]
+			if json.Valid([]byte(candidate)) {
+				return normalizeToolArguments(candidate)
+			}
+		}
+		return "{}"
+	}
+	// 形态 2：key/value 对。按 ", " / " and " 切分。
+	object := map[string]any{}
+	parts := splitNLArgs(raw)
+	matched := 0
+	for _, part := range parts {
+		m := nlArgPairPattern.FindStringSubmatch(strings.TrimSpace(part))
+		if len(m) != 3 {
+			continue
+		}
+		key := strings.TrimSpace(m[1])
+		value := strings.Trim(strings.TrimSpace(m[2]), `"'`)
+		if key == "" || value == "" {
+			continue
+		}
+		object[key] = value
+		matched++
+	}
+	if matched == 0 {
+		return "{}"
+	}
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
+}
+
+// splitNLArgs 按顶层逗号或 " and " 切分参数段（不进入引号/括号内部）。
+func splitNLArgs(raw string) []string {
+	var parts []string
+	depth := 0
+	inQuote := false
+	var quote rune
+	start := 0
+	runes := []rune(raw)
+	flush := func(end int) {
+		seg := strings.TrimSpace(string(runes[start:end]))
+		if seg != "" {
+			parts = append(parts, seg)
+		}
+	}
+	for i := 0; i < len(runes); i++ {
+		ch := runes[i]
+		if inQuote {
+			if ch == quote {
+				inQuote = false
+			}
+			continue
+		}
+		switch ch {
+		case '"', '\'':
+			inQuote = true
+			quote = ch
+		case '{', '[', '(':
+			depth++
+		case '}', ']', ')':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				flush(i)
+				start = i + 1
+			}
+		}
+		// " and " 作为分隔符（仅顶层）
+		if depth == 0 && i+5 <= len(runes) && string(runes[i:i+5]) == " and " {
+			flush(i)
+			start = i + 5
+			i += 4
+		}
+	}
+	flush(len(runes))
+	return parts
+}
+
+// findJSONObjectEnd 返回从开头算起第一个配平结束的 JSON 对象的结束位置。
+func findJSONObjectEnd(raw string) int {
+	depth := 0
+	inQuote := false
+	escaped := false
+	for i, ch := range raw {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && inQuote {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inQuote = !inQuote
+			continue
+		}
+		if inQuote {
+			continue
+		}
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
 }
 
 func normalizeToolArguments(value string) string {
@@ -444,7 +596,40 @@ func (s *toolStreamSieve) Flush() toolStreamResult {
 		s.done = true
 		return toolStreamResult{Calls: parsed.Calls, Complete: true, Raw: raw}
 	}
+	// Jika buffer hanyalah prefix XML yang tidak lengkap (contoh "<tool_" tanpa
+	// penutup), pulangkan semula sebagai teks selamat supaya tidak hilang.
 	return toolStreamResult{SafeText: raw, Complete: parsed.SawSyntax, Raw: raw}
+}
+
+// FeedNL 在流式输出中检测自然语言工具调用（不含 <tool_calls 标签）。
+// 仅在 buffer 完全不含 XML 前缀时调用，作为最后手段。
+func (s *toolStreamSieve) FeedNL(chunk string) toolStreamResult {
+	if s.done || chunk == "" {
+		return toolStreamResult{SafeText: chunk}
+	}
+	combined := s.buffer + chunk
+	s.buffer = ""
+	// 仅在发现 XML 起始时才走 XML 路径；否则缓存等待更多数据
+	lower := strings.ToLower(combined)
+	if strings.Contains(lower, "<tool_calls") {
+		s.capturing = true
+		s.buffer = combined
+		return toolStreamResult{}
+	}
+	// 自然语言路径：尝试立即解析（可能不完整）
+	parsed := parseToolCalls(combined, s.available)
+	if len(parsed.Calls) > 0 {
+		s.done = true
+		return toolStreamResult{Calls: parsed.Calls, Complete: true, Raw: combined}
+	}
+	// 未匹配：缓存最后 64 字节作为前缀，其余立即放行（防止过大内存占用）
+	const keep = 64
+	if len(combined) > keep {
+		s.buffer = combined[len(combined)-keep:]
+		return toolStreamResult{SafeText: combined[:len(combined)-keep]}
+	}
+	s.buffer = combined
+	return toolStreamResult{}
 }
 
 func splitToolPrefix(value string) (string, string) {
