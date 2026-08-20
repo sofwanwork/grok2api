@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	upstreamws "github.com/bogdanfinn/websocket"
 	"github.com/chenyme/grok2api/backend/internal/application/gateway"
@@ -23,6 +24,52 @@ var voiceWSUpgrader = clientws.Upgrader{
 		return true
 	},
 	EnableCompression: true,
+}
+
+// voiceWSRateLimiters provides per-client-key token bucket rate limiting for
+// WebSocket connections. Each key gets a small bucket to prevent abuse while
+// allowing legitimate reconnects.
+var voiceWSRateLimiters = struct {
+	sync.Mutex
+	limiters map[uint64]*voiceWSTokenBucket
+}{limiters: make(map[uint64]*voiceWSTokenBucket)}
+
+type voiceWSTokenBucket struct {
+	tokens     float64
+	maxTokens  float64
+	refillRate float64 // tokens per second
+	lastRefill time.Time
+	mu         sync.Mutex
+}
+
+func newVoiceWSTokenBucket(maxTokens, refillRate float64) *voiceWSTokenBucket {
+	return &voiceWSTokenBucket{tokens: maxTokens, maxTokens: maxTokens, refillRate: refillRate, lastRefill: time.Now()}
+}
+
+func (b *voiceWSTokenBucket) Allow() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(b.lastRefill).Seconds()
+	b.tokens = min(b.maxTokens, b.tokens+elapsed*b.refillRate)
+	b.lastRefill = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+func voiceWSRateLimiter(clientKeyID uint64) *voiceWSTokenBucket {
+	voiceWSRateLimiters.Lock()
+	defer voiceWSRateLimiters.Unlock()
+	if limiter, exists := voiceWSRateLimiters.limiters[clientKeyID]; exists {
+		return limiter
+	}
+	// 10 connections burst, refill 1 per 6 seconds (10 per minute sustained)
+	limiter := newVoiceWSTokenBucket(10, 1.0/6.0)
+	voiceWSRateLimiters.limiters[clientKeyID] = limiter
+	return limiter
 }
 
 func (h *Handler) proxyRealtimeWebSocket(c *gin.Context) {
@@ -44,6 +91,11 @@ func (h *Handler) proxyVoiceWebSocket(c *gin.Context, pathValue string) {
 	}
 	clientKey, requestID, ok := requestIdentity(c)
 	if !ok {
+		return
+	}
+	// Rate limit WebSocket connections per client key.
+	if limiter := voiceWSRateLimiter(clientKey.ID); limiter != nil && !limiter.Allow() {
+		writeOpenAIError(c, http.StatusTooManyRequests, "rate_limit_exceeded", "WebSocket 连接频率受限")
 		return
 	}
 	model := strings.TrimSpace(c.Query("model"))

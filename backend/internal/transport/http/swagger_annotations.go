@@ -106,6 +106,7 @@ func swaggerReady() {}
 
 // swaggerModels godoc
 // @Summary 获取可用模型
+// @Description 返回 OpenAI-compatible 模型列表，包含 context_window、max_output_tokens、capabilities 等元数据。支持 ETag 缓存（If-None-Match → 304）。
 // @Tags Models
 // @Security BearerAuth
 // @Produce json
@@ -113,6 +114,15 @@ func swaggerReady() {}
 // @Failure 401 {object} map[string]any
 // @Router /v1/models [get]
 func swaggerModels() {}
+
+// swaggerMetrics godoc
+// @Summary Prometheus 指标
+// @Description 返回 Prometheus text exposition format 的指标数据。
+// @Tags System
+// @Produce text/plain
+// @Success 200 {string} string
+// @Router /metrics [get]
+func swaggerMetrics() {}
 
 // swaggerResponses godoc
 // @Summary 创建 Response

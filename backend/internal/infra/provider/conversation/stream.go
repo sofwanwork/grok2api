@@ -67,6 +67,10 @@ type streamConverter struct {
 	stopFilter        *anthropicStreamStopFilter
 	stopSequence      string
 	refused           bool
+	// doomLoop detection: track repeated identical deltas to detect model
+	// output loops before they exhaust the response budget.
+	lastDelta      string
+	sameDeltaCount int
 }
 
 type streamTool struct {
@@ -402,6 +406,16 @@ func (c *streamConverter) reasoningSummaryDelta(itemID, delta string) error {
 	if delta == "" || !c.reasoningOutputEnabled() {
 		return nil
 	}
+	// Doom loop detection for buffered reasoning summaries.
+	if delta == c.lastDelta {
+		c.sameDeltaCount++
+		if c.sameDeltaCount >= 16 {
+			return fmt.Errorf("model reasoning summary loop detected (repeated delta %d times)", c.sameDeltaCount)
+		}
+	} else {
+		c.lastDelta = delta
+		c.sameDeltaCount = 0
+	}
 	_, state := c.ensureReasoningState(itemID)
 	if state.done || state.rawSeen {
 		return nil
@@ -433,6 +447,16 @@ func (c *streamConverter) reasoningTextDelta(itemID, delta string) error {
 }
 
 func (c *streamConverter) emitReasoningDelta(delta string) error {
+	// Doom loop detection for reasoning content too.
+	if delta != "" && delta == c.lastDelta {
+		c.sameDeltaCount++
+		if c.sameDeltaCount >= 16 {
+			return fmt.Errorf("model reasoning loop detected (repeated delta %d times)", c.sameDeltaCount)
+		}
+	} else {
+		c.lastDelta = delta
+		c.sameDeltaCount = 0
+	}
 	if c.operation == OperationChat {
 		return c.chatDelta(map[string]any{"reasoning_content": delta})
 	}
@@ -552,6 +576,18 @@ func (c *streamConverter) start() error {
 }
 
 func (c *streamConverter) textDelta(delta string) error {
+	// Doom loop detection: if the model repeats the exact same delta more than
+	// a threshold of times, terminate the stream with an error instead of
+	// letting the loop exhaust the account quota and the client context window.
+	if delta != "" && delta == c.lastDelta {
+		c.sameDeltaCount++
+		if c.sameDeltaCount >= 16 {
+			return fmt.Errorf("model output loop detected (repeated delta %d times)", c.sameDeltaCount)
+		}
+	} else {
+		c.lastDelta = delta
+		c.sameDeltaCount = 0
+	}
 	if c.operation == OperationChat {
 		return c.textDeltaChat(delta)
 	}

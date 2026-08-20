@@ -82,6 +82,8 @@ type ServerConfig struct {
 	SwaggerEnabled        bool     `yaml:"swaggerEnabled"`
 	// CORS controls browser access to /v1/*. Empty means disabled.
 	CORS CORSConfig `yaml:"cors"`
+	// BodyLog enables opt-in request/response body logging for debugging.
+	BodyLog BodyLogConfig `yaml:"bodyLog"`
 }
 
 type FrontendConfig struct {
@@ -307,6 +309,12 @@ type ClientKeyDefaultsConfig struct {
 type CORSConfig struct {
 	AllowedOrigins   []string `yaml:"allowedOrigins"`
 	AllowCredentials bool     `yaml:"allowCredentials"`
+}
+
+// BodyLogConfig controls opt-in request/response body logging.
+type BodyLogConfig struct {
+	Enabled      bool  `yaml:"enabled"`
+	MaxBodyBytes int64 `yaml:"maxBodyBytes"`
 }
 
 // AccountsConfig 定义可热加载的账号池维护策略；默认全部关闭。

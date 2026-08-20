@@ -269,6 +269,54 @@ func (l *accountLease) completeSelectorObservation(success bool) {
 	}
 }
 
+// circuitBreakerState tracks consecutive upstream failures per provider/model.
+// When a provider exceeds the failure threshold, the selector short-circuits
+// new requests to that provider for a cooldown period instead of hammering it.
+type circuitBreakerState struct {
+	failures   map[string]int
+	lastFailAt map[string]time.Time
+	mu         sync.RWMutex
+}
+
+func newCircuitBreakerState() *circuitBreakerState {
+	return &circuitBreakerState{failures: make(map[string]int), lastFailAt: make(map[string]time.Time)}
+}
+
+func (b *circuitBreakerState) key(provider account.Provider, model string) string {
+	return string(provider) + "/" + model
+}
+
+// Allow reports whether a request to the provider/model should proceed.
+func (b *circuitBreakerState) Allow(provider account.Provider, model string, threshold int, cooldown time.Duration) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	key := b.key(provider, model)
+	failures, exists := b.failures[key]
+	if !exists || failures < threshold {
+		return true
+	}
+	lastFail := b.lastFailAt[key]
+	return time.Since(lastFail) >= cooldown
+}
+
+// RecordSuccess resets the failure counter for the provider/model.
+func (b *circuitBreakerState) RecordSuccess(provider account.Provider, model string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	key := b.key(provider, model)
+	delete(b.failures, key)
+	delete(b.lastFailAt, key)
+}
+
+// RecordFailure increments the failure counter for the provider/model.
+func (b *circuitBreakerState) RecordFailure(provider account.Provider, model string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	key := b.key(provider, model)
+	b.failures[key]++
+	b.lastFailAt[key] = time.Now()
+}
+
 // Selector 实现可替换的 balanced 账号选择策略。
 type Selector struct {
 	accounts               repository.AccountRepository
@@ -306,6 +354,7 @@ type Selector struct {
 	overlayProviderVersion map[account.Provider]uint64
 	candidateLoads         singleflight.Group
 	concurrencySnapshots   *resultcache.Cache[[32]byte, map[string]int]
+	circuitBreaker         *circuitBreakerState
 	tierOrders             interface {
 		TierOrder(account.Provider, string) []account.WebTier
 	}
@@ -318,7 +367,7 @@ func NewSelector(accounts repository.AccountRepository, concurrency repository.C
 	if len(capacityWait) > 0 && capacityWait[0] > 0 {
 		wait = capacityWait[0]
 	}
-	return &Selector{accounts: accounts, concurrency: concurrency, sticky: sticky, tierOrders: tierOrders, stickyTTL: stickyTTL, cooldownBase: cooldownBase, cooldownMax: cooldownMax, capacityWait: wait, leaseWake: make(chan struct{}), logger: slog.Default(), lastSelectedAt: make(map[uint64]time.Time), lastSuccessAt: make(map[uint64]time.Time), healthOverrides: make(map[uint64]routingHealthOverride), quotaConsumed: make(map[quotaConsumptionKey]int), staleFallbackLoggedAt: make(map[string]time.Time), candidates: make(map[candidateCacheKey]candidateSnapshot), routingBases: make(map[routingBaseCacheKey]routingBaseSnapshot), routingOverlays: make(map[routingOverlayCacheKey]routingOverlaySnapshot), routingAccountProvider: make(map[uint64]account.Provider), baseProviderVersion: make(map[account.Provider]uint64), overlayProviderVersion: make(map[account.Provider]uint64), concurrencySnapshots: resultcache.New[[32]byte, map[string]int](maxConcurrencySnapshots, concurrencySnapshotTTL)}
+	return &Selector{accounts: accounts, concurrency: concurrency, sticky: sticky, tierOrders: tierOrders, stickyTTL: stickyTTL, cooldownBase: cooldownBase, cooldownMax: cooldownMax, capacityWait: wait, leaseWake: make(chan struct{}), logger: slog.Default(), lastSelectedAt: make(map[uint64]time.Time), lastSuccessAt: make(map[uint64]time.Time), healthOverrides: make(map[uint64]routingHealthOverride), quotaConsumed: make(map[quotaConsumptionKey]int), staleFallbackLoggedAt: make(map[string]time.Time), candidates: make(map[candidateCacheKey]candidateSnapshot), routingBases: make(map[routingBaseCacheKey]routingBaseSnapshot), routingOverlays: make(map[routingOverlayCacheKey]routingOverlaySnapshot), routingAccountProvider: make(map[uint64]account.Provider), baseProviderVersion: make(map[account.Provider]uint64), overlayProviderVersion: make(map[account.Provider]uint64), concurrencySnapshots: resultcache.New[[32]byte, map[string]int](maxConcurrencySnapshots, concurrencySnapshotTTL), circuitBreaker: newCircuitBreakerState()}
 }
 
 // SetLogger wires the application logger into routing degradation diagnostics.
@@ -918,6 +967,7 @@ func (s *Selector) candidateSupportsModel(provider account.Provider, upstreamMod
 
 func (s *Selector) MarkSuccess(ctx context.Context, credential account.Credential) {
 	s.markSuccess(ctx, credential, true)
+	s.circuitBreaker.RecordSuccess(credential.Provider, credential.ObservedModel)
 }
 
 func isMissingThinkingStrike(lastError string) bool {
@@ -1165,6 +1215,7 @@ func (s *Selector) markMissingThinking(ctx context.Context, credential account.C
 
 func (s *Selector) MarkFailure(ctx context.Context, credential account.Credential, status int, retryAfter time.Duration) {
 	_ = s.markFailure(ctx, credential, credential.FailureCount, credential.FailureCount+1, status, retryAfter)
+	s.circuitBreaker.RecordFailure(credential.Provider, credential.ObservedModel)
 }
 
 // MarkFailureAfterSuccess records a stream failure from a fresh health baseline.

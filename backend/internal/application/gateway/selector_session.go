@@ -40,6 +40,10 @@ func (s *Selector) beginSelectionSessionForKey(ctx context.Context, provider acc
 	if !scopeValid || !accountScope.AllowsProvider(provider) {
 		return nil, &SelectionUnavailableError{Reason: SelectionNoAccounts, Scope: accountScope}
 	}
+	// Circuit breaker: skip providers that are failing across the board.
+	if !s.circuitBreaker.Allow(provider, upstreamModel, 5, 2*time.Minute) {
+		return nil, &SelectionUnavailableError{Reason: SelectionNoAccounts, Scope: accountScope}
+	}
 	now := time.Now().UTC()
 	values, err := s.loadCandidates(ctx, provider, modelRouteID, upstreamModel, quotaMode, now)
 	if err != nil {

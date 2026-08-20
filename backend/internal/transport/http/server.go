@@ -31,6 +31,7 @@ import (
 	modelhttp "github.com/chenyme/grok2api/backend/internal/transport/http/model"
 	settingshttp "github.com/chenyme/grok2api/backend/internal/transport/http/settings"
 	systemhttp "github.com/chenyme/grok2api/backend/internal/transport/http/system"
+	"github.com/chenyme/grok2api/backend/internal/pkg/perfmetrics"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -50,6 +51,8 @@ type Dependencies struct {
 	// CORSConfig controls browser access to the public inference API.
 	// Empty AllowedOrigins disables CORS headers (default for server-side use).
 	CORSConfig middleware.CORSConfig
+	// BodyLogConfig enables opt-in request/response body logging for debugging.
+	BodyLogConfig middleware.BodyLogConfig
 	// HealthCheckers are probed by /healthz. Each entry is named after the
 	// subsystem (database, redis, …) and returns nil when healthy.
 	HealthCheckers map[string]func(context.Context) error
@@ -140,6 +143,11 @@ func New(deps Dependencies) *gin.Engine {
 		}
 		c.JSON(status, gin.H{"ok": status == http.StatusOK, "components": components})
 	})
+	// Prometheus metrics endpoint for observability stack.
+	router.GET("/metrics", func(c *gin.Context) {
+		samples := perfmetrics.Default.CollectAndReset()
+		c.Data(http.StatusOK, "text/plain; version=0.0.4; charset=utf-8", perfmetrics.Prometheus(samples))
+	})
 	router.GET("/readyz", func(c *gin.Context) {
 		if deps.Readiness != nil {
 			snapshot := deps.Readiness(c.Request.Context())
@@ -197,6 +205,7 @@ func New(deps Dependencies) *gin.Engine {
 	v1.Use(middleware.ObserveBodyMemory())
 	v1.Use(middleware.CORS(deps.CORSConfig))
 	v1.Use(gzip.Gzip(gzip.DefaultCompression))
+	v1.Use(middleware.BodyLog(deps.BodyLogConfig))
 	if deps.TrafficReady != nil {
 		v1.Use(func(c *gin.Context) {
 			if deps.TrafficReady() {
