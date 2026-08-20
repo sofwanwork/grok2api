@@ -2,6 +2,8 @@ package inference
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,7 +249,24 @@ func (h *Handler) listModels(c *gin.Context) {
 	// will attempt text conversations with them.
 	enrichModelListItems(items)
 	items = filterConversationModelListItems(items)
+	// ETag lets clients cache the catalog and get a cheap 304 when nothing changed.
+	etag := modelListETag(items)
+	c.Header("ETag", etag)
+	if match := strings.TrimSpace(c.GetHeader("If-None-Match")); match == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": items})
+}
+
+// modelListETag computes a weak ETag from the sorted model IDs and metadata.
+func modelListETag(items []modelListItem) string {
+	parts := make([]string, 0, len(items)*6)
+	for _, item := range items {
+		parts = append(parts, item.ID, strconv.Itoa(item.ContextWindow), strconv.Itoa(item.MaxOutputTokens), strconv.FormatBool(item.SupportsVision), strconv.FormatBool(item.SupportsTools), strconv.FormatBool(item.SupportsReasoning))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return `"` + hex.EncodeToString(sum[:8]) + `"`
 }
 
 func filterModelRoutesForClientKey(values []modeldomain.Route, key clientkeydomain.Key) []modeldomain.Route {
