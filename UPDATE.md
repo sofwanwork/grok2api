@@ -59,7 +59,7 @@ Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **62 pake
 | 2. Doom-loop | `conversation/stream_doomloop_test.go` |
 | 3. Soft-session v4 | `gateway/soft_session_test.go` |
 | 4+5. max_output 65536 | `inference/max_output_tokens_test.go`, `cli/max_output_tokens_test.go` |
-| 6+7. Persona | `cli/persona_inject_test.go`, `config/persona_test.go` |
+| 6+7. Persona (+ berlapis) | `cli/persona_inject_test.go`, `config/persona_test.go` |
 | 8. reasoning_opaque replay | `conversation/reasoning_replay_test.go` |
 
 ### ✅ DIBAIKI: persona dilangkau bila `system` ada tapi kosong
@@ -83,6 +83,31 @@ semua tempat tu sekali gus — contohnya `"tools": []` jadi "tiada tools". Blast
 Ujian: `TestInjectPersonaIntoMessagesRequestFillsContentlessSystemField` (5 varian),
 `TestHasAnthropicSystemContentTreatsUnknownShapesAsContent` (13 varian — termasuk blok imej dan
 `cache_control` yang mesti dikira ada/tiada isi dengan betul).
+
+### Persona berlapis: `systemPromptWhenClientHasSystem`
+
+**Masalah:** `appendWhenClientHasSystem: true` menyebabkan persona penuh ditambah atas system prompt IDE.
+Persona penuh ada arahan **WAJIB** (mesti ada emosi, mesti flag security, mesti sebut UX gap) yang berlawan
+dengan arahan **format** IDE (balas diff sahaja, guna tool ikut spesifikasi). Model kena pilih satu →
+gejala: jawapan berceloteh dalam konteks kod, abai peraturan diff.
+
+**Penyelesaian:** dua persona berasingan dalam `config.yaml`:
+
+| Situasi | Field digunakan | Saiz |
+|---|---|---|
+| Client tiada system prompt (Chatbox, curl) | `systemPrompt` | ~985 token |
+| Client ada system prompt (opencode, Cursor) | `systemPromptWhenClientHasSystem` | ~50 token |
+
+Variant ringkas nyatakan secara eksplisit: *"the client's instructions above take priority over this voice"*.
+
+**Fallback:** kosongkan field → guna `systemPrompt` (tingkah laku lama, tiada breaking change).
+
+**Tool contract selamat:** diuji — `tools`, `tool_choice`, `parallel_tool_calls`, `model` kekal
+byte-identical selepas persona diinject. Jadi risiko sebenar adalah percanggahan arahan, bukan kontrak tool.
+
+⚠️ **Field baru = kena rebuild image.** Kalau tukar `config.yaml` sahaja tanpa rebuild, container akan
+crash-loop dengan `field systemPromptWhenClientHasSystem not found in type config.PersonaConfig`.
+Rebuild: `docker build -t grok2api:local-layered .` lalu set `GROK2API_IMAGE` dalam `.env`.
 
 ### Nota: alias effort hanya diwarisi kalau model sokong level tu
 
