@@ -49,6 +49,36 @@ Confirm dengan `gofmt -d <fail>` kalau ragu.
 
 **Nota:** Persona AKIF settings hidup dalam `config.yaml` (gitignored — **tak ikut git**). Backup ada kat `../backups/config.yaml.persona_*.bak`.
 
+### Liputan ujian setiap patch (audit 22 Ogos)
+
+Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **62 pakej, 0 gagal** = sihat.
+
+| Patch | Fail ujian |
+|---|---|
+| 1. Reasoning `detailed` | `cli/normalize_test.go` (dah ada sebelum ni) |
+| 2. Doom-loop | `conversation/stream_doomloop_test.go` |
+| 3. Soft-session v4 | `gateway/soft_session_test.go` |
+| 4+5. max_output 65536 | `inference/max_output_tokens_test.go`, `cli/max_output_tokens_test.go` |
+| 6+7. Persona | `cli/persona_inject_test.go`, `config/persona_test.go` |
+| 8. reasoning_opaque replay | `conversation/reasoning_replay_test.go` |
+
+### ⚠️ KNOWN GAP: persona dilangkau bila `"system": []`
+
+`isEmptyJSON` (`cli/normalize.go`) anggap hanya ``, `null`, `""` sebagai kosong — **bukan** `[]`.
+Jadi bila client Anthropic hantar `"system": []` (array blok kosong), ia dikira "client dah bagi system prompt",
+persona dilangkau, dan request sampai ke upstream **tanpa arahan sama sekali**.
+
+SDK Anthropic yang sentiasa hantar key `system` dan biar caller append blok akan terkena.
+
+Dipin sebagai ujian (`TestInjectPersonaIntoMessagesRequestSkipsPersonaForEmptyBlockArray`), **belum dibaiki** —
+sebab `isEmptyJSON` dikongsi dengan laluan normalisasi lain, jadi kena periksa blast radius dulu.
+
+### Nota: alias effort hanya diwarisi kalau model sokong level tu
+
+`grok-4.5-xhigh` **bukan** alias sah — grok-4.5 berhenti di `high`, hanya grok-4.6 ada `xhigh`.
+Jadi ia jatuh ke heuristik 10% context, bukan warisi 64k. Ini betul, bukan bug.
+Dipin dalam `TestModelMaxOutputTokensUnsupportedEffortSuffixIsNotAnAlias`.
+
 ### Patch mana upstream dah ada, mana masih eksklusif kita
 
 Disemak pada 22 Ogos 2026 terhadap `origin/main` (`d6f6e9f5`) — **jangan assume ikut tajuk commit sahaja, grep kod**:
