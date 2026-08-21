@@ -1,6 +1,6 @@
 # UPDATE.md — Panduan Update grok2api (dengan local patches)
 
-> Repo ni ada **6 local commits** di atas upstream `chenyme/grok2api`.
+> Repo ni ada **12 local commits** di atas upstream `chenyme/grok2api`.
 > Fail ni sebagai rujukan bila nak update ke versi baru.
 > **Amalan: bagitahu agent AI check dulu sebelum merge.**
 
@@ -10,16 +10,35 @@
 |---|---|
 | Branch aktif | `main` |
 | Bookmark patches | `local-patches` (commit 47596974) |
-| Jumlah local commits | 6 (909bb810, 6a954e5b, c541a436, b83b3e8b, 5b880b92, 6fd81ada, 47596974) |
+| Jumlah local commits | 12 (909bb810, 6a954e5b, c541a436, b83b3e8b, 5b880b92, 6fd81ada, 47596974, 17080ba8, 04da9cc0, 15fb4147, 54c29d41, 93a74557) |
+| Base upstream terakhir | `c9916f65` (19 Ogos 2026) |
 | Image Docker | `grok2api:local-nltools` |
 | Container | `grok2api` (docker compose) |
+
+## Toolchain (WAJIB sebelum merge)
+
+Go **1.26.7** dipasang via winget (`GoLang.Go`) — padan dengan `go 1.26` dalam `backend/go.mod`.
+Tak masuk PATH global, jadi setiap sesi:
+
+```powershell
+$env:PATH = "C:\Program Files\Go\bin;$env:PATH"
+cd backend; go build ./...; go test ./...
+```
+
+Baseline sihat: **62 pakej lulus, 0 gagal**.
+
+**Penting:** CI repo ni (`.github/workflows/`) hanya ada CodeQL + docker image — **tiada `go test` automatik**.
+Jadi `go test ./...` manual adalah satu-satunya jaring keselamatan selepas merge. Jangan skip.
+
+`gofmt -l` akan flag ~12 fail dalam repo — itu **CRLF sahaja** (checkout Windows), bukan isu format.
+Confirm dengan `gofmt -d <fail>` kalau ragu.
 
 ## Local patches yang wajib kekal (semak selepas setiap update)
 
 | # | Patch | Fail | Kesan kalau hilang |
 |---|---|---|---|
 | 1 | Reasoning summary `detailed` untuk high/xhigh | `cli/normalize.go` | xhigh rasa "lembik", jawapan cetek |
-| 2 | Doom-loop: counter berasingan (content 32 / reasoning 256) | `conversation/stream.go` | Stream xhigh dipotong awal |
+| 2 | Doom-loop: counter berasingan (content **128** / reasoning 256) + ujian | `conversation/stream.go`, `stream_doomloop_test.go` | Stream xhigh dipotong awal; jadual/garis markdown kena bunuh |
 | 3 | Soft-session identity v4 | `gateway/prompt_cache.go` | Gejala "ulang ayat sama" antara chat |
 | 4 | max_output_tokens 65536 + alias inherit | `inference/handler.go` | Output terhad 16k, reasoning makan budget |
 | 5 | Default max_tokens 65536 injection | `cli/adapter.go` | Request tanpa max_tokens dapat upstream default kecil |
@@ -29,6 +48,47 @@
 | 9 | Buang persona generik + system_fingerprint | `conversation/chat_request.go`, `chat_response.go`, `chat_stream.go` | Persona kosmetik override suara model |
 
 **Nota:** Persona AKIF settings hidup dalam `config.yaml` (gitignored — **tak ikut git**). Backup ada kat `../backups/config.yaml.persona_*.bak`.
+
+### Patch mana upstream dah ada, mana masih eksklusif kita
+
+Disemak pada 22 Ogos 2026 terhadap `origin/main` (`d6f6e9f5`) — **jangan assume ikut tajuk commit sahaja, grep kod**:
+
+| Patch | Upstream ada? | Nota |
+|---|---|---|
+| Doom-loop (semua) | ❌ **takda sama sekali** | `git grep -n "DoomLoop\|RepeatCount" origin/main` = kosong. `doom_loop_check` yang muncul tu event Grok CLI, benda lain. |
+| reasoning_opaque | ❌ takda | `git grep -n "reasoning_opaque" origin/main` = kosong |
+| Reasoning `detailed`, persona, max_tokens 65536 | ❌ takda | `normalize.go`, `adapter.go`, `prompt_cache.go` tak disentuh upstream — auto-merge bersih |
+
+**PR dihantar ke upstream:** [chenyme/grok2api#994](https://github.com/chenyme/grok2api/pull/994) — doom-loop split thresholds + ujian.
+Fork: `sofwanwork/grok2api`, remote `fork`, branch `feat/split-doom-loop-thresholds`.
+Kalau PR ni diterima, **buang patch #2 dari senarai atas** dan konflik `stream.go` hilang selamanya.
+
+### Yang upstream ada tapi kita belum (dapat bila merge)
+
+| Feature | Commit | Kenapa berguna |
+|---|---|---|
+| Kesan 降智 + tukar akaun automatik | `d1aeb775`, `6b288f20` | Grok bagi jawapan tanpa berfikir → rotate akaun |
+| Audit request + retention 7 hari | `1316ed73`, `86010fc5` | Diagnostik bila request pelik |
+| Proxy per-akaun (`account-bound leases`) | `c0d7c94e` | Penting untuk multi-akaun |
+| Video protokol `mediaGenInput` terkini | `46cfa374` | Video gen kita dah obsolete |
+
+Default upstream pun berubah: `holdTimeout 3s→30s`, `minOutputTokens 32→8`, `accountCooldown 24h→12h`,
+tambah `idleAccountCooldown: 15m`, dan `requestRetry.enabled: false→true`.
+
+### ⚠️ config.yaml kita tertinggal 3 section
+
+`config.yaml` kita **takda** `deployment:`, `audit:`, `qualityGuard:` — semua tuning baru di atas tak aktif.
+Sebab `config.yaml` gitignored, kena tambah **manual** dari `config.example.yaml` selepas merge.
+
+### Kos konflik merge (dry-run 22 Ogos)
+
+`git merge-tree --write-tree HEAD origin/main` → **11 fail konflik**:
+
+- **Bermakna (4):** `conversation/stream.go`, `inference/handler.go`, `handler_test.go`, `conversation_test.go` — kena **gabung dua-dua**, bukan pilih satu
+- **Kosmetik (7):** `egress/service.go`, `web/image.go`, `web/video.go`, `openai_audio_handler.go`, `voice_handler.go`, `config.example.yaml`, `i18n/index.ts` — semua dari commit terjemahan BM/EN (`17080ba8`, `04da9cc0`, `15fb4147`, `54c29d41`)
+
+**64% kerja merge adalah kosmetik.** Kalau patch terjemahan di-drop, konflik turun dari 11 → 4.
+Pertimbangkan bila terjemahan tu dah tak berbaloi.
 
 ## Senarai semak bila ada update upstream
 
