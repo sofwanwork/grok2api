@@ -46,16 +46,16 @@ func builtinProbeProfiles() []probeProfile {
 	return []probeProfile{
 		{
 			ID:              profileQualityMarker,
-			Name:            "预期标记",
+			Name:            "Penanda jangkaan",
 			BuiltIn:         true,
-			Prompt:          "先用三点总结为什么天空呈蓝色，最后一行只输出 QUALITY_OK。",
+			Prompt:          "Ringkaskan dalam tiga titik mengapa langit berwarna biru, dan keluarkan QUALITY_OK sahaja pada baris terakhir.",
 			ExpectedText:    "QUALITY_OK",
 			MatchMode:       egressapp.MatchLastLine,
 			RequireThinking: true,
 		},
 		{
 			ID:        profileThroughput,
-			Name:      "吞吐基线",
+			Name:      "Asas daya pemprosesan",
 			BuiltIn:   true,
 			Prompt:    "Write a detailed technical explanation of how TCP slow start works, at least 12 sentences, plain text only.",
 			MatchMode: egressapp.MatchContains,
@@ -200,30 +200,30 @@ func validateProbeProfile(profile *probeProfile, creating bool) error {
 	profile.ExpectedText = strings.TrimSpace(profile.ExpectedText)
 	profile.MatchMode = egressapp.NormalizeMatchMode(profile.MatchMode)
 	if profile.Name == "" {
-		return errors.New("方案名称不能为空")
+		return errors.New("Nama profil tak boleh kosong")
 	}
 	if len(profile.Name) > 80 {
-		return errors.New("方案名称不能超过 80 个字符")
+		return errors.New("Nama profil tidak boleh melebihi 80 aksara")
 	}
 	if profile.Prompt == "" {
-		return errors.New("探测 Prompt 不能为空")
+		return errors.New("Prompt pengesanan tak boleh kosong")
 	}
 	if len(profile.Prompt) > egressapp.MaxQualityProbePromptBytes {
-		return errors.New("探测 Prompt 过长")
+		return errors.New("Prompt pengesanan terlalu panjang")
 	}
 	if len(profile.ExpectedText) > egressapp.MaxQualityProbeExpectedBytes {
-		return errors.New("预期标记过长")
+		return errors.New("Penanda jangkaan terlalu panjang")
 	}
 	if profile.MatchMode == egressapp.MatchRegex && profile.ExpectedText != "" {
 		if _, err := regexp.Compile(profile.ExpectedText); err != nil {
-			return fmt.Errorf("正则预期标记无效")
+			return fmt.Errorf("Penanda jangkaan regex tidak sah")
 		}
 	}
 	if profile.MaxOutputTokens < 0 || profile.MaxOutputTokens > egressapp.MaxQualityProbeOutputTokens {
-		return fmt.Errorf("方案最大输出需在 0 到 %d Token 之间", egressapp.MaxQualityProbeOutputTokens)
+		return fmt.Errorf("Output maksimum profil mesti antara 0 hingga %d Token", egressapp.MaxQualityProbeOutputTokens)
 	}
 	if creating && profile.BuiltIn {
-		return errors.New("不能新建内置方案")
+		return errors.New("Tidak boleh mencipta profil terbina dalam")
 	}
 	return nil
 }
@@ -242,7 +242,7 @@ func applyProfile(base egressapp.QualityProbeInput, profile probeProfile) egress
 func (h *Handler) listQualityGuardProfiles(c *gin.Context) {
 	data, err := loadProbeProfileFile(h.profilesPath())
 	if err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "探针方案暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Profil pengesan buat sementara tidak tersedia")
 		return
 	}
 	items := make([]probeProfile, 0, len(data.Profiles))
@@ -274,19 +274,19 @@ type probeProfileWriteRequest struct {
 func (h *Handler) createQualityGuardProfile(c *gin.Context) {
 	path := h.profilesPath()
 	if path == "" {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "探针方案当前只读")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "Profil pengesan buat masa ini hanya baca")
 		return
 	}
 	var request probeProfileWriteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	h.profilesMu.Lock()
 	defer h.profilesMu.Unlock()
 	data, err := loadProbeProfileFile(path)
 	if err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "探针方案暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Profil pengesan buat sementara tidak tersedia")
 		return
 	}
 	custom := 0
@@ -296,7 +296,7 @@ func (h *Handler) createQualityGuardProfile(c *gin.Context) {
 		}
 	}
 	if custom >= maxCustomProfiles {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", fmt.Sprintf("自定义方案最多 %d 个", maxCustomProfiles))
+		response.Error(c, http.StatusBadRequest, "invalidRequest", fmt.Sprintf("Profil tersuai maksimum %d", maxCustomProfiles))
 		return
 	}
 	profile := probeProfile{
@@ -315,7 +315,7 @@ func (h *Handler) createQualityGuardProfile(c *gin.Context) {
 		data.ActiveProfileID = profile.ID
 	}
 	if err := saveProbeProfileFile(path, data); err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "探针方案保存失败")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "Menyimpan profil pengesan gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, profile)
@@ -324,38 +324,38 @@ func (h *Handler) createQualityGuardProfile(c *gin.Context) {
 func (h *Handler) updateQualityGuardProfile(c *gin.Context) {
 	path := h.profilesPath()
 	if path == "" {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "探针方案当前只读")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "Profil pengesan buat masa ini hanya baca")
 		return
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	var request probeProfileWriteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	h.profilesMu.Lock()
 	defer h.profilesMu.Unlock()
 	data, err := loadProbeProfileFile(path)
 	if err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "探针方案暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Profil pengesan buat sementara tidak tersedia")
 		return
 	}
 	existing, ok := data.Profiles[id]
 	if !ok {
-		response.Error(c, http.StatusNotFound, "notFound", "方案不存在")
+		response.Error(c, http.StatusNotFound, "notFound", "Profil tidak wujud")
 		return
 	}
 	if existing.BuiltIn {
 		if request.Active {
 			data.ActiveProfileID = existing.ID
 			if err := saveProbeProfileFile(path, data); err != nil {
-				response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "探针方案保存失败")
+				response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "Menyimpan profil pengesan gagal")
 				return
 			}
 			response.Success(c, http.StatusOK, existing)
 			return
 		}
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "内置方案不能修改，请复制后另存")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Profil terbina dalam tidak boleh diubah, sila salin dan simpan sebagai yang baharu")
 		return
 	}
 	existing.Name = request.Name
@@ -374,7 +374,7 @@ func (h *Handler) updateQualityGuardProfile(c *gin.Context) {
 		data.ActiveProfileID = id
 	}
 	if err := saveProbeProfileFile(path, data); err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "探针方案保存失败")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "Menyimpan profil pengesan gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, existing)
@@ -383,7 +383,7 @@ func (h *Handler) updateQualityGuardProfile(c *gin.Context) {
 func (h *Handler) deleteQualityGuardProfile(c *gin.Context) {
 	path := h.profilesPath()
 	if path == "" {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "探针方案当前只读")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "Profil pengesan buat masa ini hanya baca")
 		return
 	}
 	id := strings.TrimSpace(c.Param("id"))
@@ -391,16 +391,16 @@ func (h *Handler) deleteQualityGuardProfile(c *gin.Context) {
 	defer h.profilesMu.Unlock()
 	data, err := loadProbeProfileFile(path)
 	if err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "探针方案暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Profil pengesan buat sementara tidak tersedia")
 		return
 	}
 	existing, ok := data.Profiles[id]
 	if !ok {
-		response.Error(c, http.StatusNotFound, "notFound", "方案不存在")
+		response.Error(c, http.StatusNotFound, "notFound", "Profil tidak wujud")
 		return
 	}
 	if existing.BuiltIn {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "内置方案不能删除")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Profil terbina dalam tidak boleh dipadam")
 		return
 	}
 	delete(data.Profiles, id)
@@ -408,7 +408,7 @@ func (h *Handler) deleteQualityGuardProfile(c *gin.Context) {
 		data.ActiveProfileID = profileQualityMarker
 	}
 	if err := saveProbeProfileFile(path, data); err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "探针方案保存失败")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "Menyimpan profil pengesan gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"deleted": true})
@@ -423,7 +423,7 @@ func (h *Handler) resolveProbeInput(profileID string) (egressapp.QualityProbeInp
 	profile, ok := data.resolve(profileID)
 	if !ok {
 		if profileID != "" {
-			return input, fmt.Errorf("方案不存在")
+			return input, fmt.Errorf("Profil tidak wujud")
 		}
 		return input, nil
 	}

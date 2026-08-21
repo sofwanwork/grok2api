@@ -754,7 +754,7 @@ func TestLiteChatStreamFailsBeforeReturningSuccessResponse(t *testing.T) {
 		Method:     http.MethodPost, Path: "/v1/chat/completions", Model: "grok-imagine-image", Operation: conversation.OperationChat,
 		Body: []byte(`{"model":"grok-imagine-image-lite","stream":true,"messages":[{"role":"user","content":"draw a cat"}]}`), Streaming: true,
 	})
-	if err == nil || response != nil || !strings.Contains(err.Error(), "未解析到最终图片") {
+	if err == nil || response != nil || !strings.Contains(err.Error(), "imej akhir tidak dihuraikan") {
 		t.Fatalf("response=%#v error=%v", response, err)
 	}
 }

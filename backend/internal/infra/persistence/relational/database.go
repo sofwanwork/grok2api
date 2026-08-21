@@ -45,12 +45,12 @@ func (d *Database) Dialect() string {
 // 显式事务使用 IMMEDIATE，避免并发读后写事务在锁升级时直接返回 SQLITE_BUSY。
 func OpenSQLite(ctx context.Context, path string) (*Database, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("创建数据库目录: %w", err)
+		return nil, fmt.Errorf("Mencipta direktori pangkalan data: %w", err)
 	}
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_txlock=immediate", path)
 	db, err := gorm.Open(glebarezsqlite.Open(dsn), gormConfig())
 	if err != nil {
-		return nil, fmt.Errorf("打开 SQLite: %w", err)
+		return nil, fmt.Errorf("Membuka SQLite: %w", err)
 	}
 	return configureDatabase(ctx, db, "sqlite", 16, 16)
 }
@@ -59,11 +59,11 @@ func OpenSQLite(ctx context.Context, path string) (*Database, error) {
 func OpenPostgres(ctx context.Context, dsn string, maxOpenConns, maxIdleConns int) (*Database, error) {
 	db, err := gorm.Open(postgres.Open(dsn), gormConfig())
 	if err != nil {
-		return nil, &postgresConnectionError{operation: "打开 PostgreSQL", err: err, dsn: dsn}
+		return nil, &postgresConnectionError{operation: "Membuka PostgreSQL", err: err, dsn: dsn}
 	}
 	database, err := configureDatabase(ctx, db, "postgres", maxOpenConns, maxIdleConns)
 	if err != nil {
-		return nil, &postgresConnectionError{operation: "配置 PostgreSQL", err: err, dsn: dsn}
+		return nil, &postgresConnectionError{operation: "Mengkonfigurasi PostgreSQL", err: err, dsn: dsn}
 	}
 	return database, nil
 }
@@ -115,7 +115,7 @@ func configureDatabase(ctx context.Context, db *gorm.DB, dialect string, maxOpen
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	if err := sqlDB.PingContext(ctx); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("连接 %s: %w", dialect, err)
+		return nil, fmt.Errorf("Menyambung %s: %w", dialect, err)
 	}
 	return &Database{db: db, dialect: dialect}, nil
 }

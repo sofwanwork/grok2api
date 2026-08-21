@@ -40,18 +40,18 @@ func (h *Handler) synthesizeOpenAIAudioTask(c *gin.Context) {
 func (h *Handler) handleOpenAISpeech(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.maxBodyBytes)
 	if !isJSONRequest(c) {
-		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "audio speech 仅支持 application/json")
+		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "audio speech hanya menyokong application/json")
 		return
 	}
 	var request openAISpeechRequest
 	if err := decodeSingleJSON(c.Request.Body, &request, false); err != nil {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "audio speech 请求无效")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan audio speech tidak sah")
 		return
 	}
 
 	text := strings.TrimSpace(request.Input)
 	if text == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "input 不能为空")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "input tak boleh kosong")
 		return
 	}
 	language := strings.TrimSpace(request.Language)
@@ -77,7 +77,7 @@ func (h *Handler) handleOpenAISpeech(c *gin.Context) {
 		if codec := mapOpenAIResponseFormat(request.ResponseFormat); codec != "" {
 			format.Codec = codec
 		} else if strings.TrimSpace(request.ResponseFormat) != "" {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "response_format 不受支持")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "response_format tidak disokong")
 			return
 		} else {
 			format.Codec = "mp3"

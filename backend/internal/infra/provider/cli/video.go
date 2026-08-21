@@ -78,7 +78,7 @@ func newVideoUpstreamError(status int, body []byte) *videoUpstreamError {
 
 func summarizeVideoUpstreamError(status int, body []byte) string {
 	code, message := extractVideoUpstreamErrorFields(body)
-	parts := []string{fmt.Sprintf("Build 视频上游返回 %d", status)}
+	parts := []string{fmt.Sprintf("Build video upstream mengembalikan %d", status)}
 	if code != "" {
 		parts = append(parts, code)
 	}
@@ -157,7 +157,7 @@ func boundDiagnosticText(value string, limit int) string {
 // 其他 auto Super 账号仅在当次 Build 创建返回 403 后探测 XAI。
 func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoRequest) (provider.VideoResult, error) {
 	if total := buildVideoImageCount(request); total > buildVideoMaxImages {
-		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePrepare, 0, fmt.Errorf("Build grok-imagine-video-1.5 最多支持 %d 张输入图，当前为 %d 张", buildVideoMaxImages, total))
+		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePrepare, 0, fmt.Errorf("Build grok-imagine-video-1.5 menyokong maksimum %d imej input, semasa %d", buildVideoMaxImages, total))
 	}
 	accessToken, err := a.cipher.Decrypt(request.Credential.EncryptedAccessToken)
 	if err != nil {
@@ -204,7 +204,7 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 func (a *Adapter) generateVideoOnXAI(ctx context.Context, request provider.VideoRequest, credential account.Credential, accessToken string, recordFallback bool) (provider.VideoResult, error) {
 	issuer := a.uploadIssuerRef()
 	if issuer == nil {
-		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePrepare, 0, fmt.Errorf("XAI 视频需要媒体上传接收服务"))
+		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePrepare, 0, fmt.Errorf("Video XAI memerlukan perkhidmatan penerima muat naik media"))
 	}
 	jobKey := strings.TrimSpace(request.JobID)
 	if jobKey == "" {
@@ -247,7 +247,7 @@ func (a *Adapter) generateVideoOnXAI(ctx context.Context, request provider.Video
 func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credential, rawURL string) (io.ReadCloser, string, int64, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || parsed.Scheme != "https" || parsed.User != nil || !trustedBuildVideoAssetHost(parsed.Hostname()) {
-		return nil, "", 0, fmt.Errorf("视频内容 URL 不受信任")
+		return nil, "", 0, fmt.Errorf("URL kandungan video tidak dipercayai")
 	}
 	requestCtx := infraegress.WithCredential(ctx, credential)
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, parsed.String(), nil)
@@ -265,7 +265,7 @@ func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credenti
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_ = response.Body.Close()
-		return nil, "", 0, fmt.Errorf("下载视频返回 %d", response.StatusCode)
+		return nil, "", 0, fmt.Errorf("Muat turun video mengembalikan %d", response.StatusCode)
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
 	if contentType == "" || contentType == "application/octet-stream" {
@@ -273,7 +273,7 @@ func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credenti
 	}
 	if !strings.HasPrefix(contentType, "video/") {
 		_ = response.Body.Close()
-		return nil, "", 0, fmt.Errorf("上游视频 Content-Type 无效")
+		return nil, "", 0, fmt.Errorf("Content-Type video upstream tidak sah")
 	}
 	return response.Body, contentType, response.ContentLength, nil
 }
@@ -298,14 +298,14 @@ func videoCreatePayload(request provider.VideoRequest, uploadURL string, profile
 		payload["image"] = map[string]any{profile.imageURLField: imageURL}
 	}
 	if strings.TrimSpace(request.ImageURL) != "" && (len(request.ReferenceURLs) > 0 || len(request.ReferenceAudios) > 0) {
-		return nil, fmt.Errorf("image 不能与 reference_images/reference_audios 同时使用")
+		return nil, fmt.Errorf("image tidak boleh digunakan bersama reference_images/reference_audios")
 	}
 	if len(request.ReferenceURLs) > 0 {
 		references := make([]map[string]any, 0, len(request.ReferenceURLs))
 		for _, rawURL := range request.ReferenceURLs {
 			refURL := strings.TrimSpace(rawURL)
 			if refURL == "" {
-				return nil, fmt.Errorf("视频参考图 URL 不能为空")
+				return nil, fmt.Errorf("URL imej rujukan video tak boleh kosong")
 			}
 			references = append(references, map[string]any{profile.imageURLField: refURL})
 		}
@@ -314,13 +314,13 @@ func videoCreatePayload(request provider.VideoRequest, uploadURL string, profile
 	}
 	if len(request.ReferenceAudios) > 0 {
 		if len(request.ReferenceAudios) > 3 {
-			return nil, fmt.Errorf("reference_audios 最多 3 个")
+			return nil, fmt.Errorf("reference_audios maksimum 3")
 		}
 		audios := make([]map[string]any, 0, len(request.ReferenceAudios))
 		for _, raw := range request.ReferenceAudios {
 			voiceID := strings.TrimSpace(raw)
 			if voiceID == "" {
-				return nil, fmt.Errorf("reference_audios.voice_id 不能为空")
+				return nil, fmt.Errorf("reference_audios.voice_id tak boleh kosong")
 			}
 			audios = append(audios, map[string]any{"voice_id": voiceID})
 		}
@@ -329,16 +329,16 @@ func videoCreatePayload(request provider.VideoRequest, uploadURL string, profile
 	hasReferenceMode := len(request.ReferenceURLs) > 0 || len(request.ReferenceAudios) > 0
 	if hasReferenceMode {
 		if strings.TrimSpace(request.Prompt) == "" {
-			return nil, fmt.Errorf("参考图/参考音频视频必须提供 prompt")
+			return nil, fmt.Errorf("Video rujukan imej/audio mesti menyediakan prompt")
 		}
 		if strings.EqualFold(strings.TrimSpace(request.Resolution), "1080p") {
-			return nil, fmt.Errorf("参考图视频 resolution 最高 720p")
+			return nil, fmt.Errorf("Resolusi video rujukan imej maksimum 720p")
 		}
 	}
 	if _, hasPrompt := payload["prompt"]; !hasPrompt {
 		if _, hasImage := payload["image"]; !hasImage {
 			if !hasReferenceMode {
-				return nil, fmt.Errorf("文本生视频必须提供 prompt；图片生视频可以省略 prompt")
+				return nil, fmt.Errorf("Teks ke video mesti menyediakan prompt; imej ke video boleh mengabaikan prompt")
 			}
 		}
 	}
@@ -364,7 +364,7 @@ func (a *Adapter) pollVideoJob(ctx context.Context, credential account.Credentia
 			if assetID != "" {
 				issuer := a.uploadIssuerRef()
 				if issuer == nil {
-					return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePoll, 0, fmt.Errorf("XAI 视频需要媒体上传接收服务"))
+					return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePoll, 0, fmt.Errorf("Video XAI memerlukan perkhidmatan penerima muat naik media"))
 				}
 				contentType, waitErr := issuer.WaitVideoUpload(ctx, assetID)
 				if waitErr != nil {
@@ -425,7 +425,7 @@ func (a *Adapter) doVideoJSON(ctx context.Context, credential account.Credential
 		return nil, err
 	}
 	if len(data) > buildVideoMaxBodySize {
-		return nil, fmt.Errorf("Build 视频上游响应超过 %d 字节", buildVideoMaxBodySize)
+		return nil, fmt.Errorf("Respons upstream video Build melebihi %d bait", buildVideoMaxBodySize)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, provider.ErrUnauthorized
@@ -439,10 +439,10 @@ func (a *Adapter) doVideoJSON(ctx context.Context, credential account.Credential
 func parseVideoCreateResponse(body []byte) (string, error) {
 	var root map[string]any
 	if err := json.Unmarshal(body, &root); err != nil {
-		return "", fmt.Errorf("解析 Build 视频创建响应: %w", err)
+		return "", fmt.Errorf("Huraian respons penciptaan video Build: %w", err)
 	}
 	if message := firstNestedString(root, "error", "message"); message != "" {
-		return "", fmt.Errorf("Build 视频创建失败: %s", safeVideoDiagnosticMessage(message))
+		return "", fmt.Errorf("Penciptaan video Build gagal: %s", safeVideoDiagnosticMessage(message))
 	}
 	if id := firstString(root, "request_id", "id"); id != "" {
 		return id, nil
@@ -452,16 +452,16 @@ func parseVideoCreateResponse(body []byte) (string, error) {
 			return id, nil
 		}
 	}
-	return "", fmt.Errorf("Build 视频创建响应缺少 request_id")
+	return "", fmt.Errorf("Respons penciptaan video Build tiada request_id")
 }
 
 func parseVideoStatusResponse(body []byte, progress func(int), allowMissingURL bool) (provider.VideoResult, bool, error) {
 	var root map[string]any
 	if err := json.Unmarshal(body, &root); err != nil {
-		return provider.VideoResult{}, false, fmt.Errorf("解析 Build 视频状态响应: %w", err)
+		return provider.VideoResult{}, false, fmt.Errorf("Huraian respons status video Build: %w", err)
 	}
 	if message := firstNestedString(root, "error", "message"); message != "" {
-		return provider.VideoResult{}, false, fmt.Errorf("Build 视频生成失败: %s", safeVideoDiagnosticMessage(message))
+		return provider.VideoResult{}, false, fmt.Errorf("Penjanaan video Build gagal: %s", safeVideoDiagnosticMessage(message))
 	}
 	statusSource := root
 	if data, ok := root["data"].(map[string]any); ok {
@@ -480,11 +480,11 @@ func parseVideoStatusResponse(body []byte, progress func(int), allowMissingURL b
 		if message == "" {
 			message = status
 		}
-		return provider.VideoResult{}, false, fmt.Errorf("Build 视频生成失败: %s", safeVideoDiagnosticMessage(message))
+		return provider.VideoResult{}, false, fmt.Errorf("Penjanaan video Build gagal: %s", safeVideoDiagnosticMessage(message))
 	case "completed", "succeeded", "success", "ready", "done":
 		videoURL := extractBuildVideoURL(root)
 		if videoURL == "" && !allowMissingURL {
-			return provider.VideoResult{}, false, fmt.Errorf("视频生成完成但没有返回内容 URL")
+			return provider.VideoResult{}, false, fmt.Errorf("Penjanaan video selesai tetapi tiada URL kandungan dikembalikan")
 		}
 		return provider.VideoResult{URL: videoURL, ContentType: "video/mp4"}, true, nil
 	default:

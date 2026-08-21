@@ -35,7 +35,7 @@ func (l *Lease) DialWebSocketDeferredForbidden(ctx context.Context, endpoint str
 
 func (l *Lease) dialWebSocket(ctx context.Context, endpoint string, headers fhttp.Header, handshakeTimeout time.Duration, invalidateForbidden bool) (*websocket.Conn, *fhttp.Response, error) {
 	if l == nil || l.browser == nil {
-		return nil, nil, errors.New("当前出口客户端不支持浏览器 WebSocket")
+		return nil, nil, errors.New("Klien egress semasa tidak menyokong WebSocket pelayar")
 	}
 	for attempt := 0; ; attempt++ {
 		dialer := &websocket.Dialer{
@@ -76,12 +76,12 @@ func newBrowserClient(proxyURL, userAgent string) (*browserClient, error) {
 	if proxyURL != "" {
 		parsed, err := url.Parse(proxyURL)
 		if err != nil {
-			return nil, fmt.Errorf("解析浏览器出口代理: %w", err)
+			return nil, fmt.Errorf("Huraian proksi egress pelayar: %w", err)
 		}
 		if tunnelproxy.IsSupportedScheme(parsed.Scheme) {
 			dialer, err := tunnelproxy.NewDialer(proxyURL)
 			if err != nil {
-				return nil, fmt.Errorf("创建浏览器隧道代理: %w", err)
+				return nil, fmt.Errorf("Mencipta proksi terowong pelayar: %w", err)
 			}
 			options = append(options, tlsclient.WithDialContext(dialer.DialContext))
 		} else {

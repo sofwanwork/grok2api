@@ -71,7 +71,7 @@ func TestWebCredentialJSONLinesPreserveMetadata(t *testing.T) {
 func TestWebCredentialJSONLinesRejectMalformedLine(t *testing.T) {
 	adapter := &Adapter{}
 	_, err := adapter.ParseImportedCredentials([]byte("{\"sso_token\":\"token-one\"}\ninvalid-secret\n"))
-	if err == nil || !strings.Contains(err.Error(), "第 2 行") || strings.Contains(err.Error(), "invalid-secret") {
+	if err == nil || !strings.Contains(err.Error(), "baris 2") || strings.Contains(err.Error(), "invalid-secret") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -102,11 +102,11 @@ func TestWebCredentialBareArrayWithBOM(t *testing.T) {
 func TestWebCredentialBareArrayErrors(t *testing.T) {
 	adapter := &Adapter{}
 	// 空数组：JSON 路径解析出 0 个账号，而不是被当成空文本导入。
-	if _, err := adapter.ParseImportedCredentials([]byte("[]")); err == nil || !strings.Contains(err.Error(), "没有 Grok Web 账号") {
+	if _, err := adapter.ParseImportedCredentials([]byte("[]")); err == nil || !strings.Contains(err.Error(), "Tiada akaun Grok Web") {
 		t.Fatalf("empty array error = %v", err)
 	}
 	// null 元素：归一化阶段带账号序号报错。
-	if _, err := adapter.ParseImportedCredentials([]byte(`[{"sso_token":"token-one"},null]`)); err == nil || !strings.Contains(err.Error(), "第 2 个账号缺少 sso_token") {
+	if _, err := adapter.ParseImportedCredentials([]byte(`[{"sso_token":"token-one"},null]`)); err == nil || !strings.Contains(err.Error(), "Akaun ke-2 tiada sso_token") {
 		t.Fatalf("null element error = %v", err)
 	}
 	// 非法 [ 开头输入：明确 JSON 报错，禁止静默当纯文本导入。

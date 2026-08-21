@@ -139,7 +139,7 @@ func (d *Database) initializeSchema(ctx context.Context) error {
 	// all 作用域会让 Build 与 Web 共用 UA、健康度和冷却状态，升级时直接移除旧节点。
 	if db.Migrator().HasTable(&egressNodeModel{}) {
 		if err := db.Where("scope = ?", "all").Delete(&egressNodeModel{}).Error; err != nil {
-			return fmt.Errorf("清理旧版所有域出口节点: %w", err)
+			return fmt.Errorf("Membersihkan node egress domain semua versi lama: %w", err)
 		}
 	}
 	autoMigrate := func() error {
@@ -154,85 +154,85 @@ func (d *Database) initializeSchema(ctx context.Context) error {
 		migrateErr = autoMigrate()
 	}
 	if migrateErr != nil {
-		return fmt.Errorf("初始化数据库表: %w", migrateErr)
+		return fmt.Errorf("Menginisialisasi jadual pangkalan data: %w", migrateErr)
 	}
 	if hadGlobalSubscriptionProxy {
 		if err := d.migratePerSourceSubscriptionProxy(ctx); err != nil {
-			return fmt.Errorf("迁移代理订阅拉取代理: %w", err)
+			return fmt.Errorf("Memigrasikan proksi tarikan langganan: %w", err)
 		}
 	}
 	if err := d.migrateStandaloneEgressProxyProfiles(ctx); err != nil {
-		return fmt.Errorf("迁移独立出口代理配置: %w", err)
+		return fmt.Errorf("Memigrasikan konfigurasi proksi egress berdiri sendiri: %w", err)
 	}
 	if err := d.migrateClientKeyAccountScopes(ctx, hadLegacyAccountPool, !hadProviderScope, !hadTierScope); err != nil {
-		return fmt.Errorf("迁移客户端 Key 调用范围: %w", err)
+		return fmt.Errorf("Memigrasikan skop panggilan Key klien: %w", err)
 	}
 	if err := d.migrateBuildResponseHeaderTimeout(ctx); err != nil {
-		return fmt.Errorf("迁移 Grok Build 响应头超时: %w", err)
+		return fmt.Errorf("Memigrasikan tamat masa pengepala respons Grok Build: %w", err)
 	}
 	if err := d.migrateProviderStreamIdleTimeouts(ctx); err != nil {
-		return fmt.Errorf("迁移 Provider 流式空闲超时: %w", err)
+		return fmt.Errorf("Memigrasikan tamat masa melahu strim Provider: %w", err)
 	}
 	if err := d.ensureConsoleConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移 Console 数据库约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan pangkalan data Console: %w", err)
 	}
 	if err := d.ensureEgressAssetScopeConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移资源出口数据库约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan pangkalan data egress aset: %w", err)
 	}
 	if err := d.ensureAuditOperationConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移请求审计操作约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan operasi audit permintaan: %w", err)
 	}
 	if err := d.ensureModelRouteCapabilityConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移模型路由能力约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan keupayaan laluan model: %w", err)
 	}
 	if err := d.ensureMediaJobConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移 media job 数据库约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan pangkalan data media job: %w", err)
 	}
 	if err := d.migrateMediaJobOperations(ctx); err != nil {
-		return fmt.Errorf("迁移 media job 操作类型: %w", err)
+		return fmt.Errorf("Memigrasikan jenis operasi media job: %w", err)
 	}
 	if err := d.ensureMediaJobInputConstraint(ctx); err != nil {
-		return fmt.Errorf("迁移 media job 输入长度约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan panjang input media job: %w", err)
 	}
 	// Create the pending-metadata partial index before backfill so both first
 	// upgrade and subsequent empty scans avoid walking the full media_jobs table.
 	if err := d.ensureMediaJobInputMetadataPendingIndex(ctx); err != nil {
-		return fmt.Errorf("初始化 media job 输入元数据索引: %w", err)
+		return fmt.Errorf("Menginisialisasi indeks metadata input media job: %w", err)
 	}
 	if err := d.migrateMediaJobInputMetadata(ctx); err != nil {
-		return fmt.Errorf("迁移 media job 输入元数据: %w", err)
+		return fmt.Errorf("Memigrasikan metadata input media job: %w", err)
 	}
 	if err := d.ensureMediaJobAccountForeignKey(ctx); err != nil {
-		return fmt.Errorf("迁移 media job 账号外键: %w", err)
+		return fmt.Errorf("Memigrasikan kunci asing akaun media job: %w", err)
 	}
 	if err := d.ensureMediaAssetConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移 media asset 数据库约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan pangkalan data media asset: %w", err)
 	}
 	if err := d.ensureClientKeyLimitConstraints(ctx); err != nil {
-		return fmt.Errorf("迁移客户端 Key 限额约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan had Key klien: %w", err)
 	}
 	if err := d.backfillWebEgressIdentities(ctx); err != nil {
-		return fmt.Errorf("迁移 Web 出口身份: %w", err)
+		return fmt.Errorf("Memigrasikan identiti egress Web: %w", err)
 	}
 	if err := d.backfillReauthMarkedAt(ctx); err != nil {
-		return fmt.Errorf("迁移 reauth_marked_at: %w", err)
+		return fmt.Errorf("Memigrasikan reauth_marked_at: %w", err)
 	}
 	if err := d.dropRedundantResponseExpiryIndexes(ctx); err != nil {
-		return fmt.Errorf("迁移响应过期索引: %w", err)
+		return fmt.Errorf("Memigrasikan indeks luput respons: %w", err)
 	}
 	if err := d.dropProviderUpstreamUniqueIndex(ctx); err != nil {
-		return fmt.Errorf("迁移模型路由上游唯一约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan unik upstream laluan model: %w", err)
 	}
 	if err := d.dropModelPublicIDUniqueIndex(ctx); err != nil {
-		return fmt.Errorf("迁移模型路由名称唯一约束: %w", err)
+		return fmt.Errorf("Memigrasikan kekangan unik nama laluan model: %w", err)
 	}
 	for _, statement := range schemaIndexes {
 		if err := db.Exec(statement).Error; err != nil {
-			return fmt.Errorf("初始化数据库索引: %w", err)
+			return fmt.Errorf("Menginisialisasi indeks pangkalan data: %w", err)
 		}
 	}
 	if err := d.ensureCanonicalModelPublicIDs(ctx); err != nil {
-		return fmt.Errorf("迁移模型 Provider 命名空间: %w", err)
+		return fmt.Errorf("Memigrasikan ruang nama Provider model: %w", err)
 	}
 	return nil
 }
@@ -730,11 +730,11 @@ func (d *Database) ensureClientKeyLimitConstraints(ctx context.Context) error {
 			}
 			if definition != "" {
 				if err := db.Migrator().DropConstraint(value.model, value.name); err != nil {
-					return fmt.Errorf("删除旧约束 %s: %w", value.name, err)
+					return fmt.Errorf("Memadam kekangan lama %s: %w", value.name, err)
 				}
 			}
 			if err := db.Migrator().CreateConstraint(value.model, value.name); err != nil {
-				return fmt.Errorf("创建约束 %s: %w", value.name, err)
+				return fmt.Errorf("Mencipta kekangan %s: %w", value.name, err)
 			}
 		}
 		return nil
@@ -764,11 +764,11 @@ func (d *Database) ensureNamedConstraints(ctx context.Context, constraints []con
 			}
 			if definition != "" {
 				if err := db.Migrator().DropConstraint(value.model, value.name); err != nil {
-					return fmt.Errorf("删除旧约束 %s: %w", value.name, err)
+					return fmt.Errorf("Memadam kekangan lama %s: %w", value.name, err)
 				}
 			}
 			if err := db.Migrator().CreateConstraint(value.model, value.name); err != nil {
-				return fmt.Errorf("创建约束 %s: %w", value.name, err)
+				return fmt.Errorf("Mencipta kekangan %s: %w", value.name, err)
 			}
 		}
 		return nil
@@ -797,7 +797,7 @@ func (d *Database) withSQLiteForeignKeysDisabled(ctx context.Context, migrate fu
 	}()
 	db := d.db.WithContext(ctx)
 	if err := db.Exec("PRAGMA foreign_keys = OFF").Error; err != nil {
-		return fmt.Errorf("暂停 SQLite 外键约束: %w", err)
+		return fmt.Errorf("Menangguhkan kekangan kunci asing SQLite: %w", err)
 	}
 	foreignKeysDisabled := true
 	defer func() {
@@ -807,10 +807,10 @@ func (d *Database) withSQLiteForeignKeysDisabled(ctx context.Context, migrate fu
 	}()
 	var foreignKeys int
 	if err := db.Raw("PRAGMA foreign_keys").Scan(&foreignKeys).Error; err != nil {
-		return fmt.Errorf("确认 SQLite 外键状态: %w", err)
+		return fmt.Errorf("Mengesahkan status kunci asing SQLite: %w", err)
 	}
 	if foreignKeys != 0 {
-		return fmt.Errorf("暂停 SQLite 外键约束失败")
+		return fmt.Errorf("Gagal menangguhkan kekangan kunci asing SQLite")
 	}
 	migrationErr := migrate()
 	if migrationErr == nil {
@@ -821,9 +821,9 @@ func (d *Database) withSQLiteForeignKeysDisabled(ctx context.Context, migrate fu
 			FKID   int
 		}
 		if err := db.Raw("PRAGMA foreign_key_check").Scan(&violations).Error; err != nil {
-			migrationErr = fmt.Errorf("校验 SQLite 外键: %w", err)
+			migrationErr = fmt.Errorf("Mengesahkan kunci asing SQLite: %w", err)
 		} else if len(violations) > 0 {
-			migrationErr = fmt.Errorf("SQLite 约束迁移产生 %d 条外键违规", len(violations))
+			migrationErr = fmt.Errorf("Migrasi kekangan SQLite menghasilkan %d pelanggaran kunci asing", len(violations))
 		}
 	}
 	enableErr := db.Exec("PRAGMA foreign_keys = ON").Error
@@ -832,12 +832,12 @@ func (d *Database) withSQLiteForeignKeysDisabled(ctx context.Context, migrate fu
 	}
 	if migrationErr != nil {
 		if enableErr != nil {
-			return fmt.Errorf("%w；恢复 SQLite 外键失败: %v", migrationErr, enableErr)
+			return fmt.Errorf("%w; gagal memulihkan kunci asing SQLite: %v", migrationErr, enableErr)
 		}
 		return migrationErr
 	}
 	if enableErr != nil {
-		return fmt.Errorf("恢复 SQLite 外键约束: %w", enableErr)
+		return fmt.Errorf("Memulihkan kekangan kunci asing SQLite: %w", enableErr)
 	}
 	return nil
 }
@@ -860,7 +860,7 @@ func (d *Database) constraintDefinition(ctx context.Context, value consoleConstr
 			return "", err
 		}
 	default:
-		return "", fmt.Errorf("不支持的数据库驱动: %s", d.dialect)
+		return "", fmt.Errorf("Pemacu pangkalan data tidak disokong: %s", d.dialect)
 	}
 	return definition, nil
 }

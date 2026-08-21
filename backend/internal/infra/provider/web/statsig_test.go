@@ -97,7 +97,7 @@ func TestFetchStatsigMetaContentRejectsNon404IndexStatuses(t *testing.T) {
 					return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
 				}
 				_, err := fetchStatsigMetaContentWithDo(context.Background(), "https://grok.com", "sso-token", &infraegress.Lease{UserAgent: "test-agent"}, do)
-				if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("Grok index 返回 %d", status)) {
+				if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("Grok index mengembalikan %d", status)) {
 					t.Fatalf("err=%v", err)
 				}
 				if calls != 1 {
@@ -122,7 +122,7 @@ func TestFetchStatsigMetaContentRequiresSuccessfulRoot(t *testing.T) {
 				return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
 			}
 			_, err := fetchStatsigMetaContentWithDo(context.Background(), "https://grok.com", "sso-token", &infraegress.Lease{UserAgent: "test-agent"}, do)
-			if err == nil || !strings.Contains(err.Error(), "Grok 首页返回 503") {
+			if err == nil || !strings.Contains(err.Error(), "Laman depan Grok mengembalikan 503") {
 				t.Fatalf("err=%v", err)
 			}
 		})
@@ -179,7 +179,7 @@ func TestFetchStatsigMetaContentDoesNotFallbackOnTransportReadOrOversizeFailure(
 			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(strings.Repeat("x", statsigMetaBodyLimit+1))), Header: http.Header{}}, nil
 		}
 		_, err := fetchStatsigMetaContentWithDo(context.Background(), "https://grok.com", "sso-token", &infraegress.Lease{UserAgent: "test-agent"}, do)
-		if err == nil || !strings.Contains(err.Error(), "超过安全上限") || calls != 1 {
+		if err == nil || !strings.Contains(err.Error(), "melebihi had selamat") || calls != 1 {
 			t.Fatalf("err=%v calls=%d", err, calls)
 		}
 	})

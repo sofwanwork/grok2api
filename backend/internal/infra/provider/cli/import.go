@@ -58,7 +58,7 @@ func marshalCredentials(values []provider.CredentialSeed) ([]byte, error) {
 	}
 	data, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("序列化账号凭据: %w", err)
+		return nil, fmt.Errorf("Menyahkod kredensial akaun: %w", err)
 	}
 	return append(data, '\n'), nil
 }
@@ -70,14 +70,14 @@ func parseImportedCredentials(data []byte) ([]provider.CredentialSeed, error) {
 	}
 
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("账号凭据中没有账号")
+		return nil, fmt.Errorf("Tiada akaun dalam kredensial akaun")
 	}
 
 	result := make([]provider.CredentialSeed, 0, len(entries))
 	for index, entry := range entries {
 		seed, err := normalizeImportedCredential(entry)
 		if err != nil {
-			return nil, fmt.Errorf("第 %d 个账号: %w", index+1, err)
+			return nil, fmt.Errorf("Akaun ke-%d: %w", index+1, err)
 		}
 		result = append(result, seed)
 	}
@@ -121,24 +121,24 @@ func parsePlainTextRefreshTokens(value string) ([]importedCredentialEntry, error
 			}
 		}
 		if line == "" {
-			return nil, fmt.Errorf("refresh token 不能为空")
+			return nil, fmt.Errorf("refresh token tak boleh kosong")
 		}
 		if len(line) > maxImportedRefreshTokenBytes {
-			return nil, fmt.Errorf("refresh token 长度不能超过 %d 字节", maxImportedRefreshTokenBytes)
+			return nil, fmt.Errorf("Panjang refresh token tidak boleh melebihi %d bait", maxImportedRefreshTokenBytes)
 		}
 		if strings.IndexFunc(line, unicode.IsSpace) >= 0 {
-			return nil, fmt.Errorf("refresh token 不能包含空白字符")
+			return nil, fmt.Errorf("refresh token tidak boleh mengandungi aksara ruang kosong")
 		}
 		if len(entries) >= maxCredentialImportAccounts {
-			return nil, fmt.Errorf("%w: 单次最多导入 %d 个账号", provider.ErrCredentialLimit, maxCredentialImportAccounts)
+			return nil, fmt.Errorf("%w: import maksimum %d akaun setiap kali", provider.ErrCredentialLimit, maxCredentialImportAccounts)
 		}
 		entries = append(entries, importedCredentialEntry{Provider: credentialImportProvider, RefreshToken: line})
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("读取 refresh token 文本: %w", err)
+		return nil, fmt.Errorf("Membaca teks refresh token: %w", err)
 	}
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("文本中没有 refresh token")
+		return nil, fmt.Errorf("Tiada refresh token dalam teks")
 	}
 	return entries, nil
 }
@@ -156,21 +156,21 @@ func parseImportedCredentialJSONValue(data []byte) ([]importedCredentialEntry, e
 	if accounts, batch := shape["accounts"]; batch {
 		var entries []importedCredentialEntry
 		if err := json.Unmarshal(accounts, &entries); err != nil {
-			return nil, fmt.Errorf("解析批量账号凭据: %w", err)
+			return nil, fmt.Errorf("Huraian kredensial akaun secara pukal: %w", err)
 		}
 		return entries, nil
 	}
 
 	var entry importedCredentialEntry
 	if err := json.Unmarshal(data, &entry); err != nil {
-		return nil, fmt.Errorf("解析 OAuth 凭据: %w", err)
+		return nil, fmt.Errorf("Huraian kredensial OAuth: %w", err)
 	}
 	return []importedCredentialEntry{entry}, nil
 }
 
 func appendImportedCredentialEntries(target *[]importedCredentialEntry, values []importedCredentialEntry) error {
 	if len(values) > maxCredentialImportAccounts-len(*target) {
-		return fmt.Errorf("%w: 单次最多导入 %d 个账号", provider.ErrCredentialLimit, maxCredentialImportAccounts)
+		return fmt.Errorf("%w: import maksimum %d akaun setiap kali", provider.ErrCredentialLimit, maxCredentialImportAccounts)
 	}
 	*target = append(*target, values...)
 	return nil
@@ -211,19 +211,19 @@ func parseLooseCredentialDocument(data []byte) ([]importedCredentialEntry, bool,
 			continue
 		}
 		if closed {
-			return nil, true, fmt.Errorf("解析批量账号凭据第 %d 行: 结束标记后仍有内容", lineNumber)
+			return nil, true, fmt.Errorf("Huraian kredensial akaun secara pukal pada baris %d: masih ada kandungan selepas penanda penutup", lineNumber)
 		}
 		line = strings.TrimSpace(strings.TrimSuffix(line, ","))
 		values, err := parseImportedCredentialJSONValue([]byte(line))
 		if err != nil {
-			return nil, true, fmt.Errorf("解析批量账号凭据第 %d 行: %w", lineNumber, err)
+			return nil, true, fmt.Errorf("Huraian kredensial akaun secara pukal pada baris %d: %w", lineNumber, err)
 		}
 		if err := appendImportedCredentialEntries(&entries, values); err != nil {
 			return nil, true, err
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, true, fmt.Errorf("读取批量账号凭据: %w", err)
+		return nil, true, fmt.Errorf("Membaca kredensial akaun secara pukal: %w", err)
 	}
 	if nonEmptyLine < 2 {
 		return nil, false, nil
@@ -250,15 +250,15 @@ func normalizeImportedCredential(entry importedCredentialEntry) (provider.Creden
 		providerName = credentialImportProvider
 	}
 	if providerName != credentialImportProvider {
-		return provider.CredentialSeed{}, fmt.Errorf("暂不支持 Provider %q", entry.Provider)
+		return provider.CredentialSeed{}, fmt.Errorf("Provider %q belum disokong", entry.Provider)
 	}
 	accessToken := strings.TrimSpace(entry.AccessToken)
 	refreshToken := strings.TrimSpace(entry.RefreshToken)
 	if accessToken == "" && refreshToken == "" {
-		return provider.CredentialSeed{}, fmt.Errorf("access_token 和 refresh_token 至少提供一个")
+		return provider.CredentialSeed{}, fmt.Errorf("Sekurang-kurangnya satu daripada access_token atau refresh_token mesti disediakan")
 	}
 	if entry.TokenType != "" && !strings.EqualFold(strings.TrimSpace(entry.TokenType), "Bearer") {
-		return provider.CredentialSeed{}, fmt.Errorf("暂不支持 token_type %q", entry.TokenType)
+		return provider.CredentialSeed{}, fmt.Errorf("token_type %q belum disokong", entry.TokenType)
 	}
 
 	claims := decodeJWTClaims(firstNonEmpty(entry.IDToken, accessToken))
@@ -283,7 +283,7 @@ func importedCredentialExpiry(entry importedCredentialEntry, claims map[string]a
 	if strings.TrimSpace(entry.ExpiresAt) != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(entry.ExpiresAt))
 		if err != nil {
-			return time.Time{}, fmt.Errorf("expires_at 必须是 RFC3339 时间: %w", err)
+			return time.Time{}, fmt.Errorf("expires_at mesti masa RFC3339: %w", err)
 		}
 		return parsed.UTC(), nil
 	}
@@ -291,10 +291,10 @@ func importedCredentialExpiry(entry importedCredentialEntry, claims map[string]a
 		return expiresAt, nil
 	}
 	if entry.ExpiresIn < 0 {
-		return time.Time{}, fmt.Errorf("expires_in 不能小于零")
+		return time.Time{}, fmt.Errorf("expires_in tidak boleh kurang daripada sifar")
 	}
 	if entry.ExpiresIn > int64((365*24*time.Hour)/time.Second) {
-		return time.Time{}, fmt.Errorf("expires_in 超出合理范围")
+		return time.Time{}, fmt.Errorf("expires_in melebihi julat yang munasabah")
 	}
 	if entry.ExpiresIn > 0 {
 		return time.Now().UTC().Add(time.Duration(entry.ExpiresIn) * time.Second), nil

@@ -83,10 +83,10 @@ func parseToolConfiguration(rawTools, rawChoice json.RawMessage) (toolConfigurat
 	if len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) {
 		var values []map[string]any
 		if err := json.Unmarshal(trimmed, &values); err != nil {
-			return toolConfiguration{}, errors.New("tools 必须是数组")
+			return toolConfiguration{}, errors.New("tools mesti tatasusunan")
 		}
 		if len(values) > maxFunctionTools {
-			return toolConfiguration{}, fmt.Errorf("tools 不能超过 %d 个", maxFunctionTools)
+			return toolConfiguration{}, fmt.Errorf("tools tidak boleh melebihi %d", maxFunctionTools)
 		}
 		configuration.ResponseTools = make([]any, 0, len(values))
 		for _, value := range values {
@@ -105,7 +105,7 @@ func parseToolConfiguration(rawTools, rawChoice json.RawMessage) (toolConfigurat
 				// Grok Web 原生搜索始终由上游执行，这两个标准声明无需注入函数提示词。
 				configuration.HostedWebSearch = true
 			default:
-				return toolConfiguration{}, fmt.Errorf("Grok Web 暂不支持 tools.type=%q", typeName)
+				return toolConfiguration{}, fmt.Errorf("Grok Web belum menyokong tools.type=%q", typeName)
 			}
 		}
 	}
@@ -120,17 +120,17 @@ func parseToolConfiguration(rawTools, rawChoice json.RawMessage) (toolConfigurat
 	configuration.available = make(map[string]struct{}, len(configuration.Functions))
 	for _, function := range configuration.Functions {
 		if _, exists := configuration.available[function.Name]; exists {
-			return toolConfiguration{}, fmt.Errorf("function tool 名称 %q 重复", function.Name)
+			return toolConfiguration{}, fmt.Errorf("Nama function tool %q berulang", function.Name)
 		}
 		configuration.available[function.Name] = struct{}{}
 	}
 	if forcedName != "" {
 		if _, ok := configuration.available[forcedName]; !ok {
-			return toolConfiguration{}, fmt.Errorf("tool_choice 指定的函数 %q 不存在", forcedName)
+			return toolConfiguration{}, fmt.Errorf("Fungsi %q yang ditetapkan oleh tool_choice tidak wujud", forcedName)
 		}
 	}
 	if (choice == "required" || forcedName != "") && len(configuration.Functions) == 0 && !configuration.HostedWebSearch {
-		return toolConfiguration{}, errors.New("tool_choice 要求调用函数，但 tools 中没有可用函数")
+		return toolConfiguration{}, errors.New("tool_choice memerlukan pemanggilan fungsi, tetapi tiada fungsi yang boleh digunakan dalam tools")
 	}
 	return configuration, nil
 }
@@ -147,17 +147,17 @@ func parseFunctionTool(value map[string]any) (functionTool, bool, error) {
 	name, _ := definition["name"].(string)
 	name = strings.TrimSpace(name)
 	if !toolNamePattern.MatchString(name) {
-		return functionTool{}, false, errors.New("function tool 的 name 必须是 1 到 64 位字母、数字、下划线或连字符")
+		return functionTool{}, false, errors.New("name function tool mesti 1 hingga 64 aksara huruf, angka, garis bawah atau sempang")
 	}
 	description, _ := definition["description"].(string)
 	if len(description) > maxToolDescriptionSize {
-		return functionTool{}, false, fmt.Errorf("函数 %q 的 description 过长", name)
+		return functionTool{}, false, fmt.Errorf("description fungsi %q terlalu panjang", name)
 	}
 	parameters := json.RawMessage(`{"type":"object","properties":{}}`)
 	if raw, ok := definition["parameters"]; ok {
 		encoded, err := json.Marshal(raw)
 		if err != nil || !json.Valid(encoded) {
-			return functionTool{}, false, fmt.Errorf("函数 %q 的 parameters 不是有效 JSON", name)
+			return functionTool{}, false, fmt.Errorf("parameters fungsi %q bukan JSON yang sah", name)
 		}
 		parameters = encoded
 	}
@@ -176,12 +176,12 @@ func parseToolChoice(raw json.RawMessage) (string, string, any, error) {
 		case "auto", "none", "required":
 			return text, "", text, nil
 		default:
-			return "", "", nil, errors.New("tool_choice 必须是 auto、none、required 或函数对象")
+			return "", "", nil, errors.New("tool_choice mesti auto, none, required atau objek fungsi")
 		}
 	}
 	var value map[string]any
 	if json.Unmarshal(trimmed, &value) != nil {
-		return "", "", nil, errors.New("tool_choice 格式无效")
+		return "", "", nil, errors.New("Format tool_choice tidak sah")
 	}
 	typeName, _ := value["type"].(string)
 	typeName = strings.ToLower(strings.TrimSpace(typeName))
@@ -195,11 +195,11 @@ func parseToolChoice(raw json.RawMessage) (string, string, any, error) {
 		}
 		name = strings.TrimSpace(name)
 		if !toolNamePattern.MatchString(name) {
-			return "", "", nil, errors.New("tool_choice.function.name 无效")
+			return "", "", nil, errors.New("tool_choice.function.name tidak sah")
 		}
 		return "required", name, value, nil
 	default:
-		return "", "", nil, fmt.Errorf("Grok Web 暂不支持 tool_choice.type=%q", typeName)
+		return "", "", nil, fmt.Errorf("Grok Web belum menyokong tool_choice.type=%q", typeName)
 	}
 }
 

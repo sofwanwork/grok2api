@@ -30,14 +30,14 @@ const (
 func (a *Adapter) SynthesizeSpeech(ctx context.Context, request provider.TTSRequest) (provider.TTSResult, error) {
 	text := strings.TrimSpace(request.Text)
 	if text == "" {
-		return provider.TTSResult{}, invalidConsoleVoiceError("text 不能为空")
+		return provider.TTSResult{}, invalidConsoleVoiceError("text tak boleh kosong")
 	}
 	if utf8.RuneCountInString(text) > 15000 {
-		return provider.TTSResult{}, invalidConsoleVoiceError("text 最多 15000 个字符")
+		return provider.TTSResult{}, invalidConsoleVoiceError("text maksimum 15000 aksara")
 	}
 	language := strings.TrimSpace(request.Language)
 	if language == "" {
-		return provider.TTSResult{}, invalidConsoleVoiceError("language 不能为空")
+		return provider.TTSResult{}, invalidConsoleVoiceError("language tak boleh kosong")
 	}
 	payload := map[string]any{"text": text, "language": language}
 	if voiceID := strings.TrimSpace(request.VoiceID); voiceID != "" {
@@ -72,7 +72,7 @@ func (a *Adapter) SynthesizeSpeech(ctx context.Context, request provider.TTSRequ
 		return provider.TTSResult{}, err
 	}
 	if len(data) > consoleVoiceAudioLimit {
-		return provider.TTSResult{}, errors.New("Console TTS 响应超过安全上限")
+		return provider.TTSResult{}, errors.New("Respons Console TTS melebihi had selamat")
 	}
 	if strings.Contains(contentType, "application/json") || request.WithTimestamps {
 		var envelope struct {
@@ -91,11 +91,11 @@ func (a *Adapter) SynthesizeSpeech(ctx context.Context, request provider.TTSRequ
 			if !strings.Contains(contentType, "application/json") {
 				return provider.TTSResult{Audio: data, ContentType: firstNonEmpty(contentType, "audio/mpeg")}, nil
 			}
-			return provider.TTSResult{}, fmt.Errorf("解析 Console TTS JSON 响应失败: %w", err)
+			return provider.TTSResult{}, fmt.Errorf("Huraian respons JSON Console TTS gagal: %w", err)
 		}
 		audio, err := base64.StdEncoding.DecodeString(strings.TrimSpace(envelope.Audio))
 		if err != nil {
-			return provider.TTSResult{}, fmt.Errorf("解码 Console TTS audio 失败: %w", err)
+			return provider.TTSResult{}, fmt.Errorf("Menyahkod audio Console TTS gagal: %w", err)
 		}
 		result := provider.TTSResult{
 			Audio: audio, ContentType: firstNonEmpty(envelope.ContentType, contentType, "audio/mpeg"),
@@ -137,7 +137,7 @@ func (a *Adapter) ListTTSVoices(ctx context.Context, credential account.Credenti
 		} `json:"voices"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil, fmt.Errorf("解析 Console TTS voices 失败: %w", err)
+		return nil, fmt.Errorf("Huraian voices Console TTS gagal: %w", err)
 	}
 	result := make([]provider.VoiceInfo, 0, len(payload.Voices))
 	for _, item := range payload.Voices {
@@ -153,7 +153,7 @@ func (a *Adapter) ListTTSVoices(ctx context.Context, credential account.Credenti
 func (a *Adapter) GetTTSVoice(ctx context.Context, credential account.Credential, voiceID string) (provider.VoiceInfo, error) {
 	voiceID = strings.TrimSpace(voiceID)
 	if voiceID == "" {
-		return provider.VoiceInfo{}, invalidConsoleVoiceError("voice_id 不能为空")
+		return provider.VoiceInfo{}, invalidConsoleVoiceError("voice_id tak boleh kosong")
 	}
 	response, err := a.forwardConsoleVoice(ctx, credential, http.MethodGet, "/tts/voices/"+url.PathEscape(voiceID), nil, "", "application/json")
 	if err != nil {
@@ -173,7 +173,7 @@ func (a *Adapter) GetTTSVoice(ctx context.Context, credential account.Credential
 		Language *string `json:"language"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return provider.VoiceInfo{}, fmt.Errorf("解析 Console TTS voice 失败: %w", err)
+		return provider.VoiceInfo{}, fmt.Errorf("Huraian voice Console TTS gagal: %w", err)
 	}
 	language := ""
 	if payload.Language != nil {
@@ -186,7 +186,7 @@ func (a *Adapter) TranscribeSpeech(ctx context.Context, request provider.STTRequ
 	hasFile := len(request.FileData) > 0
 	hasURL := strings.TrimSpace(request.URL) != ""
 	if hasFile == hasURL {
-		return provider.STTResult{}, invalidConsoleVoiceError("STT 必须提供 file 或 url 其中之一")
+		return provider.STTResult{}, invalidConsoleVoiceError("STT mesti menyediakan salah satu daripada file atau url")
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -382,7 +382,7 @@ func parseSTTResult(data []byte) (provider.STTResult, error) {
 		} `json:"channels"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return provider.STTResult{}, fmt.Errorf("解析 Console STT 响应失败: %w", err)
+		return provider.STTResult{}, fmt.Errorf("Huraian respons Console STT gagal: %w", err)
 	}
 	result := provider.STTResult{Text: payload.Text, Language: payload.Language, Duration: payload.Duration}
 	for _, word := range payload.Words {

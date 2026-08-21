@@ -443,7 +443,7 @@ func (c *streamConverter) reasoningSummaryDelta(itemID, delta string) error {
 	// precedence without relying on chunk boundaries or text equality.
 	pending := state.summary.Len()
 	if pending >= maxDeferredReasoningSummaryBytes || len(delta) > maxDeferredReasoningSummaryBytes-pending {
-		return fmt.Errorf("reasoning summary 延迟缓冲超过 %d MiB", maxDeferredReasoningSummaryBytes>>20)
+		return fmt.Errorf("reasoning summary penimbal tertangguh melebihi %d MiB", maxDeferredReasoningSummaryBytes>>20)
 	}
 	state.summary.WriteString(delta)
 	return nil
@@ -528,7 +528,7 @@ func (c *streamConverter) flushPendingReasoning() error {
 func (c *streamConverter) bufferSearchText(delta string) error {
 	pending := c.pendingSearchText.Len()
 	if pending >= maxDeferredSearchTextBytes || len(delta) > maxDeferredSearchTextBytes-pending {
-		return fmt.Errorf("WebSearch 延迟文本缓冲超过 %d MiB", maxDeferredSearchTextBytes>>20)
+		return fmt.Errorf("penimbal teks tertangguh WebSearch melebihi %d MiB", maxDeferredSearchTextBytes>>20)
 	}
 	c.pendingSearchText.WriteString(delta)
 	return nil

@@ -307,6 +307,6 @@ func voiceWebSocketRoute(pathValue string) (modeldomain.Capability, audit.Operat
 	case "/stt":
 		return modeldomain.CapabilitySTT, audit.OperationSTT, "grok-stt", nil
 	default:
-		return "", "", "", errors.New("不支持的 voice websocket path")
+		return "", "", "", errors.New("path websocket voice tidak disokong")
 	}
 }

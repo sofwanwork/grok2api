@@ -48,7 +48,7 @@ func newBuildClientWithOptions(proxyURL string, responseHeaderTimeout time.Durat
 	if strings.TrimSpace(proxyURL) != "" {
 		parsed, err := url.Parse(proxyURL)
 		if err != nil {
-			return nil, fmt.Errorf("解析 Grok Build 出口代理: %w", err)
+			return nil, fmt.Errorf("Huraian proksi egress Grok Build: %w", err)
 		}
 		switch strings.ToLower(parsed.Scheme) {
 		case "http", "https":
@@ -56,17 +56,17 @@ func newBuildClientWithOptions(proxyURL string, responseHeaderTimeout time.Durat
 		case "socks4", "socks4a", "socks5", "socks5h":
 			dialer, err := xproxy.FromURL(parsed, direct)
 			if err != nil {
-				return nil, fmt.Errorf("创建 Grok Build SOCKS 代理: %w", err)
+				return nil, fmt.Errorf("Mencipta proksi SOCKS Grok Build: %w", err)
 			}
 			transport.DialContext = dialContext(dialer)
 		case "trojan", "vless", "ss", "vmess":
 			dialer, err := tunnelproxy.NewDialer(proxyURL)
 			if err != nil {
-				return nil, fmt.Errorf("创建 Grok Build 隧道代理: %w", err)
+				return nil, fmt.Errorf("Mencipta proksi terowong Grok Build: %w", err)
 			}
 			transport.DialContext = dialer.DialContext
 		default:
-			return nil, fmt.Errorf("Grok Build 不支持代理协议 %q", parsed.Scheme)
+			return nil, fmt.Errorf("Grok Build tidak menyokong protokol proksi %q", parsed.Scheme)
 		}
 	}
 	return &http.Client{

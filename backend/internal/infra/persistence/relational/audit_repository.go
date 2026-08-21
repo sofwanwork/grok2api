@@ -371,14 +371,14 @@ func toAuditModels(value audit.Record) (requestAuditModel, []requestAuditAttempt
 	for _, attempt := range value.Attempts {
 		responseHeaders, err := json.Marshal(attempt.ResponseHeaders)
 		if err != nil {
-			return requestAuditModel{}, nil, fmt.Errorf("序列化审计响应头: %w", err)
+			return requestAuditModel{}, nil, fmt.Errorf("Mengekod pengepala respons audit: %w", err)
 		}
 		if attempt.ResponseHeaders == nil {
 			responseHeaders = []byte("{}")
 		}
 		errorChain, err := json.Marshal(attempt.ErrorChain)
 		if err != nil {
-			return requestAuditModel{}, nil, fmt.Errorf("序列化审计错误链: %w", err)
+			return requestAuditModel{}, nil, fmt.Errorf("Mengekod rantaian ralat audit: %w", err)
 		}
 		if attempt.ErrorChain == nil {
 			errorChain = []byte("[]")

@@ -13,7 +13,7 @@ import (
 // duplicate generation or billing and is therefore never attempted here.
 func (l *Lease) do(request *http.Request) (*http.Response, error) {
 	if l == nil || l.client == nil {
-		return nil, errors.New("出口客户端未初始化")
+		return nil, errors.New("Klien egress tidak dimulakan")
 	}
 	if !l.proxyPool {
 		return l.client.Do(request)
@@ -58,13 +58,13 @@ func (l *Lease) do(request *http.Request) (*http.Response, error) {
 
 func cloneRequestBody(request *http.Request) (*http.Request, error) {
 	if request == nil {
-		return nil, errors.New("请求为空")
+		return nil, errors.New("Permintaan kosong")
 	}
 	if request.Body == nil || request.Body == http.NoBody {
 		return request.Clone(request.Context()), nil
 	}
 	if request.GetBody == nil {
-		return nil, errors.New("请求体不可重放")
+		return nil, errors.New("Badan permintaan tidak boleh dimainkan semula")
 	}
 	body, err := request.GetBody()
 	if err != nil {

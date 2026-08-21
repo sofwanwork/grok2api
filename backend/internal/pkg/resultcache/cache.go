@@ -77,7 +77,7 @@ func (c *Cache[K, V]) Load(ctx context.Context, key K, now time.Time, loader fun
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			c.mu.Lock()
-			pending.err = errors.New("缓存加载异常中断")
+			pending.err = errors.New("Pemuatan cache terganggu secara tidak normal")
 			delete(c.loads, key)
 			close(pending.done)
 			c.mu.Unlock()

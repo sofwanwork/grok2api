@@ -47,7 +47,7 @@ type flaresolverrSolver struct{}
 
 func (flaresolverrSolver) Solve(ctx context.Context, cfg ClearanceConfig, proxyURL string) (clearanceSolution, error) {
 	if parsedProxy, parseErr := url.Parse(proxyURL); parseErr == nil && tunnelproxy.IsSupportedScheme(parsedProxy.Scheme) {
-		return clearanceSolution{}, errors.New("FlareSolverr 暂不支持 Trojan、VLESS、SS 或 VMess 隧道代理")
+		return clearanceSolution{}, errors.New("FlareSolverr belum menyokong proksi terowong Trojan, VLESS, SS atau VMess")
 	}
 	endpoint, err := flaresolverrEndpoint(cfg.FlareSolverrURL)
 	if err != nil {
@@ -67,33 +67,33 @@ func (flaresolverrSolver) Solve(ctx context.Context, cfg ClearanceConfig, proxyU
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return clearanceSolution{}, fmt.Errorf("编码 FlareSolverr 请求: %w", err)
+		return clearanceSolution{}, fmt.Errorf("Mengkod permintaan FlareSolverr: %w", err)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return clearanceSolution{}, fmt.Errorf("创建 FlareSolverr 请求: %w", err)
+		return clearanceSolution{}, fmt.Errorf("Mencipta permintaan FlareSolverr: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 	client := &http.Client{
 		Timeout: cfg.Timeout + 15*time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return errors.New("FlareSolverr 响应不允许重定向")
+			return errors.New("Respons FlareSolverr tidak membenarkan lencongan")
 		},
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return clearanceSolution{}, fmt.Errorf("调用 FlareSolverr: %w", err)
+		return clearanceSolution{}, fmt.Errorf("Memanggil FlareSolverr: %w", err)
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxFlareSolverrResponseBytes+1))
 	if err != nil {
-		return clearanceSolution{}, fmt.Errorf("读取 FlareSolverr 响应: %w", err)
+		return clearanceSolution{}, fmt.Errorf("Membaca respons FlareSolverr: %w", err)
 	}
 	if len(responseBody) > maxFlareSolverrResponseBytes {
-		return clearanceSolution{}, errors.New("FlareSolverr 响应过大")
+		return clearanceSolution{}, errors.New("Respons FlareSolverr terlalu besar")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return clearanceSolution{}, fmt.Errorf("FlareSolverr 返回 HTTP %d", response.StatusCode)
+		return clearanceSolution{}, fmt.Errorf("FlareSolverr mengembalikan HTTP %d", response.StatusCode)
 	}
 	var result struct {
 		Status   string `json:"status"`
@@ -107,14 +107,14 @@ func (flaresolverrSolver) Solve(ctx context.Context, cfg ClearanceConfig, proxyU
 		} `json:"solution"`
 	}
 	if err := json.Unmarshal(responseBody, &result); err != nil {
-		return clearanceSolution{}, fmt.Errorf("解析 FlareSolverr 响应: %w", err)
+		return clearanceSolution{}, fmt.Errorf("Huraian respons FlareSolverr: %w", err)
 	}
 	if result.Status != "ok" {
 		message := sanitizeFlareSolverrMessage(result.Message)
 		if message == "" {
 			message = "unknown error"
 		}
-		return clearanceSolution{}, fmt.Errorf("FlareSolverr 求解失败: %s", message)
+		return clearanceSolution{}, fmt.Errorf("FlareSolverr gagal menyelesaikan: %s", message)
 	}
 	parts := make([]string, 0, len(result.Solution.Cookies))
 	for _, cookie := range result.Solution.Cookies {
@@ -125,7 +125,7 @@ func (flaresolverrSolver) Solve(ctx context.Context, cfg ClearanceConfig, proxyU
 	cookies := application.SanitizeCloudflareCookies(strings.Join(parts, "; "))
 	userAgent := strings.TrimSpace(result.Solution.UserAgent)
 	if userAgent == "" || len(userAgent) > 512 || strings.IndexFunc(userAgent, func(character rune) bool { return character < 0x20 || character == 0x7f }) >= 0 {
-		return clearanceSolution{}, errors.New("FlareSolverr 返回的 User-Agent 无效")
+		return clearanceSolution{}, errors.New("User-Agent yang dikembalikan oleh FlareSolverr tidak sah")
 	}
 	return clearanceSolution{Cookies: cookies, UserAgent: userAgent}, nil
 }
@@ -157,13 +157,13 @@ func sanitizeFlareSolverrMessage(value string) string {
 func flaresolverrEndpoint(value string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(value))
 	if err != nil || parsed.Host == "" || parsed.User != nil {
-		return "", errors.New("FlareSolverr URL 无效")
+		return "", errors.New("URL FlareSolverr tidak sah")
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", errors.New("FlareSolverr URL 必须使用 HTTP 或 HTTPS")
+		return "", errors.New("URL FlareSolverr mesti menggunakan HTTP atau HTTPS")
 	}
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", errors.New("FlareSolverr URL 不能包含查询参数或片段")
+		return "", errors.New("URL FlareSolverr tidak boleh mengandungi parameter pertanyaan atau serpihan")
 	}
 	path := strings.TrimSuffix(parsed.EscapedPath(), "/")
 	if path == "" {

@@ -35,7 +35,7 @@ const (
 	directFileUploadResponseLimit = 2 << 20
 )
 
-var errLiteImageReady = errors.New("Lite 图片已完成")
+var errLiteImageReady = errors.New("Imej Lite sudah selesai")
 
 type imagineModelConfig struct {
 	Pro            bool
@@ -270,21 +270,21 @@ func (a *Adapter) GenerateImage(ctx context.Context, request provider.ImageGener
 		return imageGenerationUserError("Streaming is only supported with n=1.", "input", "unsupported_parameter")
 	}
 	if request.PartialImages < 0 || request.PartialImages > 3 {
-		return invalidImageRequest("partial_images 必须在 0 到 3 之间")
+		return invalidImageRequest("partial_images mesti antara 0 hingga 3")
 	}
 	if request.PartialImages > 0 && !request.Streaming {
-		return invalidImageRequest("partial_images 仅可在 stream=true 时使用")
+		return invalidImageRequest("partial_images hanya boleh digunakan dengan stream=true")
 	}
 	format := strings.ToLower(strings.TrimSpace(request.ResponseFormat))
 	if format == "" {
 		format = "url"
 	}
 	if format != "url" && format != "b64_json" {
-		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "response_format 必须是 url 或 b64_json", "type": "invalid_request_error"}}), nil
+		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "response_format mesti url atau b64_json", "type": "invalid_request_error"}}), nil
 	}
 	spec, modelKnown := Resolve(request.Model)
 	if !modelKnown || spec.Capability != "image" {
-		return invalidImageRequest("模型不支持图片生成")
+		return invalidImageRequest("Model tidak menyokong penjanaan imej")
 	}
 	protocolModel := spec.ProtocolModel
 	if protocolModel == "" {
@@ -292,10 +292,10 @@ func (a *Adapter) GenerateImage(ctx context.Context, request provider.ImageGener
 	}
 	if protocolModel == "imagine-lite" {
 		if request.Streaming {
-			return invalidImageRequest("grok-imagine-image-lite 不支持 stream")
+			return invalidImageRequest("grok-imagine-image-lite tidak menyokong stream")
 		}
 		if count > maxGeneratedImages {
-			return invalidImageRequest("n 不能超过 10")
+			return invalidImageRequest("n tidak boleh melebihi 10")
 		}
 		return a.generateLiteImage(ctx, request, count, format)
 	}
@@ -305,10 +305,10 @@ func (a *Adapter) GenerateImage(ctx context.Context, request provider.ImageGener
 	}
 	modelConfig, ok := resolveImagineModel(protocolModel, spec.ImaginePro, count)
 	if !ok {
-		return invalidImageRequest("模型不支持图片生成")
+		return invalidImageRequest("Model tidak menyokong penjanaan imej")
 	}
 	if count > modelConfig.MaxReturnCount {
-		return invalidImageRequest(fmt.Sprintf("n 不能超过 %d", modelConfig.MaxReturnCount))
+		return invalidImageRequest(fmt.Sprintf("n tidak boleh melebihi %d", modelConfig.MaxReturnCount))
 	}
 	return a.generateWSImage(ctx, request, count, format, ratio, modelConfig)
 }
@@ -329,7 +329,7 @@ func (a *Adapter) generateLiteImage(ctx context.Context, request provider.ImageG
 			}
 			if len(urls) > 0 {
 				return jsonProviderResponse(http.StatusBadGateway, map[string]any{"error": map[string]any{
-					"message": fmt.Sprintf("Lite 图片仅完成 %d/%d 张: %v", len(urls), count, err),
+					"message": fmt.Sprintf("Imej Lite hanya selesai %d/%d: %v", len(urls), count, err),
 					"type":    "server_error", "code": "image_generation_incomplete",
 				}}), nil
 			}
@@ -351,7 +351,7 @@ type liteUpstreamError struct {
 }
 
 func (e *liteUpstreamError) Error() string {
-	return fmt.Sprintf("Lite 图片上游返回 %d", e.StatusCode)
+	return fmt.Sprintf("Imej Lite upstream mengembalikan %d", e.StatusCode)
 }
 
 func (e *liteUpstreamError) Response() *provider.Response {
@@ -406,7 +406,7 @@ func (a *Adapter) generateLiteImageURL(ctx context.Context, credential account.C
 			if errors.Is(consumeErr, errWebUsageLimit) {
 				lease.Release()
 				response := jsonProviderResponse(http.StatusTooManyRequests, map[string]any{"error": map[string]any{
-					"message": "Grok Imagine 速率限制中，请稍后重试",
+					"message": "Grok Imagine dalam had kadar, sila cuba semula kemudian",
 					"type":    "rate_limit_error",
 					"code":    "usage_limit_reached",
 				}})
@@ -463,17 +463,17 @@ func (a *Adapter) generateLiteImageURL(ctx context.Context, credential account.C
 				"upstream_error_code", diagnostics.ErrorCode,
 				"upstream_error", diagnostics.ErrorMessage,
 			)
-			return "", fmt.Errorf("Grok Web Lite 响应结束但未解析到最终图片")
+			return "", fmt.Errorf("Respons Grok Web Lite berakhir tetapi imej akhir tidak dihuraikan")
 		}
 		// Lite 上游固定生成两张，但每次查询只计一次 Fast 额度；按旧协议取首张并为 n 重复查询。
 		return parsed.Images[0], nil
 	}
-	return "", fmt.Errorf("Grok Web Lite 图片签名刷新失败")
+	return "", fmt.Errorf("Pembaruan tandatangan imej Grok Web Lite gagal")
 }
 
 func (a *Adapter) forwardImageChatCompletion(ctx context.Context, request provider.ResponseResourceRequest, input openAIRequest, normalized normalizedChatInput, spec ModelSpec) (*provider.Response, error) {
 	if len(normalized.Attachments) > 0 {
-		return invalidImageRequest("文生图模型只接受当前用户消息中的纯文本；图生图请使用 grok-imagine-image-edit 和 /v1/images/edits")
+		return invalidImageRequest("Model teks-ke-imej hanya menerima teks tulen dalam mesej pengguna semasa; untuk imej-ke-imej sila gunakan grok-imagine-image-edit dan /v1/images/edits")
 	}
 	count := 1
 	format := "url"
@@ -486,10 +486,10 @@ func (a *Adapter) forwardImageChatCompletion(ctx context.Context, request provid
 		}
 	}
 	if count < 1 || count > maxGeneratedImages {
-		return invalidImageRequest("image_config.n 必须在 1 到 10 之间")
+		return invalidImageRequest("image_config.n mesti antara 1 hingga 10")
 	}
 	if format != "url" && format != "b64_json" {
-		return invalidImageRequest("image_config.response_format 必须是 url 或 b64_json")
+		return invalidImageRequest("image_config.response_format mesti url atau b64_json")
 	}
 	if spec.ProtocolModel != "imagine-lite" {
 		return a.forwardQualityImageChatCompletion(ctx, request, input, normalized, count, format)
@@ -555,7 +555,7 @@ func (a *Adapter) forwardQualityImageChatCompletion(ctx context.Context, request
 		Data []map[string]any `json:"data"`
 	}
 	if err := json.NewDecoder(generated.Body).Decode(&payload); err != nil {
-		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, fmt.Errorf("图片生成兼容响应解析失败: %w", err))
+		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, fmt.Errorf("Huraian respons serasi penjanaan imej gagal: %w", err))
 	}
 	parsed := parsedChat{ResponseID: newWebID("resp"), InputTokens: estimateTokens(normalized.Prompt)}
 	for _, item := range payload.Data {
@@ -569,7 +569,7 @@ func (a *Adapter) forwardQualityImageChatCompletion(ctx context.Context, request
 		parsed.appendText(markdown)
 	}
 	if parsed.Text.Len() == 0 {
-		return nil, fmt.Errorf("图片生成兼容响应中没有图片")
+		return nil, fmt.Errorf("Tiada imej dalam respons serasi penjanaan imej")
 	}
 	if input.Stream || request.Streaming {
 		stream, err := buildImageCompatibilityStream(request.Operation, parsed.ResponseID, input.Model, &parsed)
@@ -634,7 +634,7 @@ func (a *Adapter) generateWSImage(ctx context.Context, request provider.ImageGen
 		}
 		a.log().Warn("web_image_clearance_retry", "operation", "imagine", "status", upstreamErr.status, "body_kind", upstreamErr.bodyKind)
 	}
-	return nil, fmt.Errorf("Imagine WebSocket Clearance 重试耗尽")
+	return nil, fmt.Errorf("Cubaan semula Clearance Imagine WebSocket sudah habis")
 }
 
 func (a *Adapter) generateWSImageAttempt(ctx context.Context, request provider.ImageGenerationRequest, count int, format, ratio string, modelConfig imagineModelConfig) (*provider.Response, error) {
@@ -690,7 +690,7 @@ func (a *Adapter) generateWSImageAttempt(ctx context.Context, request provider.I
 			return nil, upstreamErr
 		}
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, err)
-		return nil, fmt.Errorf("连接 Imagine WebSocket: %w", err)
+		return nil, fmt.Errorf("Menyambung ke Imagine WebSocket: %w", err)
 	}
 	connectionOwned := true
 	defer func() {
@@ -724,7 +724,7 @@ func (a *Adapter) generateWSImageAttempt(ctx context.Context, request provider.I
 		messageType, data, readErr := connection.ReadMessage()
 		if readErr != nil {
 			a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, readErr)
-			return nil, fmt.Errorf("读取 Imagine WebSocket: %w", readErr)
+			return nil, fmt.Errorf("Membaca Imagine WebSocket: %w", readErr)
 		}
 		if messageType != websocket.TextMessage {
 			continue
@@ -734,7 +734,7 @@ func (a *Adapter) generateWSImageAttempt(ctx context.Context, request provider.I
 			continue
 		}
 		if message["type"] == "error" {
-			upstreamErr := fmt.Errorf("Imagine WebSocket 返回错误")
+			upstreamErr := fmt.Errorf("Imagine WebSocket mengembalikan ralat")
 			a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, upstreamErr)
 			return nil, upstreamErr
 		}
@@ -743,11 +743,11 @@ func (a *Adapter) generateWSImageAttempt(ctx context.Context, request provider.I
 	a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, http.StatusOK, nil)
 	images := collector.Images()
 	if len(images) == 0 {
-		return nil, fmt.Errorf("Imagine WebSocket 完成但没有可用图片")
+		return nil, fmt.Errorf("Imagine WebSocket selesai tetapi tiada imej yang boleh digunakan")
 	}
 	if len(images) < count {
 		return jsonProviderResponse(http.StatusBadGateway, map[string]any{"error": map[string]any{
-			"message": fmt.Sprintf("上游仅返回 %d/%d 张可用图片", len(images), count),
+			"message": fmt.Sprintf("Upstream hanya mengembalikan %d/%d imej yang boleh digunakan", len(images), count),
 			"type":    "server_error", "code": "image_generation_incomplete",
 		}}), nil
 	}
@@ -782,42 +782,42 @@ func (a *Adapter) EditImage(ctx context.Context, request provider.ImageEditReque
 		}
 		a.log().Warn("web_image_clearance_retry", "operation", "edit", "status", upstreamErr.status, "body_kind", upstreamErr.bodyKind)
 	}
-	return nil, fmt.Errorf("图片编辑 Clearance 重试耗尽")
+	return nil, fmt.Errorf("Cubaan semula Clearance penyuntingan imej sudah habis")
 }
 
 func (a *Adapter) editImageAttempt(ctx context.Context, request provider.ImageEditRequest) (*provider.Response, error) {
 	if strings.TrimSpace(request.Quality) != "" {
-		return invalidImageRequest("Grok Web 图片模型不支持 quality")
+		return invalidImageRequest("Model imej Grok Web tidak menyokong quality")
 	}
 	if len(request.ImageURLs) == 0 || len(request.ImageURLs) > 8 {
-		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "image 数量必须在 1 到 8 之间", "type": "invalid_request_error"}}), nil
+		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "Bilangan image mesti antara 1 hingga 8", "type": "invalid_request_error"}}), nil
 	}
 	count := request.Count
 	if count <= 0 {
 		count = 1
 	}
 	if count != 1 {
-		return invalidImageRequest("Grok Web 图片编辑当前仅支持 n=1")
+		return invalidImageRequest("Penyuntingan imej Grok Web buat masa ini hanya menyokong n=1")
 	}
 	if request.PartialImages < 0 || request.PartialImages > 3 {
-		return invalidImageRequest("partial_images 必须在 0 到 3 之间")
+		return invalidImageRequest("partial_images mesti antara 0 hingga 3")
 	}
 	if request.PartialImages > 0 && !request.Streaming {
-		return invalidImageRequest("partial_images 仅可在 stream=true 时使用")
+		return invalidImageRequest("partial_images hanya boleh digunakan dengan stream=true")
 	}
 	resolution := strings.ToLower(strings.TrimSpace(request.Resolution))
 	if resolution == "" {
 		resolution = "1k"
 	}
 	if resolution != "1k" {
-		return invalidImageRequest("Grok Web 图片编辑当前仅支持 resolution=1k")
+		return invalidImageRequest("Penyuntingan imej Grok Web buat masa ini hanya menyokong resolution=1k")
 	}
 	format := strings.ToLower(strings.TrimSpace(request.ResponseFormat))
 	if format == "" {
 		format = "url"
 	}
 	if format != "url" && format != "b64_json" {
-		return invalidImageRequest("response_format 必须是 url 或 b64_json")
+		return invalidImageRequest("response_format mesti url atau b64_json")
 	}
 	ratio, err := resolveImageEditAspectRatio(request.AspectRatio, request.Size)
 	if err != nil {
@@ -853,7 +853,7 @@ func (a *Adapter) editImageAttempt(ctx context.Context, request provider.ImageEd
 			return nil, uploadErr
 		}
 		if uploaded.MetadataID == "" {
-			return nil, fmt.Errorf("上传图片成功但上游未返回 fileMetadataId")
+			return nil, fmt.Errorf("Muat naik imej berjaya tetapi upstream tidak mengembalikan fileMetadataId")
 		}
 		assets = append(assets, uploaded.MetadataID)
 	}
@@ -889,7 +889,7 @@ func (a *Adapter) editImageAttempt(ctx context.Context, request provider.ImageEd
 	urls := imageEditResultURLs(&parsed, capture.Bytes())
 	if len(urls) == 0 {
 		return jsonProviderResponse(http.StatusBadGateway, map[string]any{"error": map[string]any{
-			"message": "上游未返回可用的编辑图片",
+			"message": "Upstream tidak mengembalikan imej suntingan yang boleh digunakan",
 			"type":    "server_error", "code": "image_edit_incomplete",
 		}}), nil
 	}
@@ -1003,7 +1003,7 @@ func (a *Adapter) streamImageEdit(
 	}
 	urls := imageEditResultURLs(&parsed, capture.Bytes())
 	if len(urls) == 0 {
-		err := fmt.Errorf("上游未返回可用的编辑图片")
+		err := fmt.Errorf("Upstream tidak mengembalikan imej suntingan yang boleh digunakan")
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, err)
 		_ = writer.CloseWithError(err)
 		return
@@ -1269,7 +1269,7 @@ func (a *Adapter) uploadFileV2Direct(ctx context.Context, cfg Config, lease *egr
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, webMediaDiagnosticBodyLimit+1))
 		if readErr != nil {
-			return uploadedFile{}, fmt.Errorf("读取 V2 上传文件错误响应: %w", readErr)
+			return uploadedFile{}, fmt.Errorf("Membaca respons ralat muat naik fail V2: %w", readErr)
 		}
 		truncated := len(responseBody) > webMediaDiagnosticBodyLimit
 		if truncated {
@@ -1341,10 +1341,10 @@ func decodeDirectFileUploadResponse(source io.Reader) (uploadedFile, error) {
 		} `json:"fileMetadata"`
 	}
 	if err := json.NewDecoder(source).Decode(&value); err != nil {
-		return uploadedFile{}, fmt.Errorf("V2 上传文件响应无效: %w", err)
+		return uploadedFile{}, fmt.Errorf("Respons muat naik fail V2 tidak sah: %w", err)
 	}
 	if directFileUploadTerminalError(value.TerminalError) {
-		return uploadedFile{}, errors.New("V2 上传文件被上游拒绝")
+		return uploadedFile{}, errors.New("Muat naik fail V2 ditolak oleh upstream")
 	}
 	metadataID := strings.TrimSpace(value.FileMetadata.ID)
 	fileID := metadataID
@@ -1362,7 +1362,7 @@ func decodeDirectFileUploadResponse(source io.Reader) (uploadedFile, error) {
 		fileURI = absoluteAssetURL(value.FileMetadata.FileURI)
 	}
 	if fileID == "" && fileURI == "" {
-		return uploadedFile{}, fmt.Errorf("V2 上传文件成功但上游未返回完整文件标识")
+		return uploadedFile{}, fmt.Errorf("Muat naik fail V2 berjaya tetapi upstream tidak mengembalikan pengepala fail lengkap")
 	}
 	return uploadedFile{ID: fileID, MetadataID: metadataID, URI: fileURI}, nil
 }
@@ -1422,14 +1422,14 @@ func parseMediaPostResponseWithDiagnostics(response *http.Response, onUpstreamEr
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, int64(readLimit)+1))
 	if err != nil {
-		return "", fmt.Errorf("读取媒体 Post 响应: %w", err)
+		return "", fmt.Errorf("Membaca respons Post media: %w", err)
 	}
 	truncated := len(body) > readLimit
 	if truncated {
 		body = body[:readLimit]
 	}
 	if truncated && response.StatusCode >= 200 && response.StatusCode < 300 {
-		return "", fmt.Errorf("创建媒体 Post 响应超过安全上限")
+		return "", fmt.Errorf("Respons penciptaan Post media melebihi had selamat")
 	}
 	if response.StatusCode == http.StatusUnauthorized {
 		return "", provider.ErrUnauthorized
@@ -1447,7 +1447,7 @@ func parseMediaPostResponseWithDiagnostics(response *http.Response, onUpstreamEr
 		} `json:"post"`
 	}
 	if json.Unmarshal(body, &value) != nil || strings.TrimSpace(value.Post.ID) == "" {
-		return "", fmt.Errorf("创建媒体 Post 响应无效")
+		return "", fmt.Errorf("Respons penciptaan Post media tidak sah")
 	}
 	return strings.TrimSpace(value.Post.ID), nil
 }
@@ -1477,9 +1477,9 @@ func (a *Adapter) postJSONWithReferer(ctx context.Context, cfg Config, lease *eg
 			body, readErr := io.ReadAll(io.LimitReader(response.Body, webMediaDiagnosticBodyLimit+1))
 			_ = response.Body.Close()
 			cancel()
-			if readErr != nil {
-				return nil, fmt.Errorf("读取 Grok Web 403 响应: %w", readErr)
-			}
+		if readErr != nil {
+			return nil, fmt.Errorf("Membaca respons 403 Grok Web: %w", readErr)
+		}
 			truncated := len(body) > webMediaDiagnosticBodyLimit
 			if truncated {
 				body = body[:webMediaDiagnosticBodyLimit]
@@ -1502,7 +1502,7 @@ func (a *Adapter) postJSONWithReferer(ctx context.Context, cfg Config, lease *eg
 		response.Body = &cancelBody{ReadCloser: response.Body, cancel: cancel}
 		return response, nil
 	}
-	return nil, fmt.Errorf("Grok Web Statsig 刷新失败")
+	return nil, fmt.Errorf("Pembaruan Statsig Grok Web gagal")
 }
 
 func (a *Adapter) imageResponse(ctx context.Context, credential account.Credential, urls, blobs []string, count int, format string) (*provider.Response, error) {
@@ -1523,7 +1523,7 @@ func (a *Adapter) imageResponse(ctx context.Context, credential account.Credenti
 
 func (a *Adapter) imageDataItem(ctx context.Context, credential account.Credential, image imagineImageValue, format string) (map[string]any, error) {
 	if a.assets == nil {
-		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, fmt.Errorf("图片媒体存储未配置"))
+		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, fmt.Errorf("Storan media imej tidak dikonfigurasi"))
 	}
 	raw, err := a.imageBytes(ctx, credential, image)
 	if err != nil {
@@ -1604,12 +1604,12 @@ func (a *Adapter) streamImagineImages(ctx context.Context, writer *io.PipeWriter
 		if json.Unmarshal(data, &message) != nil {
 			continue
 		}
-		if message["type"] == "error" {
-			upstreamErr := fmt.Errorf("Imagine WebSocket 返回错误")
-			a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, upstreamErr)
-			_ = writer.CloseWithError(upstreamErr)
-			return
-		}
+	if message["type"] == "error" {
+		upstreamErr := fmt.Errorf("Imagine WebSocket mengembalikan ralat")
+		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, upstreamErr)
+		_ = writer.CloseWithError(upstreamErr)
+		return
+	}
 		collector.Accept(message)
 		if partialImages > 0 {
 			for _, image := range collector.ReadyPreviews() {
@@ -1651,7 +1651,7 @@ func (a *Adapter) streamImagineImages(ctx context.Context, writer *io.PipeWriter
 			emitted++
 		}
 		if collector.Done(modelConfig.ExpectedCount) && emitted < count {
-			incompleteErr := fmt.Errorf("上游仅返回 %d/%d 张可用图片", emitted, count)
+			incompleteErr := fmt.Errorf("Upstream hanya mengembalikan %d/%d imej yang boleh digunakan", emitted, count)
 			_ = writer.CloseWithError(incompleteErr)
 			return
 		}
@@ -1691,7 +1691,7 @@ func imageOutputFormat(raw []byte) string {
 
 func (a *Adapter) saveStreamImage(ctx context.Context, raw []byte) error {
 	if a.assets == nil {
-		return provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, fmt.Errorf("图片媒体存储未配置"))
+		return provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, fmt.Errorf("Storan media imej tidak dikonfigurasi"))
 	}
 	if _, err := a.saveImageWithRetry(ctx, raw); err != nil {
 		return provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, err)
@@ -1702,7 +1702,7 @@ func (a *Adapter) saveStreamImage(ctx context.Context, raw []byte) error {
 func (a *Adapter) downloadImage(ctx context.Context, credential account.Credential, rawURL string) ([]byte, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.Scheme != "https" || !trustedImageAssetHost(parsed.Hostname()) || parsed.User != nil {
-		return nil, fmt.Errorf("图片内容 URL 不受信任")
+		return nil, fmt.Errorf("URL kandungan imej tidak dipercayai")
 	}
 	token, err := a.cipher.Decrypt(credential.EncryptedAccessToken)
 	if err != nil {
@@ -1749,19 +1749,19 @@ func (a *Adapter) downloadImageAttempt(ctx context.Context, credential account.C
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
 		retryable := response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooEarly || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500
-		return nil, retryable, fmt.Errorf("下载图片返回 %d", response.StatusCode)
+		return nil, retryable, fmt.Errorf("Muat turun imej mengembalikan %d", response.StatusCode)
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
 	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
-		return nil, false, fmt.Errorf("上游图片 Content-Type 无效")
+		return nil, false, fmt.Errorf("Content-Type imej upstream tidak sah")
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, (32<<20)+1))
 	if err != nil {
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, 0, err)
-		return nil, ctx.Err() == nil, fmt.Errorf("读取图片内容: %w", err)
+		return nil, ctx.Err() == nil, fmt.Errorf("Membaca kandungan imej: %w", err)
 	}
 	if len(raw) > 32<<20 {
-		return nil, false, fmt.Errorf("图片下载超过 32 MiB")
+		return nil, false, fmt.Errorf("Muat turun imej melebihi 32 MiB")
 	}
 	a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
 	return raw, false, nil
@@ -1785,19 +1785,19 @@ func decodeImageBlob(value string) ([]byte, error) {
 	if strings.HasPrefix(strings.ToLower(value), "data:") {
 		comma := strings.IndexByte(value, ',')
 		if comma < 0 || !strings.Contains(strings.ToLower(value[:comma]), ";base64") {
-			return nil, fmt.Errorf("图片 blob data URI 无效")
+			return nil, fmt.Errorf("Data URI blob imej tidak sah")
 		}
 		value = value[comma+1:]
 	}
 	if value == "" || base64.StdEncoding.DecodedLen(len(value)) > 32<<20 {
-		return nil, fmt.Errorf("图片 blob 为空或超过 32 MiB")
+		return nil, fmt.Errorf("Blob imej kosong atau melebihi 32 MiB")
 	}
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
 		raw, err = base64.RawStdEncoding.DecodeString(value)
 	}
 	if err != nil || len(raw) == 0 || len(raw) > 32<<20 {
-		return nil, fmt.Errorf("图片 blob Base64 无效")
+		return nil, fmt.Errorf("Base64 blob imej tidak sah")
 	}
 	return raw, nil
 }
@@ -1817,7 +1817,7 @@ func imagineURL(baseURL string) (string, error) {
 	case "http":
 		value.Scheme = "ws"
 	default:
-		return "", fmt.Errorf("Grok Web Base URL 协议无效")
+		return "", fmt.Errorf("Protokol Base URL Grok Web tidak sah")
 	}
 	value.Path = "/ws/imagine/listen"
 	value.RawQuery = ""
@@ -1848,7 +1848,7 @@ func resolveImageAspectRatio(aspectRatio, size string) (string, error) {
 	if resolved := values[value]; resolved != "" {
 		return resolved, nil
 	}
-	return "", fmt.Errorf("aspect_ratio 不受支持")
+	return "", fmt.Errorf("aspect_ratio tidak disokong")
 }
 
 func resolveAspectRatio(size string) string {

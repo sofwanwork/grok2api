@@ -33,7 +33,7 @@ func TestTransportUpstreamFailureClassifiesProviderStreamIdleTimeout(t *testing.
 
 func TestTransportUpstreamFailureClassifiesResponseHeaderTimeout(t *testing.T) {
 	failure := newTransportUpstreamFailure(responseHeaderTimeoutTestError{}, 42, "build")
-	if failure.HTTPStatus != http.StatusGatewayTimeout || failure.Code != "upstream_header_timeout" || failure.PublicMessage != "等待上游响应头超时" || failure.AuditCode() != "upstream_header_timeout" {
+	if failure.HTTPStatus != http.StatusGatewayTimeout || failure.Code != "upstream_header_timeout" || failure.PublicMessage != "Tamat masa menunggu pengepala respons upstream" || failure.AuditCode() != "upstream_header_timeout" {
 		t.Fatalf("failure = %#v", failure)
 	}
 	if stage := transportStage(responseHeaderTimeoutTestError{}); stage != "response_header_timeout" {

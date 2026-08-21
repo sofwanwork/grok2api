@@ -295,7 +295,7 @@ func TestForeignCompactionNeverReachesBuildModelInput(t *testing.T) {
 func TestRemoteCompactionTriggerMustBeTerminal(t *testing.T) {
 	_, _, err := normalizeResponsesRequest([]byte(`{"model":"public","input":[{"type":"compaction_trigger"},{"role":"user","content":"late item"}]}`), "grok-4.5")
 	var requestErr *responsesRequestError
-	if err == nil || !strings.Contains(err.Error(), "最后一项") || !errors.As(err, &requestErr) || requestErr.Param != "input[0]" {
+	if err == nil || !strings.Contains(err.Error(), "item terakhir dalam input") || !errors.As(err, &requestErr) || requestErr.Param != "input[0]" {
 		t.Fatalf("error = %#v", err)
 	}
 }

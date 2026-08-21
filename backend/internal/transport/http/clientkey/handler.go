@@ -91,7 +91,7 @@ func (h *Handler) list(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "clientKeyListFailed", "读取客户端 Key 失败")
+		response.Error(c, http.StatusInternalServerError, "clientKeyListFailed", "Membaca Key klien gagal")
 		return
 	}
 	items := make([]keyResponse, 0, len(values))
@@ -104,7 +104,7 @@ func (h *Handler) list(c *gin.Context) {
 func (h *Handler) batchUpdate(c *gin.Context) {
 	var request batchUpdateRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -123,7 +123,7 @@ func (h *Handler) batchUpdate(c *gin.Context) {
 func (h *Handler) batchDelete(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -142,17 +142,17 @@ func (h *Handler) batchDelete(c *gin.Context) {
 func (h *Handler) create(c *gin.Context) {
 	var request createRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	expiresAt, err := parseTime(request.ExpiresAt)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidExpiresAt", "expiresAt 必须是 RFC3339 时间")
+		response.Error(c, http.StatusBadRequest, "invalidExpiresAt", "expiresAt mesti masa RFC3339")
 		return
 	}
 	modelIDs, err := parseIDs(request.AllowedModelIDs)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidModelId", "allowedModelIds 包含无效 ID")
+		response.Error(c, http.StatusBadRequest, "invalidModelId", "allowedModelIds mengandungi ID yang tidak sah")
 		return
 	}
 	enabled := true
@@ -197,7 +197,7 @@ func (h *Handler) update(c *gin.Context) {
 	}
 	var request updateRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	providerScope, tierScope, err := parseRequestedScopes(request.ProviderScope, request.TierScope, request.AccountPool)
@@ -212,7 +212,7 @@ func (h *Handler) update(c *gin.Context) {
 		} else {
 			expiresAt, err := parseTime(*request.ExpiresAt)
 			if err != nil {
-				response.Error(c, http.StatusBadRequest, "invalidExpiresAt", "expiresAt 必须是 RFC3339 时间")
+				response.Error(c, http.StatusBadRequest, "invalidExpiresAt", "expiresAt mesti masa RFC3339")
 				return
 			}
 			input.ExpiresAt = expiresAt
@@ -221,7 +221,7 @@ func (h *Handler) update(c *gin.Context) {
 	if request.AllowedModelIDs != nil {
 		ids, err := parseIDs(*request.AllowedModelIDs)
 		if err != nil {
-			response.Error(c, http.StatusBadRequest, "invalidModelId", "allowedModelIds 包含无效 ID")
+			response.Error(c, http.StatusBadRequest, "invalidModelId", "allowedModelIds mengandungi ID yang tidak sah")
 			return
 		}
 		input.AllowedModels = &ids
@@ -275,7 +275,7 @@ func (h *Handler) writeServiceError(c *gin.Context, code string, err error) {
 	case errors.Is(err, clientkeyapp.ErrSystemManaged):
 		response.Error(c, http.StatusConflict, "clientKeySystemManaged", err.Error())
 	default:
-		response.Error(c, http.StatusInternalServerError, code, "客户端 Key 操作失败")
+		response.Error(c, http.StatusInternalServerError, code, "Operasi Key klien gagal")
 	}
 }
 
@@ -294,7 +294,7 @@ func newKeyResponse(value clientkeydomain.Key) keyResponse {
 
 func parseRequestedScopes(providerValues, tierValues *[]string, legacyPool *string) (*clientkeydomain.ProviderScope, *clientkeydomain.TierScope, error) {
 	if legacyPool != nil && (providerValues != nil || tierValues != nil) {
-		return nil, nil, errors.New("accountPool 不能与 providerScope 或 tierScope 同时设置")
+		return nil, nil, errors.New("accountPool tidak boleh ditetapkan serentak dengan providerScope atau tierScope")
 	}
 	if legacyPool != nil {
 		providers := clientkeydomain.ProviderScopeAll
@@ -307,7 +307,7 @@ func parseRequestedScopes(providerValues, tierValues *[]string, legacyPool *stri
 		case "super":
 			tiers = clientkeydomain.TierScopeSuper
 		default:
-			return nil, nil, errors.New("accountPool 必须是 all、free 或 super")
+			return nil, nil, errors.New("accountPool mesti all, free atau super")
 		}
 		return &providers, &tiers, nil
 	}
@@ -315,7 +315,7 @@ func parseRequestedScopes(providerValues, tierValues *[]string, legacyPool *stri
 	if providerValues != nil {
 		value, valid := clientkeydomain.ParseProviderScopeValues(*providerValues)
 		if !valid {
-			return nil, nil, errors.New("providerScope 必须是 all，或 grok_build、grok_web、grok_console 的组合")
+			return nil, nil, errors.New("providerScope mesti all, atau gabungan grok_build, grok_web, grok_console")
 		}
 		providers = &value
 	}
@@ -323,7 +323,7 @@ func parseRequestedScopes(providerValues, tierValues *[]string, legacyPool *stri
 	if tierValues != nil {
 		value, valid := clientkeydomain.ParseTierScopeValues(*tierValues)
 		if !valid {
-			return nil, nil, errors.New("tierScope 必须是 all，或 free、super 的组合")
+			return nil, nil, errors.New("tierScope mesti all, atau gabungan free, super")
 		}
 		tiers = &value
 	}
@@ -347,7 +347,7 @@ func parseIDs(values []string) ([]uint64, error) {
 	for _, value := range values {
 		id, err := strconv.ParseUint(value, 10, 64)
 		if err != nil || id == 0 {
-			return nil, fmt.Errorf("无效模型 ID: %s", value)
+			return nil, fmt.Errorf("ID model tidak sah: %s", value)
 		}
 		result = append(result, id)
 	}
@@ -357,7 +357,7 @@ func parseIDs(values []string) ([]uint64, error) {
 func pathID(c *gin.Context) (uint64, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidId", "ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID tidak sah")
 		return 0, false
 	}
 	return id, true

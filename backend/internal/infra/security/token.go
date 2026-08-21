@@ -58,12 +58,12 @@ func (s *TokenService) ParseAccessToken(raw string) (AdminTokenIdentity, error) 
 	claims := &adminClaims{}
 	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {
-			return nil, fmt.Errorf("不支持的 JWT 签名算法")
+			return nil, fmt.Errorf("Algoritma tandatangan JWT tidak disokong")
 		}
 		return s.secret, nil
 	}, jwt.WithIssuer(s.issuer))
 	if err != nil || !token.Valid || claims.AdminID == 0 || claims.SessionID == 0 {
-		return AdminTokenIdentity{}, fmt.Errorf("管理员令牌无效")
+		return AdminTokenIdentity{}, fmt.Errorf("Token pentadbir tidak sah")
 	}
 	return AdminTokenIdentity{AdminID: claims.AdminID, SessionID: claims.SessionID}, nil
 }

@@ -422,21 +422,21 @@ func Load(path string) (Config, error) {
 	if strings.TrimSpace(path) != "" {
 		data, err := os.ReadFile(path)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return Config{}, fmt.Errorf("读取配置文件: %w", err)
+			return Config{}, fmt.Errorf("Membaca fail konfigurasi: %w", err)
 		}
 		if err == nil {
 			loadedFrom = path
 			decoder := yaml.NewDecoder(bytes.NewReader(data))
 			decoder.KnownFields(true)
 			if err := decoder.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
-				return Config{}, fmt.Errorf("解析配置文件: %w", err)
+				return Config{}, fmt.Errorf("Huraian fail konfigurasi: %w", err)
 			}
 			var extra any
 			if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 				if err != nil {
-					return Config{}, fmt.Errorf("解析配置文件: %w", err)
+					return Config{}, fmt.Errorf("Huraian fail konfigurasi: %w", err)
 				}
-				return Config{}, errors.New("配置文件只能包含一个 YAML 文档")
+				return Config{}, errors.New("Fail konfigurasi hanya boleh mengandungi satu dokumen YAML")
 			}
 		}
 	}
@@ -474,14 +474,14 @@ func applyEnvironmentOverrides(cfg *Config) error {
 func validatePostgresEnvironmentURL(value string) (string, error) {
 	lower := strings.ToLower(value)
 	if strings.HasPrefix(lower, "postgresql+asyncpg://") {
-		return "", fmt.Errorf("%s 不支持 SQLAlchemy asyncpg URL；请将 postgresql+asyncpg:// 改为 postgresql://", DatabaseURLEnv)
+		return "", fmt.Errorf("%s tidak menyokong URL SQLAlchemy asyncpg; sila tukar postgresql+asyncpg:// kepada postgresql://", DatabaseURLEnv)
 	}
 	if !strings.HasPrefix(lower, "postgres://") && !strings.HasPrefix(lower, "postgresql://") {
-		return "", fmt.Errorf("%s 必须使用 postgres:// 或 postgresql:// URL（连接信息已隐藏）", DatabaseURLEnv)
+		return "", fmt.Errorf("%s mesti menggunakan URL postgres:// atau postgresql:// (maklumat sambungan disembunyikan)", DatabaseURLEnv)
 	}
 	parsed, err := url.ParseRequestURI(value)
 	if err != nil || parsed.Scheme == "" || parsed.Fragment != "" {
-		return "", fmt.Errorf("%s 不是有效的 PostgreSQL URL（连接信息已隐藏）", DatabaseURLEnv)
+		return "", fmt.Errorf("%s bukan URL PostgreSQL yang sah (maklumat sambungan disembunyikan)", DatabaseURLEnv)
 	}
 	return value, nil
 }
@@ -489,7 +489,7 @@ func validatePostgresEnvironmentURL(value string) (string, error) {
 func resolveRelativePaths(cfg *Config, configPath string) error {
 	absoluteConfigPath, err := filepath.Abs(configPath)
 	if err != nil {
-		return fmt.Errorf("解析配置文件路径: %w", err)
+		return fmt.Errorf("Huraian laluan fail konfigurasi: %w", err)
 	}
 	baseDir := filepath.Dir(absoluteConfigPath)
 	if cfg.Database.Driver == "sqlite" {
@@ -512,37 +512,37 @@ func resolveRelativePaths(cfg *Config, configPath string) error {
 // Validate 校验启动所需的安全配置和运行边界。
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.Server.Listen) == "" {
-		return errors.New("server.listen 不能为空")
+		return errors.New("server.listen tak boleh kosong")
 	}
 	if c.Server.MaxBodyBytes <= 0 || c.Server.MaxBodyBytes > maxServerBodyBytes {
-		return fmt.Errorf("server.maxBodyBytes 必须在 1 到 %d 字节之间", maxServerBodyBytes)
+		return fmt.Errorf("server.maxBodyBytes mesti antara 1 hingga %d bait", maxServerBodyBytes)
 	}
 	if c.Server.ReadTimeout.Value() <= 0 || c.Server.ReadTimeout.Value() > maxReadTimeout {
-		return errors.New("server.readTimeout 必须大于零且不超过 1 小时")
+		return errors.New("server.readTimeout mesti lebih besar daripada sifar dan tidak melebihi 1 jam")
 	}
 	if c.Server.RequestTimeout.Value() <= 0 || c.Server.RequestTimeout.Value() > maxRequestTimeout {
-		return errors.New("server.requestTimeout 必须大于零且不超过 24 小时")
+		return errors.New("server.requestTimeout mesti lebih besar daripada sifar dan tidak melebihi 24 jam")
 	}
 	if c.Server.MaxConcurrentRequests < 1 || c.Server.MaxConcurrentRequests > 100000 {
-		return errors.New("server.maxConcurrentRequests 必须在 1 到 100000 之间")
+		return errors.New("server.maxConcurrentRequests mesti antara 1 hingga 100000")
 	}
 	for _, value := range c.Server.TrustedProxies {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
-			return errors.New("server.trustedProxies 不能包含空值")
+			return errors.New("server.trustedProxies tidak boleh mengandungi nilai kosong")
 		}
 		if trimmed != value {
-			return fmt.Errorf("server.trustedProxies %q 不能包含首尾空白", value)
+			return fmt.Errorf("server.trustedProxies %q tidak boleh mengandungi ruang kosong di awal atau akhir", value)
 		}
 		if net.ParseIP(trimmed) != nil {
 			continue
 		}
 		_, network, err := net.ParseCIDR(trimmed)
 		if err != nil {
-			return fmt.Errorf("server.trustedProxies %q 必须是 IP 或 CIDR", value)
+			return fmt.Errorf("server.trustedProxies %q mesti IP atau CIDR", value)
 		}
 		if ones, _ := network.Mask.Size(); ones == 0 {
-			return fmt.Errorf("server.trustedProxies %q 不能信任整个互联网", value)
+			return fmt.Errorf("server.trustedProxies %q tidak boleh mempercayai seluruh internet", value)
 		}
 	}
 	for _, item := range []struct {
@@ -550,97 +550,97 @@ func (c Config) Validate() error {
 		value string
 	}{
 		{name: "frontend.publicApiBaseURL", value: c.Frontend.PublicAPIBaseURL},
-		{name: "frontend.publicApiBaseURL 运行设置", value: c.Frontend.PublicAPIBaseURLOverride},
+		{name: "frontend.publicApiBaseURL tetapan runtime", value: c.Frontend.PublicAPIBaseURLOverride},
 	} {
 		if publicBase := strings.TrimSpace(item.value); publicBase != "" {
 			publicAPIURL, err := url.ParseRequestURI(publicBase)
 			if err != nil || (publicAPIURL.Scheme != "http" && publicAPIURL.Scheme != "https") || publicAPIURL.Host == "" || publicAPIURL.User != nil || publicAPIURL.RawQuery != "" || publicAPIURL.Fragment != "" {
-				return fmt.Errorf("%s 必须是不含凭据、查询参数和片段的 HTTP(S) URL", item.name)
+				return fmt.Errorf("%s mesti URL HTTP(S) tanpa kredensial, parameter pertanyaan dan serpihan", item.name)
 			}
 		}
 	}
 	switch c.Database.Driver {
 	case "sqlite":
 		if strings.TrimSpace(c.Database.SQLite.Path) == "" {
-			return errors.New("database.sqlite.path 不能为空")
+			return errors.New("database.sqlite.path tak boleh kosong")
 		}
 	case "postgres":
 		if strings.TrimSpace(c.Database.Postgres.DSN) == "" {
-			return errors.New("database.postgres.dsn 不能为空")
+			return errors.New("database.postgres.dsn tak boleh kosong")
 		}
 		if c.Database.Postgres.MaxOpenConns < 1 || c.Database.Postgres.MaxOpenConns > 1000 || c.Database.Postgres.MaxIdleConns < 0 || c.Database.Postgres.MaxIdleConns > c.Database.Postgres.MaxOpenConns {
-			return errors.New("database.postgres 连接池配置无效")
+			return errors.New("Konfigurasi kolam sambungan database.postgres tidak sah")
 		}
 	default:
-		return errors.New("database.driver 必须是 sqlite 或 postgres")
+		return errors.New("database.driver mesti sqlite atau postgres")
 	}
 	switch c.RuntimeStore.Driver {
 	case "memory":
 	case "redis":
 		if strings.TrimSpace(c.RuntimeStore.Redis.Address) == "" {
-			return errors.New("runtimeStore.redis.address 不能为空")
+			return errors.New("runtimeStore.redis.address tak boleh kosong")
 		}
 		if c.RuntimeStore.Redis.Database < 0 || c.RuntimeStore.Redis.Database > 1024 {
-			return errors.New("runtimeStore.redis.database 必须在 0 到 1024 之间")
+			return errors.New("runtimeStore.redis.database mesti antara 0 hingga 1024")
 		}
 		if prefix := strings.TrimSpace(c.RuntimeStore.Redis.KeyPrefix); prefix == "" || len(prefix) > 128 {
-			return errors.New("runtimeStore.redis.keyPrefix 必须在 1 到 128 个字符之间")
+			return errors.New("runtimeStore.redis.keyPrefix mesti antara 1 hingga 128 aksara")
 		}
 	default:
-		return errors.New("runtimeStore.driver 必须是 memory 或 redis")
+		return errors.New("runtimeStore.driver mesti memory atau redis")
 	}
 	if c.Deployment.Replicas < 1 || c.Deployment.Replicas > maxDeploymentReplicas {
-		return fmt.Errorf("deployment.replicas 必须在 1 到 %d 之间", maxDeploymentReplicas)
+		return fmt.Errorf("deployment.replicas mesti antara 1 hingga %d", maxDeploymentReplicas)
 	}
 	if c.Deployment.Replicas > 1 {
 		if c.Database.Driver != "postgres" {
-			return errors.New("多实例部署必须使用 PostgreSQL")
+			return errors.New("Penggunaan berbilang tika mesti menggunakan PostgreSQL")
 		}
 		if c.RuntimeStore.Driver != "redis" {
-			return errors.New("多实例部署必须使用 Redis 运行态存储")
+			return errors.New("Penggunaan berbilang tika mesti menggunakan storan runtime Redis")
 		}
 		if strings.TrimSpace(c.Deployment.InstanceID) == "" {
-			return errors.New("多实例部署必须配置 deployment.instanceID")
+			return errors.New("Penggunaan berbilang tika mesti mengkonfigurasi deployment.instanceID")
 		}
 		if strings.TrimSpace(c.Deployment.ClusterID) == "" {
-			return errors.New("多实例部署必须配置 deployment.clusterID")
+			return errors.New("Penggunaan berbilang tika mesti mengkonfigurasi deployment.clusterID")
 		}
 		if !c.Deployment.SharedMedia {
-			return errors.New("多实例部署必须确认 deployment.sharedMedia=true 并挂载共享媒体目录")
+			return errors.New("Penggunaan berbilang tika mesti mengesahkan deployment.sharedMedia=true dan memuatkan direktori media kongsi")
 		}
 	}
 	if c.Media.Driver != "local" {
-		return errors.New("media.driver 当前仅支持 local")
+		return errors.New("media.driver buat masa ini hanya menyokong local")
 	}
 	if strings.TrimSpace(c.Media.Local.Path) == "" {
-		return errors.New("media.local.path 不能为空")
+		return errors.New("media.local.path tak boleh kosong")
 	}
 	if c.Media.MaxImageBytes < 1<<20 || c.Media.MaxImageBytes > 32<<20 {
-		return errors.New("media.maxImageBytes 必须在 1 MiB 到 32 MiB 之间")
+		return errors.New("media.maxImageBytes mesti antara 1 MiB hingga 32 MiB")
 	}
 	if c.Media.MaxTotalBytes < c.Media.MaxImageBytes || c.Media.MaxTotalBytes > 1<<40 {
-		return errors.New("media.maxTotalBytes 必须不小于单图上限且不超过 1 TiB")
+		return errors.New("media.maxTotalBytes mesti tidak kurang daripada had imej tunggal dan tidak melebihi 1 TiB")
 	}
 	if c.Media.CleanupThresholdPercent < 50 || c.Media.CleanupThresholdPercent > 95 {
-		return errors.New("media.cleanupThresholdPercent 必须在 50 到 95 之间")
+		return errors.New("media.cleanupThresholdPercent mesti antara 50 hingga 95")
 	}
 	if c.Media.CleanupInterval.Value() < time.Minute || c.Media.CleanupInterval.Value() > 24*time.Hour {
-		return errors.New("media.cleanupInterval 必须在 1 分钟到 24 小时之间")
+		return errors.New("media.cleanupInterval mesti antara 1 minit hingga 24 jam")
 	}
 	if len(c.Secrets.JWTSecret) < 32 {
-		return errors.New("secrets.jwtSecret 至少需要 32 个字符")
+		return errors.New("secrets.jwtSecret memerlukan sekurang-kurangnya 32 aksara")
 	}
 	if isExampleSecret(c.Secrets.JWTSecret) {
-		return errors.New("secrets.jwtSecret 不能使用示例占位值")
+		return errors.New("secrets.jwtSecret tidak boleh menggunakan nilai ruang letak contoh")
 	}
 	if !validCredentialEncryptionKey(c.Secrets.CredentialEncryptionKey) {
-		return errors.New("secrets.credentialEncryptionKey 必须是 Base64 编码的 32 字节密钥")
+		return errors.New("secrets.credentialEncryptionKey mesti kunci 32 bait yang dikodkan Base64")
 	}
 	if isExampleSecret(c.BootstrapAdmin.Password) {
-		return errors.New("bootstrapAdmin.password 不能使用示例占位值")
+		return errors.New("bootstrapAdmin.password tidak boleh menggunakan nilai ruang letak contoh")
 	}
 	if c.Auth.AccessTokenTTL.Value() <= 0 || c.Auth.RefreshTokenTTL.Value() <= 0 {
-		return errors.New("JWT 有效期必须大于零")
+		return errors.New("Tempoh sah JWT mesti lebih besar daripada sifar")
 	}
 	if err := validateAPIBaseURL("provider.build.baseURL", c.Provider.Build.BaseURL, false); err != nil {
 		return err
@@ -653,136 +653,136 @@ func (c Config) Validate() error {
 		return err
 	}
 	if strings.TrimSpace(c.Provider.Build.ClientVersion) == "" || strings.TrimSpace(c.Provider.Build.ClientIdentifier) == "" || strings.TrimSpace(c.Provider.Build.TokenAuth) == "" || strings.TrimSpace(c.Provider.Build.UserAgent) == "" {
-		return errors.New("provider.build 客户端标识不能为空")
+		return errors.New("Pengepala klien provider.build tak boleh kosong")
 	}
 	if timeout := c.Provider.Build.ResponseHeaderTimeout.Value(); timeout < settingsdomain.MinBuildResponseHeaderTimeout || timeout > settingsdomain.MaxBuildResponseHeaderTimeout {
-		return errors.New("Grok Build 响应头超时必须在 30 秒到 30 分钟之间")
+		return errors.New("Had masa pengepala respons Grok Build mesti antara 30 saat hingga 30 minit")
 	}
 	if idle := c.Provider.Build.StreamIdleTimeout.Value(); idle < settingsdomain.MinBuildStreamIdleTimeout || idle > settingsdomain.MaxBuildStreamIdleTimeout {
-		return errors.New("Grok Build 流式空闲超时必须在 30 秒到 10 分钟之间")
+		return errors.New("Had masa strim terbiar Grok Build mesti antara 30 saat hingga 10 minit")
 	}
 	webURL, err := url.ParseRequestURI(strings.TrimSpace(c.Provider.Web.BaseURL))
 	if err != nil || webURL.Scheme != "https" || webURL.Host == "" || webURL.User != nil {
-		return errors.New("provider.web.baseURL 必须是无凭据的 HTTPS URL")
+		return errors.New("provider.web.baseURL mesti URL HTTPS tanpa kredensial")
 	}
 	switch c.Provider.Web.StatsigMode {
 	case StatsigModeManual:
 		if !validStatsigID(c.Provider.Web.StatsigManualValue) {
-			return errors.New("provider.web 手动 x-statsig-id 格式无效")
+			return errors.New("Format x-statsig-id manual provider.web tidak sah")
 		}
 	case StatsigModeURL:
 		if err := signerurl.Validate(c.Provider.Web.StatsigSignerURL); err != nil {
-			return fmt.Errorf("provider.web Statsig 签名 URL 无效: %w", err)
+			return fmt.Errorf("URL penandatangan Statsig provider.web tidak sah: %w", err)
 		}
 	default:
-		return errors.New("provider.web Statsig 模式必须是 manual 或 url")
+		return errors.New("Mod Statsig provider.web mesti manual atau url")
 	}
 	switch c.Provider.Web.ClearanceMode {
 	case ClearanceModeManual:
 	case ClearanceModeFlareSolverr, ClearanceModeOnDemand:
 		if err := validateFlareSolverrURL(c.Provider.Web.FlareSolverrURL); err != nil {
-			return fmt.Errorf("provider.web FlareSolverr URL 无效: %w", err)
+			return fmt.Errorf("URL FlareSolverr provider.web tidak sah: %w", err)
 		}
 	default:
-		return errors.New("provider.web Clearance 模式必须是 manual、flaresolverr 或 on_demand")
+		return errors.New("Mod Clearance provider.web mesti manual, flaresolverr atau on_demand")
 	}
 	if c.Provider.Web.ClearanceTimeout.Value() < 10*time.Second || c.Provider.Web.ClearanceTimeout.Value() > 5*time.Minute {
-		return errors.New("provider.web Clearance 超时必须在 10 秒到 5 分钟之间")
+		return errors.New("Had masa Clearance provider.web mesti antara 10 saat hingga 5 minit")
 	}
 	if c.Provider.Web.ClearanceRefresh.Value() < time.Minute || c.Provider.Web.ClearanceRefresh.Value() > 24*time.Hour {
-		return errors.New("provider.web Clearance 刷新间隔必须在 1 分钟到 24 小时之间")
+		return errors.New("Selang pembaruan Clearance provider.web mesti antara 1 minit hingga 24 jam")
 	}
 	if c.Provider.Web.QuotaTimeout.Value() < time.Second || c.Provider.Web.QuotaTimeout.Value() > 2*time.Minute ||
 		c.Provider.Web.ChatTimeout.Value() < 5*time.Second || c.Provider.Web.ChatTimeout.Value() > 30*time.Minute ||
 		c.Provider.Web.ImageTimeout.Value() < 5*time.Second || c.Provider.Web.ImageTimeout.Value() > 30*time.Minute ||
 		c.Provider.Web.VideoTimeout.Value() < time.Minute || c.Provider.Web.VideoTimeout.Value() > 2*time.Hour {
-		return errors.New("provider.web 上游超时配置无效")
+		return errors.New("Konfigurasi had masa upstream provider.web tidak sah")
 	}
 	if idle := c.Provider.Web.StreamIdleTimeout.Value(); idle < settingsdomain.MinProviderStreamIdleTimeout || idle > settingsdomain.MaxProviderStreamIdleTimeout {
-		return errors.New("Grok Web 流式空闲超时必须在 30 秒到 10 分钟之间")
+		return errors.New("Had masa strim terbiar Grok Web mesti antara 30 saat hingga 10 minit")
 	}
 	if c.Provider.Web.MediaConcurrency < 1 || c.Provider.Web.MediaConcurrency > 64 {
-		return errors.New("provider.web 媒体并发必须在 1 到 64 之间")
+		return errors.New("Serentak media provider.web mesti antara 1 hingga 64")
 	}
 	consoleURL, err := url.ParseRequestURI(strings.TrimSpace(c.Provider.Console.BaseURL))
 	if err != nil || consoleURL.Scheme != "https" || consoleURL.Host == "" || consoleURL.User != nil {
-		return errors.New("provider.console.baseURL 必须是无凭据的 HTTPS URL")
+		return errors.New("provider.console.baseURL mesti URL HTTPS tanpa kredensial")
 	}
 	if c.Provider.Console.ChatTimeout.Value() < 5*time.Second || c.Provider.Console.ChatTimeout.Value() > 30*time.Minute {
-		return errors.New("provider.console.chatTimeout 必须在 5 秒到 30 分钟之间")
+		return errors.New("provider.console.chatTimeout mesti antara 5 saat hingga 30 minit")
 	}
 	if idle := c.Provider.Console.StreamIdleTimeout.Value(); idle < settingsdomain.MinProviderStreamIdleTimeout || idle > settingsdomain.MaxProviderStreamIdleTimeout {
-		return errors.New("Grok Console 流式空闲超时必须在 30 秒到 10 分钟之间")
+		return errors.New("Had masa strim terbiar Grok Console mesti antara 30 saat hingga 10 minit")
 	}
 	if c.Batch.ImportConcurrency < 1 || c.Batch.ImportConcurrency > 50 ||
 		c.Batch.ConversionConcurrency < 1 || c.Batch.ConversionConcurrency > 50 ||
 		c.Batch.SyncConcurrency < 1 || c.Batch.SyncConcurrency > 50 ||
 		c.Batch.RefreshConcurrency < 1 || c.Batch.RefreshConcurrency > 50 {
-		return errors.New("批量任务并发必须在 1 到 50 之间")
+		return errors.New("Serentak tugas pukal mesti antara 1 hingga 50")
 	}
 	if c.Batch.RandomDelay.Value() < 0 || c.Batch.RandomDelay.Value() > 5*time.Second {
-		return errors.New("批量任务随机延迟必须在 0 到 5 秒之间")
+		return errors.New("Lengah rawak tugas pukal mesti antara 0 hingga 5 saat")
 	}
 	if c.Provider.Web.RecoveryBackoffBase.Value() < 5*time.Second || c.Provider.Web.RecoveryBackoffMax.Value() < c.Provider.Web.RecoveryBackoffBase.Value() || c.Provider.Web.RecoveryBackoffMax.Value() > 6*time.Hour {
-		return errors.New("provider.web 恢复退避配置无效")
+		return errors.New("Konfigurasi backoff pemulihan provider.web tidak sah")
 	}
 	if c.Routing.StickyTTL.Value() <= 0 || c.Routing.StickyTTL.Value() > maxRoutingTTL || c.Routing.CooldownBase.Value() <= 0 || c.Routing.CooldownMax.Value() < c.Routing.CooldownBase.Value() || c.Routing.CooldownMax.Value() > maxRoutingCooldown || c.Routing.CapacityWait.Value() <= 0 || c.Routing.CapacityWait.Value() > maxRoutingCapacityWait || (c.Routing.MaxAttempts < unlimitedRoutingAttempts || c.Routing.MaxAttempts == 0 || c.Routing.MaxAttempts > maxRoutingAttempts) || (c.Routing.VideoMaxAttempts < unlimitedRoutingAttempts || c.Routing.VideoMaxAttempts > maxRoutingAttempts) {
-		return errors.New("routing 配置无效")
+		return errors.New("Konfigurasi routing tidak sah")
 	}
 	if c.Routing.SegmentedMinCandidates < 100 || c.Routing.SegmentedMinCandidates > 1000000 ||
 		c.Routing.SegmentedWindowSize < 8 || c.Routing.SegmentedWindowSize > 256 ||
 		c.Routing.SegmentedWindowSize > c.Routing.SegmentedMinCandidates {
-		return errors.New("routing segmented selector 配置无效")
+		return errors.New("Konfigurasi routing segmented selector tidak sah")
 	}
 	if c.Routing.ReasoningReplayTTL.Value() <= 0 || c.Routing.ReasoningReplayTTL.Value() > 24*time.Hour {
-		return errors.New("routing.reasoningReplayTTL 必须在 1 纳秒到 24 小时之间")
+		return errors.New("routing.reasoningReplayTTL mesti antara 1 nanosaat hingga 24 jam")
 	}
 	if c.Routing.ReasoningReplayMaxEntries < 100 || c.Routing.ReasoningReplayMaxEntries > 1000000 {
-		return errors.New("routing.reasoningReplayMaxEntries 必须在 100 到 1000000 之间")
+		return errors.New("routing.reasoningReplayMaxEntries mesti antara 100 hingga 1000000")
 	}
 	if !validAutoAssignShare(c.Routing.AutoAssignMaxNodeShare) || !validAutoAssignShare(c.Routing.AutoAssignMaxMigrationShare) {
-		return errors.New("routing.autoAssignMaxNodeShare 与 autoAssignMaxMigrationShare 必须为 0 或 0.05 到 1 之间")
+		return errors.New("routing.autoAssignMaxNodeShare dan autoAssignMaxMigrationShare mesti 0 atau antara 0.05 hingga 1")
 	}
 	if c.Audit.BufferSize < 1 || c.Audit.BufferSize > maxAuditBufferSize || c.Audit.BatchSize < 1 || c.Audit.BatchSize > maxAuditBatchSize || c.Audit.BatchSize > c.Audit.BufferSize || c.Audit.FlushInterval.Value() < minAuditFlushInterval || c.Audit.FlushInterval.Value() > maxAuditFlushInterval {
-		return errors.New("audit 队列和批量写入配置无效")
+		return errors.New("Konfigurasi baris gilir dan penulisan pukal audit tidak sah")
 	}
 	if c.Audit.CommitDelay.Value() < minAuditCommitDelay || c.Audit.CommitDelay.Value() > maxAuditCommitDelay {
-		return errors.New("audit.commitDelay 必须在 1ms 到 50ms 之间")
+		return errors.New("audit.commitDelay mesti antara 1ms hingga 50ms")
 	}
 	if c.Audit.LedgerMode != "observe" && c.Audit.LedgerMode != "enforce" {
-		return errors.New("audit.ledgerMode 必须是 observe 或 enforce")
+		return errors.New("audit.ledgerMode mesti observe atau enforce")
 	}
 	if c.Audit.LedgerFailureThreshold < 1 || c.Audit.LedgerFailureThreshold > 100 {
-		return errors.New("audit.ledgerFailureThreshold 必须在 1 到 100 之间")
+		return errors.New("audit.ledgerFailureThreshold mesti antara 1 hingga 100")
 	}
 	if c.Audit.LedgerUnhealthyGrace.Value() < time.Second || c.Audit.LedgerUnhealthyGrace.Value() > 10*time.Minute {
-		return errors.New("audit.ledgerUnhealthyGrace 必须在 1 秒到 10 分钟之间")
+		return errors.New("audit.ledgerUnhealthyGrace mesti antara 1 saat hingga 10 minit")
 	}
 	if c.Audit.LedgerQueueHighWatermarkPct < 50 || c.Audit.LedgerQueueHighWatermarkPct > 100 {
-		return errors.New("audit.ledgerQueueHighWatermarkPercent 必须在 50 到 100 之间")
+		return errors.New("audit.ledgerQueueHighWatermarkPercent mesti antara 50 hingga 100")
 	}
 	if err := validateQualityGuardConfig(c.QualityGuard); err != nil {
 		return err
 	}
 	if c.ClientKeyDefaults.RPMLimit < 1 || c.ClientKeyDefaults.RPMLimit > clientkeydomain.MaxRPMLimit || c.ClientKeyDefaults.MaxConcurrent < 1 || c.ClientKeyDefaults.MaxConcurrent > clientkeydomain.MaxConcurrent {
-		return errors.New("clientKeyDefaults 超出允许范围")
+		return errors.New("clientKeyDefaults melebihi julat yang dibenarkan")
 	}
 	if c.Accounts.AutoCleanReauthInterval.Value() < time.Minute || c.Accounts.AutoCleanReauthInterval.Value() > time.Hour {
-		return errors.New("accounts.autoCleanReauthInterval 必须在 1 分钟到 1 小时之间")
+		return errors.New("accounts.autoCleanReauthInterval mesti antara 1 minit hingga 1 jam")
 	}
 	if c.Accounts.AutoCleanReauthMinAge.Value() < time.Minute || c.Accounts.AutoCleanReauthMinAge.Value() > 30*24*time.Hour {
-		return errors.New("accounts.autoCleanReauthMinAge 必须在 1 分钟到 30 天之间")
+		return errors.New("accounts.autoCleanReauthMinAge mesti antara 1 minit hingga 30 hari")
 	}
 	if len(c.Accounts.BuildForbiddenReauthCodes) > 32 {
-		return errors.New("accounts.buildForbiddenReauthCodes 最多支持 32 个错误码")
+		return errors.New("accounts.buildForbiddenReauthCodes menyokong maksimum 32 kod ralat")
 	}
 	for _, code := range c.Accounts.BuildForbiddenReauthCodes {
 		if !buildForbiddenCodePattern.MatchString(strings.TrimSpace(code)) {
-			return errors.New("accounts.buildForbiddenReauthCodes 包含无效错误码")
+			return errors.New("accounts.buildForbiddenReauthCodes mengandungi kod ralat yang tidak sah")
 		}
 	}
 	if len(c.Accounts.BuildForbiddenReauthCodes) == 0 {
-		return errors.New("accounts.buildForbiddenReauthCodes 至少需要一个错误码")
+		return errors.New("accounts.buildForbiddenReauthCodes memerlukan sekurang-kurangnya satu kod ralat")
 	}
 	return nil
 }
@@ -795,48 +795,48 @@ func validateQualityGuardConfig(value QualityGuardConfig) error {
 		return nil
 	}
 	if !validUniquePositiveIDs(value.NodeIDs) || !validUniquePositiveIDs(value.RotatableNodeIDs) {
-		return errors.New("qualityGuard.nodeIDs 和 rotatableNodeIDs 必须是唯一的正整数")
+		return errors.New("qualityGuard.nodeIDs dan rotatableNodeIDs mesti integer positif yang unik")
 	}
 	if strings.TrimSpace(value.Model) == "" {
-		return errors.New("qualityGuard.model 不能为空")
+		return errors.New("qualityGuard.model tak boleh kosong")
 	}
 	if value.Mode != "active" && value.Mode != "passive" && value.Mode != "hybrid" {
-		return errors.New("qualityGuard.mode 必须是 active、passive 或 hybrid")
+		return errors.New("qualityGuard.mode mesti active, passive atau hybrid")
 	}
 	if value.ActiveInterval.Value() < time.Minute || value.ActiveInterval.Value() > 24*time.Hour {
-		return errors.New("qualityGuard.activeInterval 必须在 1 分钟到 24 小时之间")
+		return errors.New("qualityGuard.activeInterval mesti antara 1 minit hingga 24 jam")
 	}
 	if value.PassivePollInterval.Value() < time.Second || value.PassivePollInterval.Value() > 5*time.Minute {
-		return errors.New("qualityGuard.passivePollInterval 必须在 1 秒到 5 分钟之间")
+		return errors.New("qualityGuard.passivePollInterval mesti antara 1 saat hingga 5 minit")
 	}
 	if value.SoftTPS < 1 || value.HardTPS <= value.SoftTPS || value.HardTPS > 10000 {
-		return errors.New("qualityGuard TPS 阈值无效")
+		return errors.New("Ambang TPS qualityGuard tidak sah")
 	}
 	if value.ConsecutiveSoft < 1 || value.ConsecutiveSoft > 20 || value.ConsecutiveErrors < 1 || value.ConsecutiveErrors > 20 {
-		return errors.New("qualityGuard 连续异常次数必须在 1 到 20 之间")
+		return errors.New("Bilangan anomali berturut-turut qualityGuard mesti antara 1 hingga 20")
 	}
 	if value.QuarantineDuration.Value() < 30*time.Second || value.QuarantineDuration.Value() > 24*time.Hour || value.NoAccountBackoff.Value() < 30*time.Second || value.NoAccountBackoff.Value() > 24*time.Hour {
-		return errors.New("qualityGuard 隔离和无账号退避时间必须在 30 秒到 24 小时之间")
+		return errors.New("Tempoh kuarantin dan backoff tanpa akaun qualityGuard mesti antara 30 saat hingga 24 jam")
 	}
 	if value.MinimumHealthyNodes < 1 || (len(value.NodeIDs) > 0 && value.MinimumHealthyNodes > len(value.NodeIDs)) {
-		return errors.New("qualityGuard.minimumHealthyNodes 与受管节点数量不匹配")
+		return errors.New("qualityGuard.minimumHealthyNodes tidak sepadan dengan bilangan nod yang diurus")
 	}
 	if value.MaxOutputTokens < 32 || value.MaxOutputTokens > 4096 {
-		return errors.New("qualityGuard.maxOutputTokens 必须在 32 到 4096 之间")
+		return errors.New("qualityGuard.maxOutputTokens mesti antara 32 hingga 4096")
 	}
 	if value.MinimumGenerationWindow.Value() < time.Millisecond || value.MinimumGenerationWindow.Value() > 2*time.Minute {
-		return errors.New("qualityGuard.minimumGenerationWindow 必须在 1 毫秒到 2 分钟之间")
+		return errors.New("qualityGuard.minimumGenerationWindow mesti antara 1 milisaat hingga 2 minit")
 	}
 	if value.RotationTimeout.Value() < 5*time.Second || value.RotationTimeout.Value() > 5*time.Minute {
-		return errors.New("qualityGuard.rotationTimeout 必须在 5 秒到 5 分钟之间")
+		return errors.New("qualityGuard.rotationTimeout mesti antara 5 saat hingga 5 minit")
 	}
 	if len(value.RotatableNodeIDs) > 0 && strings.TrimSpace(value.RotationURL) == "" {
-		return errors.New("qualityGuard.rotatableNodeIDs 非空时必须配置 rotationURL")
+		return errors.New("qualityGuard.rotatableNodeIDs tidak kosong mesti mengkonfigurasi rotationURL")
 	}
 	if raw := strings.TrimSpace(value.RotationURL); raw != "" {
 		parsed, err := url.ParseRequestURI(raw)
 		if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			return errors.New("qualityGuard.rotationURL 必须是无凭据的 HTTP(S) URL")
+			return errors.New("qualityGuard.rotationURL mesti URL HTTP(S) tanpa kredensial")
 		}
 	}
 	return nil
@@ -847,21 +847,21 @@ func validateQualityGuardRequestRetry(value QualityGuardRequestRetryConfig) erro
 		return nil
 	}
 	if value.MaxAttempts != 0 && (value.MaxAttempts < 1 || value.MaxAttempts > 6) {
-		return errors.New("qualityGuard.requestRetry.maxAttempts 必须在 1 到 6 之间")
+		return errors.New("qualityGuard.requestRetry.maxAttempts mesti antara 1 hingga 6")
 	}
 	if d := value.HoldTimeout.Value(); d != 0 && (d < 200*time.Millisecond || d > 30*time.Second) {
-		return errors.New("qualityGuard.requestRetry.holdTimeout 必须在 200ms 到 30s 之间")
+		return errors.New("qualityGuard.requestRetry.holdTimeout mesti antara 200ms hingga 30s")
 	}
 	if value.MinOutputTokens != 0 && (value.MinOutputTokens < 8 || value.MinOutputTokens > 256) {
-		return errors.New("qualityGuard.requestRetry.minOutputTokens 必须在 8 到 256 之间")
+		return errors.New("qualityGuard.requestRetry.minOutputTokens mesti antara 8 hingga 256")
 	}
 	switch strings.TrimSpace(value.OnExhausted) {
 	case "", "fail_open", "fail_closed":
 	default:
-		return errors.New("qualityGuard.requestRetry.onExhausted 必须是 fail_open 或 fail_closed")
+		return errors.New("qualityGuard.requestRetry.onExhausted mesti fail_open atau fail_closed")
 	}
 	if d := value.AccountCooldown.Value(); d != 0 && (d < time.Minute || d > 168*time.Hour) {
-		return errors.New("qualityGuard.requestRetry.accountCooldown 必须在 1m 到 168h 之间")
+		return errors.New("qualityGuard.requestRetry.accountCooldown mesti antara 1m hingga 168h")
 	}
 	return nil
 }
@@ -889,18 +889,18 @@ func validUniquePositiveIDs(values []uint64) bool {
 func validateAPIBaseURL(name, raw string, requireHTTPS bool) error {
 	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return fmt.Errorf("%s 必须是不含凭据、查询参数和片段的 HTTP(S) URL", name)
+		return fmt.Errorf("%s mesti URL HTTP(S) tanpa kredensial, parameter pertanyaan dan serpihan", name)
 	}
 	switch parsed.Scheme {
 	case "https":
 		return nil
 	case "http":
 		if requireHTTPS {
-			return fmt.Errorf("%s 必须是 HTTPS URL", name)
+			return fmt.Errorf("%s mesti URL HTTPS", name)
 		}
 		return nil
 	default:
-		return fmt.Errorf("%s 必须是不含凭据、查询参数和片段的 HTTP(S) URL", name)
+		return fmt.Errorf("%s mesti URL HTTP(S) tanpa kredensial, parameter pertanyaan dan serpihan", name)
 	}
 }
 
@@ -1014,7 +1014,7 @@ func defaultConfig() Config {
 
 func validateFlareSolverrURL(value string) error {
 	if err := signerurl.Validate(value); err != nil {
-		return errors.New(strings.ReplaceAll(err.Error(), "签名 URL", "URL"))
+		return errors.New(strings.ReplaceAll(err.Error(), "URL tandatangan", "URL"))
 	}
 	return nil
 }

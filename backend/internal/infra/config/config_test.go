@@ -92,9 +92,9 @@ func TestLoadRejectsInvalidDatabaseEnvironmentURLWithoutLeakingCredentials(t *te
 		value   string
 		message string
 	}{
-		{name: "asyncpg", value: "postgresql+asyncpg://user:highly-secret@postgres.internal/grok2api", message: "改为 postgresql://"},
-		{name: "unsupported scheme", value: "mysql://user:highly-secret@mysql.internal/grok2api", message: "postgres:// 或 postgresql://"},
-		{name: "malformed URL", value: "postgres://user:highly-secret%zz@postgres.internal/grok2api", message: "不是有效的 PostgreSQL URL"},
+		{name: "asyncpg", value: "postgresql+asyncpg://user:highly-secret@postgres.internal/grok2api", message: "tukar postgresql+asyncpg:// kepada postgresql://"},
+		{name: "unsupported scheme", value: "mysql://user:highly-secret@mysql.internal/grok2api", message: "postgres:// atau postgresql://"},
+		{name: "malformed URL", value: "postgres://user:highly-secret%zz@postgres.internal/grok2api", message: "bukan URL PostgreSQL yang sah"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

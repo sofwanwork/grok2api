@@ -103,7 +103,7 @@ func (l *Lease) DoDeferredForbidden(request *http.Request) (*http.Response, erro
 
 func (l *Lease) doRequest(request *http.Request, invalidateForbidden bool) (*http.Response, error) {
 	if l == nil || l.client == nil {
-		return nil, errors.New("出口客户端未初始化")
+		return nil, errors.New("Klien egress tidak dimulakan")
 	}
 	// Rotating proxy endpoints choose an exit when a new CONNECT tunnel is
 	// established. Reusing a Build keep-alive/HTTP2 connection would pin many
@@ -505,7 +505,7 @@ func (m *Manager) ProbeEgressNode(ctx context.Context, node domain.Node) (domain
 	var provider domain.ProbeProvider
 	config, supported, configErr := m.loadOperationsConfig(ctx, time.Now().UTC())
 	if configErr != nil {
-		message := "读取代理探测服务配置失败"
+		message := "Membaca konfigurasi perkhidmatan pengesan proksi gagal"
 		result := failedEgressProbeResult(provider, message, startedAt)
 		m.logProbeSetupFailure(ctx, node, provider, "load_probe_config", message, configErr, result.LatencyMS)
 		return result, configErr
@@ -558,7 +558,7 @@ func (m *Manager) ProbeEgressNode(ctx context.Context, node domain.Node) (domain
 	}
 	result.Error = strings.Join(errorsByFamily, "; ")
 	if result.Error == "" {
-		result.Error = "IPv4 和 IPv6 代理探测均失败"
+		result.Error = "Pengesanan proksi IPv4 dan IPv6 kedua-duanya gagal"
 	}
 	return result, errors.Join(ipv4Err, ipv6Err, errors.New(result.Error))
 }
@@ -566,25 +566,25 @@ func (m *Manager) ProbeEgressNode(ctx context.Context, node domain.Node) (domain
 func (m *Manager) prepareEgressProbe(node domain.Node) (preparedEgressProbe, string, string, error) {
 	target := preparedEgressProbe{nodeID: node.ID, nodeName: node.Name, nodeScope: node.Scope}
 	if node.ID == 0 {
-		message := "代理节点 ID 无效"
+		message := "ID nod proksi tidak sah"
 		return target, "validate_node", message, errors.New(message)
 	}
 	proxyURL, err := m.cipher.Decrypt(node.EncryptedProxyURL)
 	if err != nil {
-		return target, "decrypt_proxy", "读取代理配置失败", err
+		return target, "decrypt_proxy", "Membaca konfigurasi proksi gagal", err
 	}
 	proxyURL, err = application.NormalizeProxyURL(proxyURL)
 	if err != nil {
-		return target, "normalize_proxy", "代理地址无效", err
+		return target, "normalize_proxy", "Alamat proksi tidak sah", err
 	}
 	if proxyURL == "" {
-		message := "未配置代理地址"
+		message := "Alamat proksi tidak dikonfigurasi"
 		return target, "normalize_proxy", message, errors.New(message)
 	}
 	if strings.Contains(proxyURL, application.ProxyAccountPlaceholder) {
 		proxyURL, err = renderAccountProxyURL(proxyURL, "egress_probe")
 		if err != nil {
-			return target, "render_proxy_identity", "账号代理模板无效", err
+			return target, "render_proxy_identity", "Templat proksi akaun tidak sah", err
 		}
 	}
 	target.proxyURL = proxyURL
@@ -685,7 +685,7 @@ func (m *Manager) probeEgressEndpoint(ctx context.Context, target preparedEgress
 	}
 	client, err := clientFactory(target.proxyURL, egressProbeTimeout)
 	if err != nil {
-		result.Error = "创建代理连接失败"
+		result.Error = "Mencipta sambungan proksi gagal"
 		return result, err
 	}
 	defer client.CloseIdleConnections()
@@ -736,7 +736,7 @@ func (m *Manager) probeEgressEndpoint(ctx context.Context, target preparedEgress
 	stage = "build_request"
 	request, err := http.NewRequestWithContext(probeCtx, http.MethodGet, targetURL, nil)
 	if err != nil {
-		result.Error = "构造探测请求失败"
+		result.Error = "Membina permintaan pengesanan gagal"
 		return result, err
 	}
 	request.Header.Set("User-Agent", DefaultUserAgent)
@@ -755,7 +755,7 @@ func (m *Manager) probeEgressEndpoint(ctx context.Context, target preparedEgress
 			stage = "execute_request"
 		}
 		traceMu.Unlock()
-		result.Error = "代理连接失败"
+		result.Error = "Sambungan proksi gagal"
 		return result, err
 	}
 	statusCode = response.StatusCode
@@ -763,24 +763,24 @@ func (m *Manager) probeEgressEndpoint(ctx context.Context, target preparedEgress
 	stage = "read_response"
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 	if readErr != nil {
-		result.Error = "读取探测响应失败"
+		result.Error = "Membaca respons pengesanan gagal"
 		return result, readErr
 	}
 	stage = "validate_status"
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		result.Error = fmt.Sprintf("探测服务返回 HTTP %d", response.StatusCode)
+		result.Error = fmt.Sprintf("Perkhidmatan pengesanan mengembalikan HTTP %d", response.StatusCode)
 		return result, errors.New(result.Error)
 	}
 	stage = "decode_response"
 	exitIP, err := decodeProbeIP(body)
 	if err != nil {
-		result.Error = "探测服务响应格式无效"
+		result.Error = "Format respons perkhidmatan pengesanan tidak sah"
 		return result, err
 	}
 	stage = "validate_exit_ip"
 	address, err := netip.ParseAddr(exitIP)
 	if err != nil || (family == "ipv4" && !address.Is4()) || (family == "ipv6" && !address.Is6()) {
-		result.Error = fmt.Sprintf("探测服务未返回有效 %s 出口 IP", strings.ToUpper(family))
+		result.Error = fmt.Sprintf("Perkhidmatan pengesanan tidak mengembalikan IP egress %s yang sah", strings.ToUpper(family))
 		if err == nil {
 			err = errors.New(result.Error)
 		}
@@ -823,20 +823,20 @@ func (m *Manager) acquire(ctx context.Context, scope domain.Scope, affinity stri
 			now = time.Now().UTC()
 			selected, err := m.repository.GetEgressNode(ctx, boundNodeID)
 			if err != nil {
-				primaryErr := fmt.Errorf("读取绑定出口节点: %w", err)
+				primaryErr := fmt.Errorf("Membaca nod egress terikat: %w", err)
 				if !errors.Is(err, repository.ErrNotFound) {
 					return nil, true, primaryErr
 				}
 				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, primaryErr)
 			}
 			if !domain.SupportsScope(selected.Scope, scope) {
-				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("绑定出口节点 %d 与 %s 作用域不兼容", boundNodeID, scope))
+				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("Nod egress terikat %d tidak serasi dengan skop %s", boundNodeID, scope))
 			}
 			if !selected.Enabled && !qualityProbe {
-				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("绑定出口节点 %d 已禁用", boundNodeID))
+				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("Nod egress terikat %d telah dilumpuhkan", boundNodeID))
 			}
 			if strings.TrimSpace(selected.EncryptedProxyURL) == "" {
-				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("绑定出口节点 %d 未配置代理地址", boundNodeID))
+				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("Nod egress terikat %d tiada alamat proksi dikonfigurasi", boundNodeID))
 			}
 			proxyPool := m.isProxyPoolNode(selected)
 			if !qualityProbe && !proxyPool && selected.CooldownUntil != nil && now.Before(*selected.CooldownUntil) {
@@ -850,7 +850,7 @@ func (m *Manager) acquire(ctx context.Context, scope domain.Scope, affinity stri
 						continue
 					}
 				}
-				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("绑定出口节点 %d 正在冷却", boundNodeID))
+				return m.acquireUnavailableFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, fmt.Errorf("Nod egress terikat %d sedang dalam tempoh sejuk", boundNodeID))
 			}
 			return m.leaseForNode(ctx, scope, affinity, encryptedCredentialCookies, managedClearance, selected)
 		}
@@ -899,7 +899,7 @@ func (m *Manager) acquire(ctx context.Context, scope domain.Scope, affinity stri
 	if len(available) == 0 {
 		primaryErr := error(nil)
 		if configured {
-			primaryErr = fmt.Errorf("当前没有可用的 %s 出口节点", scope)
+			primaryErr = fmt.Errorf("Buat masa ini tiada nod egress %s yang boleh digunakan", scope)
 		}
 		lease, fallbackConfigured, applied, err := m.applyFallback(ctx, scope, affinity, allowDirect, encryptedCredentialCookies, managedClearance, primaryErr, fallback, fallbackSupported, fallbackConfigErr)
 		if err != nil {
@@ -946,7 +946,7 @@ func (m *Manager) acquireFallback(ctx context.Context, scope domain.Scope, affin
 
 func (m *Manager) applyFallback(ctx context.Context, scope domain.Scope, affinity string, allowDirect bool, encryptedCredentialCookies string, managedClearance bool, primaryErr error, fallback domain.FallbackConfig, supported bool, configErr error) (*Lease, bool, bool, error) {
 	if configErr != nil {
-		return nil, false, false, fallbackError(primaryErr, fmt.Errorf("读取出口回退配置: %w", configErr))
+		return nil, false, false, fallbackError(primaryErr, fmt.Errorf("Membaca konfigurasi fallback egress: %w", configErr))
 	}
 	if !supported {
 		return nil, false, false, nil
@@ -961,7 +961,7 @@ func (m *Manager) applyFallback(ctx context.Context, scope domain.Scope, affinit
 		}
 		lease, _, err := m.leaseForNode(ctx, scope, affinity, encryptedCredentialCookies, managedClearance, domain.Node{ID: 0, Name: "direct", Scope: scope, Enabled: true, Health: 1})
 		if err != nil {
-			return nil, false, false, fallbackError(primaryErr, fmt.Errorf("获取本地直连回退: %w", err))
+			return nil, false, false, fallbackError(primaryErr, fmt.Errorf("Mendapatkan fallback sambungan terus tempatan: %w", err))
 		}
 		return lease, false, true, nil
 	case domain.FallbackModeFixed:
@@ -971,11 +971,11 @@ func (m *Manager) applyFallback(ctx context.Context, scope domain.Scope, affinit
 		}
 		lease, _, err := m.leaseForNode(ctx, scope, affinity, encryptedCredentialCookies, managedClearance, selected)
 		if err != nil {
-			return nil, false, false, fallbackError(primaryErr, fmt.Errorf("获取固定回退节点 %d: %w", selected.ID, err))
+			return nil, false, false, fallbackError(primaryErr, fmt.Errorf("Mendapatkan nod fallback tetap %d: %w", selected.ID, err))
 		}
 		return lease, true, true, nil
 	default:
-		return nil, false, false, fallbackError(primaryErr, fmt.Errorf("出口回退模式 %q 无效", fallback.Mode))
+		return nil, false, false, fallbackError(primaryErr, fmt.Errorf("Mod fallback egress %q tidak sah", fallback.Mode))
 	}
 }
 
@@ -1028,37 +1028,37 @@ func (m *Manager) loadOperationsConfig(ctx context.Context, now time.Time) (doma
 
 func (m *Manager) fixedFallbackNode(ctx context.Context, scope domain.Scope, nodeID uint64) (domain.Node, error) {
 	if nodeID == 0 {
-		return domain.Node{}, errors.New("固定回退节点未指定")
+		return domain.Node{}, errors.New("Nod fallback tetap tidak ditetapkan")
 	}
 	selected, err := m.repository.GetEgressNode(ctx, nodeID)
 	if err != nil {
-		return domain.Node{}, fmt.Errorf("读取固定回退节点 %d: %w", nodeID, err)
+		return domain.Node{}, fmt.Errorf("Membaca nod fallback tetap %d: %w", nodeID, err)
 	}
 	if !domain.SupportsScope(selected.Scope, scope) {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 与 %s 作用域不兼容", nodeID, scope)
+		return domain.Node{}, fmt.Errorf("Nod fallback tetap %d tidak serasi dengan skop %s", nodeID, scope)
 	}
 	if !selected.Enabled {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 已禁用", nodeID)
+		return domain.Node{}, fmt.Errorf("Nod fallback tetap %d telah dilumpuhkan", nodeID)
 	}
 	if selected.ProxyPool {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 使用代理池模式", nodeID)
+		return domain.Node{}, fmt.Errorf("Nod fallback tetap %d menggunakan mod kolam proksi", nodeID)
 	}
 	if strings.TrimSpace(selected.EncryptedProxyURL) == "" {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 未配置代理地址", nodeID)
+		return domain.Node{}, fmt.Errorf("Nod fallback tetap %d tiada alamat proksi dikonfigurasi", nodeID)
 	}
 	if selected.CooldownUntil != nil && time.Now().UTC().Before(*selected.CooldownUntil) {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 正在冷却", nodeID)
+		return domain.Node{}, fmt.Errorf("Nod fallback tetap %d sedang dalam tempoh sejuk", nodeID)
 	}
 	proxyURL, err := m.cipher.Decrypt(selected.EncryptedProxyURL)
 	if err != nil {
-		return domain.Node{}, fmt.Errorf("读取固定回退节点 %d 代理配置: %w", nodeID, err)
+		return domain.Node{}, fmt.Errorf("Membaca konfigurasi proksi nod fallback tetap %d: %w", nodeID, err)
 	}
 	proxyURL, err = application.NormalizeProxyURL(proxyURL)
 	if err != nil || proxyURL == "" {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 代理地址无效", nodeID)
+		return domain.Node{}, fmt.Errorf("Alamat proksi nod fallback tetap %d tidak sah", nodeID)
 	}
 	if strings.Contains(proxyURL, application.ProxyAccountPlaceholder) {
-		return domain.Node{}, fmt.Errorf("固定回退节点 %d 使用账号代理模板", nodeID)
+		return domain.Node{}, fmt.Errorf("Nod fallback tetap %d menggunakan templat proksi akaun", nodeID)
 	}
 	return selected, nil
 }
@@ -1067,7 +1067,7 @@ func fallbackError(primaryErr, fallbackErr error) error {
 	if primaryErr == nil {
 		return fallbackErr
 	}
-	return fmt.Errorf("%w；出口回退不可用: %v", primaryErr, fallbackErr)
+	return fmt.Errorf("%w; fallback egress tidak tersedia: %v", primaryErr, fallbackErr)
 }
 
 type clientOptions struct {
@@ -1211,7 +1211,7 @@ func renderAccountProxyURL(template, accountKey string) (string, error) {
 	}
 	accountKey = normalizeProxyAccount(accountKey)
 	if accountKey == "" {
-		return "", errors.New("粘性代理需要有效的账号身份")
+		return "", errors.New("Proksi melekit memerlukan identiti akaun yang sah")
 	}
 	return strings.ReplaceAll(template, application.ProxyAccountPlaceholder, accountKey), nil
 }
@@ -1852,7 +1852,7 @@ func (m *Manager) refreshNode(ctx context.Context, node domain.Node, proxyURL, k
 	lock := m.clearanceLock
 	m.clearanceMu.Unlock()
 	if cfg.Mode != "flaresolverr" && cfg.Mode != "on_demand" {
-		return clearanceSolution{}, errors.New("FlareSolverr Clearance 未启用")
+		return clearanceSolution{}, errors.New("FlareSolverr Clearance tidak diaktifkan")
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -1864,7 +1864,7 @@ func (m *Manager) refreshNode(ctx context.Context, node domain.Node, proxyURL, k
 	if persist && node.ID != 0 && lock != nil {
 		release, acquired, err := lock.Acquire(ctx, "egress-clearance:"+strconv.FormatUint(node.ID, 10), timeout+clearanceLockGrace)
 		if err != nil {
-			return clearanceSolution{}, fmt.Errorf("协调 Clearance 刷新: %w", err)
+			return clearanceSolution{}, fmt.Errorf("Menyelaraskan pembaruan Clearance: %w", err)
 		}
 		if !acquired {
 			if !force {
@@ -1879,7 +1879,7 @@ func (m *Manager) refreshNode(ctx context.Context, node domain.Node, proxyURL, k
 					return solution, nil
 				}
 			}
-			return clearanceSolution{}, errors.New("另一个实例正在刷新 Cloudflare Clearance")
+			return clearanceSolution{}, errors.New("Satu lagi tika sedang memuat semula Cloudflare Clearance")
 		}
 		defer release()
 		if solution, refreshedAt, ok := m.loadPersistedClearance(ctx, node.ID, fingerprint, bindingFingerprint, interval); ok {
@@ -1898,7 +1898,7 @@ func (m *Manager) refreshNode(ctx context.Context, node domain.Node, proxyURL, k
 	solution, err := solver.Solve(solveCtx, cfg, proxyURL)
 	if err != nil {
 		m.recordClearanceError(ctx, node, persist)
-		return clearanceSolution{}, fmt.Errorf("刷新出口 %q 的 Cloudflare Clearance: %w", node.Name, err)
+		return clearanceSolution{}, fmt.Errorf("Memuat semula Cloudflare Clearance bagi egress %q: %w", node.Name, err)
 	}
 	now := time.Now().UTC()
 	if persist && node.ID != 0 {
@@ -2079,14 +2079,14 @@ func (m *Manager) RefreshClearance(ctx context.Context, nodeID uint64) error {
 		return err
 	}
 	if !isGrokWebScope(node.Scope) {
-		return fmt.Errorf("出口节点 %q 不支持 Clearance 刷新", node.Name)
+		return fmt.Errorf("Nod egress %q tidak menyokong pembaruan Clearance", node.Name)
 	}
 	proxyURL, err := m.cipher.Decrypt(node.EncryptedProxyURL)
 	if err != nil {
 		return err
 	}
 	if strings.Contains(proxyURL, application.ProxyAccountPlaceholder) {
-		return fmt.Errorf("出口节点 %q 使用账号粘性代理，将在账号请求时按租约自动刷新 Clearance", node.Name)
+		return fmt.Errorf("Nod egress %q menggunakan proksi melekit akaun; Clearance akan dimuat semula secara automatik mengikut pajakan semasa permintaan akaun", node.Name)
 	}
 	proxyURL, err = application.NormalizeProxyURL(proxyURL)
 	if err != nil {

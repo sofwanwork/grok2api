@@ -192,7 +192,7 @@ func (h *Handler) qualityGuardStatus(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "质量守护状态暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Status pengawal kualiti tidak tersedia buat sementara waktu")
 		return
 	}
 	payload := gin.H{
@@ -254,19 +254,19 @@ type qualityGuardRuntimeConfigSettings struct {
 
 func (h *Handler) updateQualityGuardConfig(c *gin.Context) {
 	if h.guardConfigPath == "" {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "质量守护策略当前只读")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardReadOnly", "Dasar pengawal kualiti semasa hanya baca")
 		return
 	}
 	state, available, err := h.readQualityGuardState()
 	if err != nil || !available {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "质量守护状态暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Status pengawal kualiti tidak tersedia buat sementara waktu")
 		return
 	}
 	var request qualityGuardConfigRequest
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	if err := request.validate(len(state.Guard.NodeIDs)); err != nil {
@@ -280,7 +280,7 @@ func (h *Handler) updateQualityGuardConfig(c *gin.Context) {
 		QuarantineSeconds: request.QuarantineSeconds, MinHealthyNodes: request.MinHealthyNodes,
 	}}
 	if err := saveQualityGuardRuntimeConfig(h.guardConfigPath, value); err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "质量守护策略保存失败")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardConfigWriteFailed", "Gagal menyimpan dasar pengawal kualiti")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"saved": true})
@@ -288,25 +288,25 @@ func (h *Handler) updateQualityGuardConfig(c *gin.Context) {
 
 func (r qualityGuardConfigRequest) validate(nodeCount int) error {
 	if r.Mode != "active" && r.Mode != "passive" && r.Mode != "hybrid" {
-		return errors.New("检测模式无效")
+		return errors.New("Mod pengesanan tidak sah")
 	}
 	if r.ActiveIntervalSeconds < 60 || r.ActiveIntervalSeconds > 86400 {
-		return errors.New("主动检测间隔必须在 60 到 86400 秒之间")
+		return errors.New("Selang pengesanan aktif mesti antara 60 hingga 86400 saat")
 	}
 	if r.PassivePollSeconds < 1 || r.PassivePollSeconds > 300 {
-		return errors.New("被动审计间隔必须在 1 到 300 秒之间")
+		return errors.New("Selang audit pasif mesti antara 1 hingga 300 saat")
 	}
 	if math.IsNaN(r.SoftTPS) || math.IsInf(r.SoftTPS, 0) || math.IsNaN(r.HardTPS) || math.IsInf(r.HardTPS, 0) || r.SoftTPS < 1 || r.HardTPS > 10000 || r.SoftTPS >= r.HardTPS {
-		return errors.New("Token/s 阈值无效，软阈值必须低于硬阈值")
+		return errors.New("Ambang Token/s tidak sah, ambang lembut mesti lebih rendah daripada ambang keras")
 	}
 	if r.ConsecutiveSoft < 1 || r.ConsecutiveSoft > 20 || r.ConsecutiveErrors < 1 || r.ConsecutiveErrors > 20 {
-		return errors.New("连续命中次数必须在 1 到 20 之间")
+		return errors.New("Bilangan kena berturut-turut mesti antara 1 hingga 20")
 	}
 	if r.QuarantineSeconds < 30 || r.QuarantineSeconds > 86400 {
-		return errors.New("隔离时长必须在 30 到 86400 秒之间")
+		return errors.New("Tempoh kuarantin mesti antara 30 hingga 86400 saat")
 	}
 	if r.MinHealthyNodes < 1 || r.MinHealthyNodes > nodeCount {
-		return errors.New("最少保留节点必须在受管节点数量范围内")
+		return errors.New("Node minimum yang dikekalkan mesti berada dalam julat bilangan node terurus")
 	}
 	return nil
 }
@@ -358,11 +358,11 @@ func (h *Handler) readQualityGuardState() (qualityGuardState, bool, error) {
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, maxQualityGuardStateBytes+1))
 	if err != nil || len(data) > maxQualityGuardStateBytes {
-		return qualityGuardState{}, true, errors.New("质量守护状态不可读")
+		return qualityGuardState{}, true, errors.New("Status pengawal kualiti tidak boleh dibaca")
 	}
 	var state qualityGuardState
 	if json.Unmarshal(data, &state) != nil || state.Version != 1 || state.Guard.Mode == "" || state.Nodes == nil {
-		return qualityGuardState{}, true, errors.New("质量守护状态格式无效")
+		return qualityGuardState{}, true, errors.New("Format status pengawal kualiti tidak sah")
 	}
 	if state.RecentEvents == nil {
 		state.RecentEvents = []qualityGuardEvent{}
@@ -379,7 +379,7 @@ func (h *Handler) testQualityGuardNode(c *gin.Context) {
 		return
 	}
 	if h.guardProbe.ClientKeyID == 0 || strings.TrimSpace(h.guardProbe.Model) == "" {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "质量守护配置暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Konfigurasi pengawal kualiti tidak tersedia buat sementara waktu")
 		return
 	}
 	var request struct {
@@ -392,7 +392,7 @@ func (h *Handler) testQualityGuardNode(c *gin.Context) {
 		return
 	}
 	if strings.TrimSpace(input.Prompt) == "" {
-		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "质量守护配置暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "qualityGuardUnavailable", "Konfigurasi pengawal kualiti tidak tersedia buat sementara waktu")
 		return
 	}
 	value, err := h.service.ProbeQuality(c.Request.Context(), nodeID, input)
@@ -528,12 +528,12 @@ func (h *Handler) testQuality(c *gin.Context) {
 	}
 	var request qualityProbeRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	clientKeyID, err := strconv.ParseUint(request.ClientKeyID, 10, 64)
 	if err != nil || clientKeyID == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidClientKeyId", "Client Key ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidClientKeyId", "Client Key ID tidak sah")
 		return
 	}
 	value, err := h.service.ProbeQuality(c.Request.Context(), nodeID, egressapp.QualityProbeInput{
@@ -560,12 +560,12 @@ func (h *Handler) testQuality(c *gin.Context) {
 func (h *Handler) updateMany(c *gin.Context) {
 	var request batchNodeUpdateRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseBoundedEgressNodeIDs(request.IDs, 5000)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidId", "代理节点 ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID node proksi tidak sah")
 		return
 	}
 	updated, err := h.service.UpdateManyEnabled(c.Request.Context(), ids, *request.Enabled)
@@ -579,12 +579,12 @@ func (h *Handler) updateMany(c *gin.Context) {
 func (h *Handler) deleteMany(c *gin.Context) {
 	var request batchNodeDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseBoundedEgressNodeIDs(request.IDs, 5000)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidId", "代理节点 ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID node proksi tidak sah")
 		return
 	}
 	deleted, err := h.service.DeleteMany(c.Request.Context(), ids)
@@ -602,12 +602,12 @@ func (h *Handler) assignAccounts(c *gin.Context) {
 	}
 	var request accountAssignmentRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseAccountIDs(request.IDs)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidId", "账号 ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID akaun tidak sah")
 		return
 	}
 	mode := accountdomain.EgressAssignmentMode(request.Mode)
@@ -625,12 +625,12 @@ func (h *Handler) assignAccounts(c *gin.Context) {
 func (h *Handler) unassignAccounts(c *gin.Context) {
 	var request accountAssignmentRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseAccountIDs(request.IDs)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidId", "账号 ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID akaun tidak sah")
 		return
 	}
 	result, err := h.service.UnassignAccounts(c.Request.Context(), accountdomain.Provider(request.Provider), ids)
@@ -704,7 +704,7 @@ func (h *Handler) writeListError(c *gin.Context, err error) bool {
 	case errors.Is(err, egressapp.ErrInvalidSort):
 		response.Error(c, http.StatusBadRequest, "invalidSort", err.Error())
 	default:
-		response.Error(c, http.StatusInternalServerError, "egressNodeListFailed", "读取代理节点失败")
+		response.Error(c, http.StatusInternalServerError, "egressNodeListFailed", "Gagal membaca node proksi")
 	}
 	return true
 }
@@ -718,7 +718,7 @@ func nodePagination(c *gin.Context) (int, int) {
 func (h *Handler) create(c *gin.Context) {
 	var request nodeRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.Create(c.Request.Context(), request.input())
@@ -736,7 +736,7 @@ func (h *Handler) update(c *gin.Context) {
 	}
 	var request nodeRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.Update(c.Request.Context(), id, request.input())
@@ -794,7 +794,7 @@ func (h *Handler) listProxyProfiles(c *gin.Context) {
 func (h *Handler) createProxyProfile(c *gin.Context) {
 	var request proxyProfileRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.CreateProxyProfile(c.Request.Context(), egressapp.ProxyProfileInput{Name: request.Name, ProxyURL: request.ProxyURL})
@@ -825,7 +825,7 @@ func (h *Handler) updateProxyProfile(c *gin.Context) {
 	}
 	var request proxyProfileRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.UpdateProxyProfile(c.Request.Context(), id, egressapp.ProxyProfileInput{Name: request.Name, ProxyURL: request.ProxyURL})
@@ -1041,7 +1041,7 @@ func (value operationsConfigRequest) input() (egressapp.OperationsConfigInput, e
 		if strings.TrimSpace(fallback.NodeID) != "" {
 			parsed, err := strconv.ParseUint(fallback.NodeID, 10, 64)
 			if err != nil || parsed == 0 {
-				return egressapp.OperationsConfigInput{}, fmt.Errorf("%w: 固定回退节点 ID 无效", egressapp.ErrInvalidInput)
+				return egressapp.OperationsConfigInput{}, fmt.Errorf("%w: ID node fallback tetap tidak sah", egressapp.ErrInvalidInput)
 			}
 			nodeID = parsed
 		}
@@ -1131,7 +1131,7 @@ func (h *Handler) writeSourceListError(c *gin.Context, err error) bool {
 	case errors.Is(err, egressapp.ErrInvalidFilter):
 		response.Error(c, http.StatusBadRequest, "invalidFilter", err.Error())
 	default:
-		response.Error(c, http.StatusInternalServerError, "egressSourceListFailed", "读取代理订阅来源失败")
+		response.Error(c, http.StatusInternalServerError, "egressSourceListFailed", "Gagal membaca sumber langganan proksi")
 	}
 	return true
 }
@@ -1139,7 +1139,7 @@ func (h *Handler) writeSourceListError(c *gin.Context, err error) bool {
 func (h *Handler) createSource(c *gin.Context) {
 	var request sourceRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.CreateSource(c.Request.Context(), request.input())
@@ -1157,7 +1157,7 @@ func (h *Handler) updateSource(c *gin.Context) {
 	}
 	var request sourceRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.UpdateSource(c.Request.Context(), id, request.input())
@@ -1196,7 +1196,7 @@ func (h *Handler) syncSource(c *gin.Context) {
 func (h *Handler) importText(c *gin.Context) {
 	var request importRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.ImportText(c.Request.Context(), egressapp.ImportInput{
@@ -1229,12 +1229,12 @@ func (h *Handler) testNode(c *gin.Context) {
 func (h *Handler) testNodes(c *gin.Context) {
 	var request probeBatchRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseOptionalAccountIDs(request.IDs)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidId", "账号 ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID akaun tidak sah")
 		return
 	}
 	value, err := h.service.TestNodes(c.Request.Context(), ids)
@@ -1257,7 +1257,7 @@ func (h *Handler) operationsConfig(c *gin.Context) {
 func (h *Handler) updateOperationsConfig(c *gin.Context) {
 	var request operationsConfigRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	input, err := request.input()
@@ -1309,11 +1309,11 @@ func (h *Handler) writeError(c *gin.Context, err error) {
 	case errors.Is(err, egressapp.ErrProbeStale):
 		response.Error(c, http.StatusConflict, "egressProbeStale", err.Error())
 	case errors.Is(err, repository.ErrConflict):
-		response.Error(c, http.StatusConflict, "egressConflict", "名称已存在")
+		response.Error(c, http.StatusConflict, "egressConflict", "Nama telah wujud")
 	case errors.Is(err, egressapp.ErrOperationsUnavailable):
-		response.Error(c, http.StatusServiceUnavailable, "egressOperationsUnavailable", "代理运营功能暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "egressOperationsUnavailable", "Fungsi operasi proksi tidak tersedia buat sementara waktu")
 	case errors.Is(err, egressapp.ErrSubscriptionSync):
-		response.Error(c, http.StatusBadGateway, "egressSubscriptionSyncFailed", "代理订阅同步失败")
+		response.Error(c, http.StatusBadGateway, "egressSubscriptionSyncFailed", "Gagal menyegerakkan langganan proksi")
 	case errors.Is(err, egressapp.ErrClearanceUnavailable):
 		response.Error(c, http.StatusConflict, "clearanceRefreshUnavailable", err.Error())
 	case errors.Is(err, egressapp.ErrQualityProbeUnavailable):
@@ -1321,27 +1321,27 @@ func (h *Handler) writeError(c *gin.Context, err error) {
 	case strings.Contains(err.Error(), "FlareSolverr") || strings.Contains(err.Error(), "Clearance"):
 		response.Error(c, http.StatusBadGateway, "clearanceRefreshFailed", err.Error())
 	default:
-		response.Error(c, http.StatusInternalServerError, "egressNodeOperationFailed", "代理节点操作失败")
+		response.Error(c, http.StatusInternalServerError, "egressNodeOperationFailed", "Operasi node proksi gagal")
 	}
 }
 
 func (h *Handler) writeQualityProbeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, egressapp.ErrQualityProbeNoAccount):
-		response.Error(c, http.StatusServiceUnavailable, "egressQualityProbeNoAccount", "质量检测暂无可调度账号，请稍后重试")
+		response.Error(c, http.StatusServiceUnavailable, "egressQualityProbeNoAccount", "Pengesanan kualiti tiada akaun yang boleh dijadualkan buat masa ini, sila cuba sebentar lagi")
 	case errors.Is(err, egressapp.ErrInvalidInput),
 		errors.Is(err, egressapp.ErrNotFound),
 		errors.Is(err, egressapp.ErrQualityProbeUnavailable):
 		h.writeError(c, err)
 	default:
-		response.Error(c, http.StatusBadGateway, "egressQualityProbeFailed", "质量检测暂不可用，请稍后重试")
+		response.Error(c, http.StatusBadGateway, "egressQualityProbeFailed", "Pengesanan kualiti tidak tersedia buat sementara waktu, sila cuba sebentar lagi")
 	}
 }
 
 func pathID(c *gin.Context) (uint64, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidId", "ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID tidak sah")
 		return 0, false
 	}
 	return id, true

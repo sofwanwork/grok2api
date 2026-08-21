@@ -20,7 +20,7 @@ func normalizeResponsesRequest(body []byte, model string) ([]byte, *responsesToo
 func normalizeResponsesRequestWithMetadata(body []byte, model string, metadata *provider.NormalizedRequestMetadata) ([]byte, *responsesToolCompatibility, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, nil, fmt.Errorf("解析 Responses 请求: %w", err)
+		return nil, nil, fmt.Errorf("huraian permintaan Responses: %w", err)
 	}
 	payload["model"] = mustJSON(model)
 	if _, err := normalizeBuildRequestPayloadWithMetadata(payload, model, conversation.OperationResponses, metadata); err != nil {
@@ -30,7 +30,7 @@ func normalizeResponsesRequestWithMetadata(body []byte, model string, metadata *
 		var text map[string]json.RawMessage
 		if raw := payload["text"]; len(raw) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			if err := json.Unmarshal(raw, &text); err != nil {
-				return nil, nil, fmt.Errorf("解析 text: %w", err)
+				return nil, nil, fmt.Errorf("huraian text: %w", err)
 			}
 		}
 		if text == nil {
@@ -71,7 +71,7 @@ func normalizeBuildRequest(body []byte, model, operation string) ([]byte, error)
 func normalizeBuildRequestWithMetadata(body []byte, model, operation string, metadata *provider.NormalizedRequestMetadata) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("解析 Build 请求: %w", err)
+		return nil, fmt.Errorf("huraian permintaan Build: %w", err)
 	}
 	changed, err := normalizeBuildRequestPayloadWithMetadata(payload, model, operation, metadata)
 	if err != nil {
@@ -113,7 +113,7 @@ func normalizeBuildRequestPayloadWithMetadata(payload map[string]json.RawMessage
 		var reasoning map[string]json.RawMessage
 		if raw := payload["reasoning"]; !isEmptyJSON(raw) {
 			if err := json.Unmarshal(raw, &reasoning); err != nil {
-				return false, fmt.Errorf("解析 Build reasoning: %w", err)
+				return false, fmt.Errorf("huraian Build reasoning: %w", err)
 			}
 		}
 		if reasoning == nil {
@@ -200,7 +200,7 @@ func applyBuildResponseDefaults(payload map[string]json.RawMessage) (bool, error
 	var includes []string
 	if raw, exists := payload["include"]; exists && !isEmptyJSON(raw) {
 		if err := json.Unmarshal(raw, &includes); err != nil {
-			return false, fmt.Errorf("解析 Build include: %w", err)
+			return false, fmt.Errorf("huraian Build include: %w", err)
 		}
 	}
 	for _, value := range includes {
@@ -313,7 +313,7 @@ func patchReasoningTextTypes(payload map[string]json.RawMessage) {
 func normalizeResponseFormat(raw json.RawMessage) (json.RawMessage, error) {
 	var format map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &format); err != nil {
-		return nil, fmt.Errorf("解析 response_format: %w", err)
+		return nil, fmt.Errorf("huraian response_format: %w", err)
 	}
 	var formatType string
 	_ = json.Unmarshal(format["type"], &formatType)
@@ -322,7 +322,7 @@ func normalizeResponseFormat(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	var schema map[string]json.RawMessage
 	if err := json.Unmarshal(format["json_schema"], &schema); err != nil {
-		return nil, fmt.Errorf("解析 response_format.json_schema: %w", err)
+		return nil, fmt.Errorf("huraian response_format.json_schema: %w", err)
 	}
 	result := make(map[string]json.RawMessage, len(schema))
 	result["type"] = mustJSON("json_schema")

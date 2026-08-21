@@ -20,7 +20,7 @@ import (
 func (a *Adapter) DialVoiceWebSocket(ctx context.Context, request provider.VoiceWebSocketRequest) (provider.VoiceWebSocketConn, func(), error) {
 	pathValue := strings.TrimSpace(request.Path)
 	if pathValue == "" || strings.Contains(pathValue, "://") || strings.Contains(pathValue, "..") {
-		return nil, nil, invalidConsoleVoiceError("voice websocket path 无效")
+		return nil, nil, invalidConsoleVoiceError("path voice websocket tidak sah")
 	}
 	if !strings.HasPrefix(pathValue, "/") {
 		pathValue = "/" + pathValue
@@ -28,7 +28,7 @@ func (a *Adapter) DialVoiceWebSocket(ctx context.Context, request provider.Voice
 	switch pathValue {
 	case "/realtime", "/stt":
 	default:
-		return nil, nil, invalidConsoleVoiceError("不支持的 voice websocket path")
+		return nil, nil, invalidConsoleVoiceError("path voice websocket tidak disokong")
 	}
 
 	token, err := a.cipher.Decrypt(request.Credential.EncryptedAccessToken)
@@ -100,7 +100,7 @@ func (a *Adapter) DialVoiceWebSocket(ctx context.Context, request provider.Voice
 			}
 			if connection == nil {
 				cleanup()
-				return nil, nil, errors.New("Console voice websocket 连接为空")
+				return nil, nil, errors.New("Sambungan voice websocket Console kosong")
 			}
 			a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsole, lease.NodeID, http.StatusSwitchingProtocols, nil)
 			return connection, cleanup, nil
@@ -108,7 +108,7 @@ func (a *Adapter) DialVoiceWebSocket(ctx context.Context, request provider.Voice
 		if response == nil {
 			a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsole, lease.NodeID, 0, dialErr)
 			cleanup()
-			return nil, nil, fmt.Errorf("拨号 Console voice websocket 失败: %w", dialErr)
+			return nil, nil, fmt.Errorf("Dail voice websocket Console gagal: %w", dialErr)
 		}
 		status := response.StatusCode
 		var body []byte
@@ -134,13 +134,13 @@ func (a *Adapter) DialVoiceWebSocket(ctx context.Context, request provider.Voice
 		return nil, nil, newConsoleMediaUpstreamError(status, body, retryAfter)
 	}
 	cleanup()
-	return nil, nil, errors.New("Console voice websocket DPoP 重试状态无效")
+	return nil, nil, errors.New("Status cuba semula DPoP voice websocket Console tidak sah")
 }
 
 func (a *Adapter) voiceWebSocketEndpoint(pathValue, modelName string) (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(a.config().BaseURL), "/")
 	if base == "" {
-		return "", errors.New("Console BaseURL 未配置")
+		return "", errors.New("BaseURL Console tidak dikonfigurasi")
 	}
 	endpoint, err := url.Parse(consoleV1Endpoint(base, pathValue))
 	if err != nil {
@@ -153,7 +153,7 @@ func (a *Adapter) voiceWebSocketEndpoint(pathValue, modelName string) (string, e
 		endpoint.Scheme = "ws"
 	case "wss", "ws":
 	default:
-		return "", fmt.Errorf("不支持的 Console voice websocket scheme: %s", endpoint.Scheme)
+		return "", fmt.Errorf("Skim voice websocket Console tidak disokong: %s", endpoint.Scheme)
 	}
 	values := endpoint.Query()
 	if modelName = strings.TrimSpace(modelName); modelName != "" {
@@ -166,7 +166,7 @@ func (a *Adapter) voiceWebSocketEndpoint(pathValue, modelName string) (string, e
 func voiceWebSocketProofEndpoint(endpoint string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(endpoint))
 	if err != nil || parsed.Host == "" {
-		return "", errors.New("Console voice websocket endpoint 无效")
+		return "", errors.New("Endpoint voice websocket Console tidak sah")
 	}
 	switch strings.ToLower(parsed.Scheme) {
 	case "wss":
@@ -175,7 +175,7 @@ func voiceWebSocketProofEndpoint(endpoint string) (string, error) {
 		parsed.Scheme = "http"
 	case "https", "http":
 	default:
-		return "", fmt.Errorf("不支持的 Console voice websocket scheme: %s", parsed.Scheme)
+		return "", fmt.Errorf("Skim voice websocket Console tidak disokong: %s", parsed.Scheme)
 	}
 	return parsed.String(), nil
 }

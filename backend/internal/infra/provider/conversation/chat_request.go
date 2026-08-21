@@ -12,11 +12,11 @@ import (
 func convertChatRequest(body []byte, model string) ([]byte, ResponseOptions, error) {
 	var source map[string]json.RawMessage
 	if err := json.Unmarshal(body, &source); err != nil {
-		return nil, ResponseOptions{}, fmt.Errorf("解析 Chat Completions 请求: %w", err)
+		return nil, ResponseOptions{}, fmt.Errorf("huraian permintaan Chat Completions: %w", err)
 	}
 	var messages []chatMessage
 	if err := json.Unmarshal(source["messages"], &messages); err != nil || len(messages) == 0 {
-		return nil, ResponseOptions{}, errors.New("messages 必须是非空数组")
+		return nil, ResponseOptions{}, errors.New("messages mesti array tidak kosong")
 	}
 	input, err := convertChatMessages(messages)
 	if err != nil {
@@ -30,7 +30,7 @@ func convertChatRequest(body []byte, model string) ([]byte, ResponseOptions, err
 	if raw := source["user"]; !isEmptyJSON(raw) {
 		var user string
 		if json.Unmarshal(raw, &user) != nil || strings.TrimSpace(user) == "" {
-			return nil, ResponseOptions{}, errors.New("user 必须是非空字符串")
+			return nil, ResponseOptions{}, errors.New("user mesti string tidak kosong")
 		}
 		target["safety_identifier"] = mustJSON(strings.TrimSpace(user))
 	}
@@ -82,20 +82,20 @@ func parseChatStopSequences(raw json.RawMessage) ([]string, error) {
 	var single string
 	if json.Unmarshal(raw, &single) == nil {
 		if single == "" {
-			return nil, errors.New("stop 不能为空")
+			return nil, errors.New("stop tak boleh kosong")
 		}
 		return []string{single}, nil
 	}
 	var values []string
 	if json.Unmarshal(raw, &values) != nil || len(values) == 0 {
-		return nil, errors.New("stop 必须是字符串或非空字符串数组")
+		return nil, errors.New("stop mesti string atau array string tidak kosong")
 	}
 	if len(values) > 4 {
-		return nil, errors.New("stop 最多包含 4 个序列")
+		return nil, errors.New("stop maksimum mengandungi 4 jujukan")
 	}
 	for index, value := range values {
 		if value == "" {
-			return nil, fmt.Errorf("stop[%d] 不能为空", index)
+			return nil, fmt.Errorf("stop[%d] tak boleh kosong", index)
 		}
 	}
 	return values, nil
@@ -130,9 +130,9 @@ func convertChatMessages(messages []chatMessage) ([]any, error) {
 			}
 			if !isEmptyJSON(message.Content) && !bytes.Equal(bytes.TrimSpace(message.Content), []byte("null")) {
 				content, err := convertChatContent(message.Content)
-				if err != nil {
-					return nil, fmt.Errorf("%s 消息内容无效: %w", role, err)
-				}
+			if err != nil {
+				return nil, fmt.Errorf("kandungan mesej %s tidak sah: %w", role, err)
+			}
 				input = append(input, map[string]any{"type": "message", "role": role, "content": content})
 			}
 			if role == "assistant" && !isEmptyJSON(message.ToolCalls) {
@@ -143,20 +143,20 @@ func convertChatMessages(messages []chatMessage) ([]any, error) {
 				input = append(input, calls...)
 			}
 		case "tool":
-			if strings.TrimSpace(message.ToolCallID) == "" {
-				return nil, errors.New("tool 消息缺少 tool_call_id")
-			}
+		if strings.TrimSpace(message.ToolCallID) == "" {
+			return nil, errors.New("mesej tool tiada tool_call_id")
+		}
 			output, err := convertChatToolOutput(message.Content)
 			if err != nil {
 				return nil, err
 			}
 			input = append(input, map[string]any{"type": "function_call_output", "call_id": message.ToolCallID, "output": output})
-		default:
-			return nil, fmt.Errorf("不支持 messages.role=%q", message.Role)
-		}
+	default:
+		return nil, fmt.Errorf("messages.role=%q tidak disokong", message.Role)
+	}
 	}
 	if len(input) == 0 {
-		return nil, errors.New("messages 中没有可发送内容")
+		return nil, errors.New("tiada kandungan yang boleh dihantar dalam messages")
 	}
 	return input, nil
 }
@@ -168,7 +168,7 @@ func convertChatContent(raw json.RawMessage) (any, error) {
 	}
 	var parts []map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &parts); err != nil {
-		return nil, errors.New("content 必须是字符串或内容数组")
+		return nil, errors.New("content mesti string atau array kandungan")
 	}
 	result := make([]any, 0, len(parts))
 	for _, part := range parts {
@@ -178,7 +178,7 @@ func convertChatContent(raw json.RawMessage) (any, error) {
 		case "text", "input_text", "output_text":
 			var value string
 			if json.Unmarshal(part["text"], &value) != nil {
-				return nil, errors.New("text 内容无效")
+				return nil, errors.New("kandungan text tidak sah")
 			}
 			result = append(result, map[string]any{"type": "input_text", "text": value})
 		case "image_url", "input_image":
@@ -188,7 +188,7 @@ func convertChatContent(raw json.RawMessage) (any, error) {
 			}
 			result = append(result, image)
 		default:
-			return nil, fmt.Errorf("不支持 content.type=%q", typeName)
+			return nil, fmt.Errorf("content.type=%q tidak disokong", typeName)
 		}
 	}
 	return result, nil
@@ -247,7 +247,7 @@ func parseImageURL(part map[string]json.RawMessage) (string, string, error) {
 		}
 		return nested.URL, detail, nil
 	}
-	return "", "", errors.New("image_url 缺少有效 url")
+	return "", "", errors.New("image_url tiada url yang sah")
 }
 
 func convertAssistantToolCalls(raw json.RawMessage) ([]any, error) {
@@ -260,12 +260,12 @@ func convertAssistantToolCalls(raw json.RawMessage) ([]any, error) {
 		} `json:"function"`
 	}
 	if err := json.Unmarshal(raw, &calls); err != nil {
-		return nil, errors.New("assistant.tool_calls 格式无效")
+		return nil, errors.New("format assistant.tool_calls tidak sah")
 	}
 	result := make([]any, 0, len(calls))
 	for _, call := range calls {
 		if strings.TrimSpace(call.ID) == "" || strings.TrimSpace(call.Function.Name) == "" {
-			return nil, errors.New("assistant.tool_calls 缺少有效 id 或 name")
+			return nil, errors.New("assistant.tool_calls tiada id atau name yang sah")
 		}
 		arguments := call.Function.Arguments
 		if arguments == "" {
@@ -279,7 +279,7 @@ func convertAssistantToolCalls(raw json.RawMessage) ([]any, error) {
 func convertChatTools(raw json.RawMessage) ([]any, error) {
 	var tools []map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &tools); err != nil {
-		return nil, errors.New("tools 必须是数组")
+		return nil, errors.New("tools mesti array")
 	}
 	result := make([]any, 0, len(tools))
 	for _, tool := range tools {
@@ -303,7 +303,7 @@ func convertChatTools(raw json.RawMessage) ([]any, error) {
 		}
 		var function map[string]any
 		if json.Unmarshal(tool["function"], &function) != nil {
-			return nil, errors.New("function tool 格式无效")
+			return nil, errors.New("format function tool tidak sah")
 		}
 		function["type"] = "function"
 		result = append(result, function)
@@ -316,7 +316,7 @@ func convertChatWebSearchTool(tool map[string]any) (map[string]any, error) {
 	if rawFilters, exists := tool["filters"]; exists && rawFilters != nil {
 		filters, ok := rawFilters.(map[string]any)
 		if !ok {
-			return nil, errors.New("web_search filters 必须是对象")
+			return nil, errors.New("filters web_search mesti objek")
 		}
 		for _, field := range []string{"allowed_domains", "excluded_domains"} {
 			if value, exists := filters[field]; exists {
@@ -341,7 +341,7 @@ func convertChatWebSearchTool(tool map[string]any) (map[string]any, error) {
 		}
 		domains := nested[field]
 		if len(domains) > 0 && len(topLevel) > 0 && !sameChatWebSearchDomains(domains, topLevel) {
-			return nil, fmt.Errorf("web_search %s 声明冲突", field)
+			return nil, fmt.Errorf("pengisytiharan web_search %s berkonflik", field)
 		}
 		if len(domains) == 0 {
 			domains = topLevel
@@ -352,7 +352,7 @@ func convertChatWebSearchTool(tool map[string]any) (map[string]any, error) {
 	}
 	if _, hasAllowed := resultFilters["allowed_domains"]; hasAllowed {
 		if _, hasExcluded := resultFilters["excluded_domains"]; hasExcluded {
-			return nil, errors.New("web_search 不能同时设置 allowed_domains 和 excluded_domains")
+			return nil, errors.New("web_search tak boleh menetapkan allowed_domains dan excluded_domains serentak")
 		}
 	}
 	converted := map[string]any{"type": "web_search"}
@@ -368,15 +368,15 @@ func normalizeChatWebSearchDomains(value any, field string) ([]any, error) {
 	}
 	domains, ok := value.([]any)
 	if !ok {
-		return nil, fmt.Errorf("web_search %s 必须是字符串数组", field)
+		return nil, fmt.Errorf("web_search %s mesti array string", field)
 	}
 	if len(domains) > MaxWebSearchDomains {
-		return nil, fmt.Errorf("web_search %s 不能超过 %d 个域名", field, MaxWebSearchDomains)
+		return nil, fmt.Errorf("web_search %s tak boleh melebihi %d domain", field, MaxWebSearchDomains)
 	}
 	for index, value := range domains {
 		domain, ok := value.(string)
 		if !ok || strings.TrimSpace(domain) == "" {
-			return nil, fmt.Errorf("web_search %s[%d] 必须是非空字符串", field, index)
+			return nil, fmt.Errorf("web_search %s[%d] mesti string tidak kosong", field, index)
 		}
 	}
 	return domains, nil
@@ -418,7 +418,7 @@ func convertChatToolChoice(raw json.RawMessage) (json.RawMessage, error) {
 		Name string `json:"name"`
 	}
 	if json.Unmarshal(value["function"], &function) != nil || strings.TrimSpace(function.Name) == "" {
-		return nil, errors.New("tool_choice.function.name 无效")
+		return nil, errors.New("tool_choice.function.name tidak sah")
 	}
 	return mustJSON(map[string]any{"type": "function", "name": function.Name}), nil
 }

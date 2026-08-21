@@ -67,7 +67,7 @@ func (c *responsesToolCompatibility) normalizeXSearchTool(tool map[string]any, p
 		date, err := time.Parse("2006-01-02", text)
 		if !ok || err != nil || len(text) != len("2006-01-02") || date.Year() < 1 || date.Format("2006-01-02") != text {
 			return nil, &responsesRequestError{
-				Message: field + " 必须使用 YYYY-MM-DD 格式",
+				Message: field + " mesti menggunakan format YYYY-MM-DD",
 				Param:   param + "." + field,
 				Code:    "invalid_parameter",
 			}
@@ -80,7 +80,7 @@ func (c *responsesToolCompatibility) normalizeXSearchTool(tool map[string]any, p
 	}
 	if hasFromDate && hasToDate && fromDate.After(toDate) {
 		return nil, &responsesRequestError{
-			Message: "from_date 不得晚于 to_date",
+			Message: "from_date tidak boleh lewat daripada to_date",
 			Param:   param + ".from_date",
 			Code:    "invalid_parameter",
 		}
@@ -94,7 +94,7 @@ func (c *responsesToolCompatibility) normalizeWebSearchTool(tool map[string]any,
 	if external, exists := tool["external_web_access"]; exists {
 		enabled, ok := external.(bool)
 		if !ok {
-			return nil, &responsesRequestError{Message: "external_web_access 必须是布尔值", Param: param + ".external_web_access", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "external_web_access mesti nilai boolean", Param: param + ".external_web_access", Code: "invalid_parameter"}
 		}
 		if !enabled {
 			// Build cannot express indexed-only search without external access. Sending a minimal
@@ -112,7 +112,7 @@ func (c *responsesToolCompatibility) normalizeWebSearchTool(tool map[string]any,
 	if contentTypes, exists := tool["search_content_types"]; exists {
 		values, ok := contentTypes.([]any)
 		if !ok {
-			return nil, &responsesRequestError{Message: "search_content_types 必须是数组", Param: param + ".search_content_types", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "search_content_types mesti tatasusunan", Param: param + ".search_content_types", Code: "invalid_parameter"}
 		}
 		for _, value := range values {
 			if value != "text" {
@@ -164,7 +164,7 @@ func (c *responsesToolCompatibility) normalizeWebSearchFilters(tool map[string]a
 	if rawFilters, exists := tool["filters"]; exists && rawFilters != nil {
 		filters, ok := rawFilters.(map[string]any)
 		if !ok {
-			return nil, &responsesRequestError{Message: "web_search filters 必须是对象", Param: param + ".filters", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "web_search filters mesti objek", Param: param + ".filters", Code: "invalid_parameter"}
 		}
 		for key := range filters {
 			if key != "allowed_domains" && key != "excluded_domains" {
@@ -201,7 +201,7 @@ func (c *responsesToolCompatibility) normalizeWebSearchFilters(tool map[string]a
 		nestedDomains := nested[field]
 		topLevelDomains := topLevel[field]
 		if len(nestedDomains) > 0 && len(topLevelDomains) > 0 && !sameStringValues(nestedDomains, topLevelDomains) {
-			return nil, &responsesRequestError{Message: "web_search " + field + " 声明冲突", Param: param + "." + field, Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "web_search " + field + " perisytiharan berkonflik", Param: param + "." + field, Code: "invalid_parameter"}
 		}
 		domains := nestedDomains
 		if len(domains) == 0 {
@@ -213,7 +213,7 @@ func (c *responsesToolCompatibility) normalizeWebSearchFilters(tool map[string]a
 	}
 	if _, hasAllowed := result["allowed_domains"]; hasAllowed {
 		if _, hasExcluded := result["excluded_domains"]; hasExcluded {
-			return nil, &responsesRequestError{Message: "web_search 不能同时设置 allowed_domains 和 excluded_domains", Param: param + ".filters", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "web_search tidak boleh menetapkan allowed_domains dan excluded_domains serentak", Param: param + ".filters", Code: "invalid_parameter"}
 		}
 	}
 	if len(result) == 0 {
@@ -228,15 +228,15 @@ func normalizeWebSearchDomains(value any, field, param string) ([]any, error) {
 	}
 	values, ok := value.([]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: field + " 必须是字符串数组", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: field + " mesti tatasusunan rentetan", Param: param, Code: "invalid_parameter"}
 	}
 	if len(values) > maxWebSearchDomains {
-		return nil, &responsesRequestError{Message: fmt.Sprintf("%s 不能超过 %d 个域名", field, maxWebSearchDomains), Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: fmt.Sprintf("%s tidak boleh melebihi %d nama domain", field, maxWebSearchDomains), Param: param, Code: "invalid_parameter"}
 	}
 	for index, value := range values {
 		domain, ok := value.(string)
 		if !ok || strings.TrimSpace(domain) == "" {
-			return nil, &responsesRequestError{Message: field + " 必须包含有效域名", Param: fmt.Sprintf("%s[%d]", param, index), Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: field + " mesti mengandungi nama domain yang sah", Param: fmt.Sprintf("%s[%d]", param, index), Code: "invalid_parameter"}
 		}
 	}
 	return values, nil
@@ -267,7 +267,7 @@ func (c *responsesToolCompatibility) normalizeMCPTool(tool map[string]any, clien
 			label = strings.TrimSpace(stringField(tool, "name"))
 		}
 		if label == "" {
-			return nil, &responsesRequestError{Message: "延迟 MCP 工具缺少 server_label", Param: param + ".server_label", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "Alat MCP tertunda tiada server_label", Param: param + ".server_label", Code: "invalid_parameter"}
 		}
 		c.deferredSurfaces = append(c.deferredSurfaces, describeDeferredTool(label, stringField(tool, "description")))
 		c.changed = true
@@ -283,7 +283,7 @@ func (c *responsesToolCompatibility) normalizeMCPTool(tool map[string]any, clien
 
 func unsupportedBuildToolError(kind, param string) error {
 	return &responsesRequestError{
-		Message: fmt.Sprintf("Grok Build 不支持 tools.type=%q", kind),
+		Message: fmt.Sprintf("Grok Build tidak menyokong tools.type=%q", kind),
 		Param:   param + ".type", Code: "unsupported_parameter",
 	}
 }

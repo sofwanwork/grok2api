@@ -40,11 +40,11 @@ func (r *RuntimeSettingsRepository) Get(ctx context.Context) (settingsdomain.Con
 	}
 	var payload runtimeSettingsPayload
 	if err := json.Unmarshal([]byte(row.ValueJSON), &payload); err != nil {
-		return settingsdomain.Config{}, time.Time{}, 0, false, fmt.Errorf("解析运行设置: %w", err)
+		return settingsdomain.Config{}, time.Time{}, 0, false, fmt.Errorf("Menghurai tetapan runtime: %w", err)
 	}
 	manualValue, err := r.cipher.Decrypt(payload.EncryptedStatsigManualValue)
 	if err != nil {
-		return settingsdomain.Config{}, time.Time{}, 0, false, fmt.Errorf("解密 Statsig 手动值: %w", err)
+		return settingsdomain.Config{}, time.Time{}, 0, false, fmt.Errorf("Menyahsulitkan nilai manual Statsig: %w", err)
 	}
 	payload.Config.ProviderWeb.StatsigManualValue = manualValue
 	return payload.Config, row.UpdatedAt, row.Revision, true, nil
@@ -53,12 +53,12 @@ func (r *RuntimeSettingsRepository) Get(ctx context.Context) (settingsdomain.Con
 func (r *RuntimeSettingsRepository) Save(ctx context.Context, value settingsdomain.Config, expectedRevision uint64) (time.Time, uint64, error) {
 	manualValue, err := r.cipher.Encrypt(value.ProviderWeb.StatsigManualValue)
 	if err != nil {
-		return time.Time{}, 0, fmt.Errorf("加密 Statsig 手动值: %w", err)
+		return time.Time{}, 0, fmt.Errorf("Mengenkripsi nilai manual Statsig: %w", err)
 	}
 	value.ProviderWeb.StatsigManualValue = ""
 	payload, err := json.Marshal(runtimeSettingsPayload{Config: value, EncryptedStatsigManualValue: manualValue})
 	if err != nil {
-		return time.Time{}, 0, fmt.Errorf("编码运行设置: %w", err)
+		return time.Time{}, 0, fmt.Errorf("Mengekod tetapan runtime: %w", err)
 	}
 	now := time.Now().UTC()
 	nextRevision := expectedRevision + 1

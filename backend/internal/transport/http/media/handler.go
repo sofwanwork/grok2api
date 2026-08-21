@@ -135,7 +135,7 @@ func (h *Handler) listImages(c *gin.Context) {
 	page, pageSize := parsePagination(c)
 	assets, total, err := h.service.AdminListImages(c.Request.Context(), page, pageSize, c.Query("search"))
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaListImagesFailed", "读取图片列表失败")
+		response.Error(c, http.StatusInternalServerError, "mediaListImagesFailed", "Membaca senarai imej gagal")
 		return
 	}
 	items := make([]mediaAssetDTO, 0, len(assets))
@@ -152,7 +152,7 @@ func (h *Handler) listImages(c *gin.Context) {
 func (h *Handler) imageStats(c *gin.Context) {
 	stats, err := h.service.AdminImageStats(c.Request.Context())
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaImageStatsFailed", "读取图片统计失败")
+		response.Error(c, http.StatusInternalServerError, "mediaImageStatsFailed", "Membaca statistik imej gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, imageStatsDTO{TotalImages: stats.TotalImages, TotalBytes: stats.TotalBytes})
@@ -161,7 +161,7 @@ func (h *Handler) imageStats(c *gin.Context) {
 func (h *Handler) deleteImages(c *gin.Context) {
 	var request deleteImagesRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	deleted, err := h.service.AdminDeleteImages(c.Request.Context(), request.IDs)
@@ -170,7 +170,7 @@ func (h *Handler) deleteImages(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaDeleteImagesFailed", "删除图片失败")
+		response.Error(c, http.StatusInternalServerError, "mediaDeleteImagesFailed", "Memadam imej gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"deleted": deleted})
@@ -184,7 +184,7 @@ func (h *Handler) listVideos(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaListVideosFailed", "读取视频任务列表失败")
+		response.Error(c, http.StatusInternalServerError, "mediaListVideosFailed", "Membaca senarai tugas video gagal")
 		return
 	}
 	items := make([]mediaJobDTO, 0, len(jobs))
@@ -212,7 +212,7 @@ func (h *Handler) listVideos(c *gin.Context) {
 func (h *Handler) videoStats(c *gin.Context) {
 	stats, err := h.service.AdminVideoStats(c.Request.Context())
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaVideoStatsFailed", "读取视频统计失败")
+		response.Error(c, http.StatusInternalServerError, "mediaVideoStatsFailed", "Membaca statistik video gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, videoStatsDTO{
@@ -224,7 +224,7 @@ func (h *Handler) videoStats(c *gin.Context) {
 func (h *Handler) deleteVideos(c *gin.Context) {
 	var request deleteVideosRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	deleted, err := h.service.AdminDeleteVideoJobs(c.Request.Context(), request.IDs)
@@ -233,7 +233,7 @@ func (h *Handler) deleteVideos(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaDeleteVideosFailed", "删除视频任务失败")
+		response.Error(c, http.StatusInternalServerError, "mediaDeleteVideosFailed", "Memadam tugas video gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"deleted": deleted})

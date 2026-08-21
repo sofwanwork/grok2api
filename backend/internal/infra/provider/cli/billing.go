@@ -12,7 +12,7 @@ import (
 func parseSubscriptionTier(data []byte) (string, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return "", fmt.Errorf("解析订阅等级: %w", err)
+		return "", fmt.Errorf("Huraian tahap langganan: %w", err)
 	}
 	if tier := stringValue(firstValue(payload, "subscriptionTier", "subscription_tier")); strings.TrimSpace(tier) != "" {
 		return strings.TrimSpace(tier), nil
@@ -72,7 +72,7 @@ func subscriptionTierFromNumber(tier int) string {
 func parseBilling(data []byte) (account.Billing, error) {
 	var root map[string]any
 	if err := json.Unmarshal(data, &root); err != nil {
-		return account.Billing{}, fmt.Errorf("解析 Billing: %w", err)
+		return account.Billing{}, fmt.Errorf("Huraian Billing: %w", err)
 	}
 	original := root
 	if nested, ok := root["config"].(map[string]any); ok {

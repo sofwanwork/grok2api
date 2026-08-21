@@ -38,18 +38,18 @@ import (
 )
 
 var (
-	ErrModelNotFound              = errors.New("模型不存在或未启用")
-	ErrNoAvailableAccount         = errors.New("没有可用上游账号")
-	ErrResponseNotFound           = errors.New("Response 不存在或已过期")
-	ErrResponseAccountUnavailable = errors.New("Response 绑定的上游账号不可用")
-	ErrResponseStateUnsupported   = errors.New("目标模型不支持有状态 Response")
-	ErrConversationUnsupported    = errors.New("目标模型不支持当前对话协议")
-	ErrVideoInputTooLarge         = errors.New("视频参考图片编码后总输入超过 32 MiB")
-	ErrVideoInputUnavailable      = errors.New("视频临时输入不存在或已过期")
-	ErrVideoParameterInvalid      = errors.New("视频请求参数无效")
-	ErrVideoOperationUnsupported  = errors.New("视频编辑/延长仅支持路由到 Console grok-imagine-video")
-	ErrLedgerUnavailable          = errors.New("计费账本暂不可用")
-	ErrContextLengthExceeded      = errors.New("当前请求超过模型的上下文长度上限")
+	ErrModelNotFound              = errors.New("Model tidak wujud atau tidak diaktifkan")
+	ErrNoAvailableAccount         = errors.New("Tiada akaun upstream yang tersedia")
+	ErrResponseNotFound           = errors.New("Response tidak wujud atau telah tamat tempoh")
+	ErrResponseAccountUnavailable = errors.New("Akaun upstream terikat Response tidak tersedia")
+	ErrResponseStateUnsupported   = errors.New("Model sasaran tidak menyokong Response berkedaan")
+	ErrConversationUnsupported    = errors.New("Model sasaran tidak menyokong protokol perbualan semasa")
+	ErrVideoInputTooLarge         = errors.New("Jumlah input imej rujukan video selepas pengekodan melebihi 32 MiB")
+	ErrVideoInputUnavailable      = errors.New("Input sementara video tidak wujud atau telah tamat tempoh")
+	ErrVideoParameterInvalid      = errors.New("Parameter permintaan video tidak sah")
+	ErrVideoOperationUnsupported  = errors.New("Penyuntingan/pemanjangan video hanya menyokong penghalaan ke Console grok-imagine-video")
+	ErrLedgerUnavailable          = errors.New("Lejar pengebilan tidak tersedia buat masa ini")
+	ErrContextLengthExceeded      = errors.New("Permintaan semasa melebihi had panjang konteks model")
 )
 
 const responseOwnershipTTL = 30 * 24 * time.Hour
@@ -1233,11 +1233,11 @@ attemptLoop:
 		if limited, ok := s.activeTeamModelRateLimit(lease.Credential, route.UpstreamModel, time.Now().UTC()); ok {
 			lease.Release()
 			lastFailure = &UpstreamFailure{
-				HTTPStatus: http.StatusTooManyRequests, Code: "upstream_rate_limited", PublicMessage: "上游请求频率受限",
+				HTTPStatus: http.StatusTooManyRequests, Code: "upstream_rate_limited", PublicMessage: "Frekuensi permintaan upstream terhad",
 				AccountID: lease.Credential.ID, AccountName: lease.Credential.Name,
 				Fingerprint: "429:team_model_rate_limit", RetryAfter: time.Until(limited.Until),
 			}
-			lastErr = fmt.Errorf("上游 Team 与模型请求频率受限")
+			lastErr = fmt.Errorf("Frekuensi permintaan Team dan model upstream terhad")
 			s.logger.Warn("upstream_team_model_rate_limit_active", "request_id", input.RequestID, "account_id", lease.Credential.ID, "provider", route.Provider, "model", route.UpstreamModel, "team_fingerprint", limited.TeamFingerprint, "retry_after", lastFailure.RetryAfter.Round(time.Second))
 			// Stored Responses are pinned to one account. Return the cached 429
 			// immediately instead of spinning until the cooldown expires or
@@ -1256,7 +1256,7 @@ attemptLoop:
 			s.selector.MarkQuotaStateChanged(lease.Credential.Provider, lease.Credential.ID)
 			if probeErr != nil || !recovered {
 				lease.Release()
-				lastErr = firstError(probeErr, fmt.Errorf("付费额度尚未恢复"))
+				lastErr = firstError(probeErr, fmt.Errorf("Kuota berbayar belum pulih"))
 				continue
 			}
 			lease.QuotaProbe = false
@@ -1278,7 +1278,7 @@ attemptLoop:
 			lease.Release()
 			lastErr = err
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
-				lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "请求已取消", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
+				lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
 				break
 			}
 			if isSSOCredentialRejected(err, credential) {
@@ -1307,7 +1307,7 @@ attemptLoop:
 			if credential.AuthType == accountdomain.AuthTypeSSO {
 				s.markSSOCredentialRejected(ctx, credential, fmt.Sprintf("%s SSO credential rejected", credential.Provider))
 				lease.Release()
-				lastErr = fmt.Errorf("%s SSO 凭据已失效", credential.Provider)
+				lastErr = fmt.Errorf("%s SSO kredensial telah luput", credential.Provider)
 				lastFailure = newHTTPUpstreamFailure(http.StatusUnauthorized, nil, credential.ID, credential.Name)
 				continue
 			}
@@ -1332,7 +1332,7 @@ attemptLoop:
 				if refreshErr != nil {
 					lastFailure = newCredentialUpstreamFailure(refreshErr, credential.ID, credential.Name)
 				} else if ctx.Err() != nil || errors.Is(err, context.Canceled) {
-					lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "请求已取消", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
+					lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
 					break
 				} else {
 					lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
@@ -1350,7 +1350,7 @@ attemptLoop:
 				_ = s.accounts.MarkReauthRequired(ctx, credential.ID, "Grok Build OAuth credential rejected after refresh")
 				s.selector.MarkQuotaStateChanged(credential.Provider, credential.ID)
 				lease.Release()
-				lastErr = fmt.Errorf("刷新后上游仍返回 401")
+				lastErr = fmt.Errorf("Upstream masih memulangkan 401 selepas penyegaran")
 				lastFailure = newHTTPUpstreamFailure(http.StatusUnauthorized, body, credential.ID, credential.Name)
 				continue
 			}
@@ -1381,9 +1381,9 @@ attemptLoop:
 				if lastFailure.AccountScoped && !failureHandled {
 					s.selector.MarkFailure(ctx, credential, response.StatusCode, retryAfter)
 				}
-				lease.Release()
-				lastErr = fmt.Errorf("上游返回 %d", response.StatusCode)
-				s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped, "account_blocked", true)
+			lease.Release()
+			lastErr = fmt.Errorf("Upstream memulangkan %d", response.StatusCode)
+			s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped, "account_blocked", true)
 				continue
 			} else if egressForbidden && !finalEgressForbidden {
 				// A non-blocking 403 is an egress/browser-session failure and must not penalize the account.
@@ -1391,9 +1391,9 @@ attemptLoop:
 				if selection != nil {
 					selection.RetryAccount(credential.ID)
 				}
-				lease.Release()
-				lastErr = fmt.Errorf("上游出口会话被拒绝")
-				continue
+			lease.Release()
+			lastErr = fmt.Errorf("Sesi egress upstream ditolak")
+			continue
 			} else {
 				// Restore the consumed final non-blocking 403 body for the common response path.
 				response.Body = io.NopCloser(bytes.NewReader(body))
@@ -1427,9 +1427,9 @@ attemptLoop:
 				lastFailure.AccountScoped = false
 				lastFailure.Fingerprint = "429:team_model_rate_limit"
 				lastFailure.RetryAfter = time.Until(limited.Until)
-				lease.Release()
-				lastErr = fmt.Errorf("上游 Team 与模型请求频率受限")
-				s.logger.Warn("upstream_team_model_rate_limited", "request_id", input.RequestID, "provider", credential.Provider, "model", route.UpstreamModel, "team_fingerprint", limited.TeamFingerprint, "scope", rateLimitMeta.Scope, "actual", rateLimitMeta.Actual, "limit", rateLimitMeta.Limit, "retry_after", lastFailure.RetryAfter)
+			lease.Release()
+			lastErr = fmt.Errorf("Frekuensi permintaan Team dan model upstream terhad")
+			s.logger.Warn("upstream_team_model_rate_limited", "request_id", input.RequestID, "provider", credential.Provider, "model", route.UpstreamModel, "team_fingerprint", limited.TeamFingerprint, "scope", rateLimitMeta.Scope, "actual", rateLimitMeta.Actual, "limit", rateLimitMeta.Limit, "retry_after", lastFailure.RetryAfter)
 				continue
 			}
 		afterTeamRateLimit:
@@ -1451,7 +1451,7 @@ attemptLoop:
 					lease.Release()
 					lastErr = err
 					if ctx.Err() != nil || errors.Is(err, context.Canceled) {
-						lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "请求已取消", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
+						lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
 						break attemptLoop
 					}
 					lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
@@ -1518,9 +1518,9 @@ attemptLoop:
 				// 5xx 短冷却：本请求已 excluded，跨请求避免立刻再打同一坏号。
 				s.selector.MarkFailure(ctx, credential, response.StatusCode, retryAfter)
 			}
-			lease.Release()
-			lastErr = fmt.Errorf("上游返回 %d", response.StatusCode)
-			s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped)
+		lease.Release()
+		lastErr = fmt.Errorf("Upstream memulangkan %d", response.StatusCode)
+		s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped)
 			if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
 				break
 			}
@@ -1539,7 +1539,7 @@ attemptLoop:
 					lease.Release()
 					lastErr = peekErr
 					if isClientRequestCancel(ctx, peekErr) {
-						lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "请求已取消", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), peekErr)}
+						lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), peekErr)}
 						break
 					}
 					lastFailure = newTransportUpstreamFailure(peekErr, credential.ID, credential.Name)
@@ -1587,7 +1587,7 @@ attemptLoop:
 					lastErr = errQualityDegraded
 					lastFailure = &UpstreamFailure{
 						HTTPStatus: http.StatusServiceUnavailable, Code: ErrorQualityDegraded,
-						PublicMessage: "上游响应缺少推理", AccountID: credential.ID, AccountName: credential.Name,
+						PublicMessage: "Respons upstream tiada penaakulan", AccountID: credential.ID, AccountName: credential.Name,
 						Cause: errQualityDegraded,
 					}
 					s.logger.Info("quality_degraded_retry", "request_id", input.RequestID, "account_id", credential.ID, "quality_attempt", qualityAccountAttempts, "output_tokens", peekUsage.OutputTokens)
@@ -1598,7 +1598,7 @@ attemptLoop:
 					lastErr = errQualityDegraded
 					lastFailure = &UpstreamFailure{
 						HTTPStatus: http.StatusServiceUnavailable, Code: ErrorQualityDegraded,
-						PublicMessage: "上游响应缺少推理", AccountID: credential.ID, AccountName: credential.Name,
+						PublicMessage: "Respons upstream tiada penaakulan", AccountID: credential.ID, AccountName: credential.Name,
 						Cause: errQualityDegraded,
 					}
 					s.logger.Info("quality_degraded_rejected", "request_id", input.RequestID, "account_id", credential.ID)
@@ -1780,7 +1780,7 @@ func (s *Service) queueAccountModelSync(accountID uint64) {
 func rewriteAliasedModel(body []byte, publicModel, reasoningEffort string, operation audit.Operation) ([]byte, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("解析兼容模型请求: %w", err)
+		return nil, fmt.Errorf("Menghurai permintaan model serasi: %w", err)
 	}
 	payload["model"] = publicModel
 	if reasoningEffort != "" {
@@ -2063,7 +2063,7 @@ func firstError(values ...error) error {
 			return value
 		}
 	}
-	return errors.New("未知上游错误")
+	return errors.New("Ralat upstream tidak diketahui")
 }
 
 // contextWindowForRoute returns the advertised context window for a route.

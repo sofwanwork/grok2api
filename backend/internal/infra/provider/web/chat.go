@@ -193,7 +193,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 	if request.Path == "/responses/compact" {
 		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{
 			"type": "invalid_request_error", "code": "unsupported_operation",
-			"message": "Grok Web 模型不支持 /responses/compact",
+			"message": "Model Grok Web tidak menyokong /responses/compact",
 		}}), nil
 	}
 	if request.Method != http.MethodPost {
@@ -211,7 +211,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 
 	var input openAIRequest
 	if err := json.Unmarshal(request.Body, &input); err != nil {
-		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "请求 JSON 无效", "type": "invalid_request_error"}}), nil
+		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "JSON permintaan tidak sah", "type": "invalid_request_error"}}), nil
 	}
 	if len(input.Include) > 0 {
 		conversationOptions.Include = append([]string{}, input.Include...)
@@ -237,15 +237,15 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 	}
 	if modelKnown && spec.Capability == modeldomain.CapabilityImage {
 		if len(tools.ResponseTools) > 0 {
-			return invalidImageRequest("图片生成模型不支持 tools")
+			return invalidImageRequest("Model penjanaan imej tidak menyokong tools")
 		}
 		return a.forwardImageChatCompletion(ctx, request, input, normalized, spec)
 	}
 	if modelKnown && spec.Capability == modeldomain.CapabilityImageEdit {
-		return invalidImageRequest("图片编辑模型请使用 /v1/images/edits，并在当前请求中显式提供输入图片")
+		return invalidImageRequest("Model penyuntingan imej sila gunakan /v1/images/edits dan nyatakan imej input dalam permintaan semasa")
 	}
 	if !modelKnown || spec.Capability != modeldomain.CapabilityChat {
-		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "模型不支持文本对话", "type": "invalid_request_error"}}), nil
+		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "Model tidak menyokong perbualan teks", "type": "invalid_request_error"}}), nil
 	}
 
 	normalized.Prompt = injectToolPrompt(normalized.Prompt, tools)
@@ -428,7 +428,7 @@ func preflightUpstream(source io.ReadCloser) (io.ReadCloser, error) {
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("Grok Web 首个流事件超过安全检查上限")
+	return nil, fmt.Errorf("Acara strim pertama Grok Web melebihi had pemeriksaan selamat")
 }
 
 func (a *Adapter) openChat(ctx context.Context, credential account.Credential, previousResponseID string, spec ModelSpec, input normalizedChatInput, options gatewayOpenOptions) (*http.Response, *infraegress.Lease, *inferencedomain.WebResponseState, string, error) {
@@ -443,13 +443,13 @@ func (a *Adapter) handleResponseResource(ctx context.Context, request provider.R
 	id, _ = url.PathUnescape(id)
 	if request.Method == http.MethodDelete {
 		if err := a.states.DeleteWebState(ctx, id); err != nil {
-			return jsonProviderResponse(http.StatusNotFound, map[string]any{"error": map[string]any{"message": "Response 不存在", "type": "invalid_request_error"}}), nil
+			return jsonProviderResponse(http.StatusNotFound, map[string]any{"error": map[string]any{"message": "Response tidak wujud", "type": "invalid_request_error"}}), nil
 		}
 		return jsonProviderResponse(http.StatusOK, map[string]any{"id": id, "object": "response.deleted", "deleted": true}), nil
 	}
 	state, err := a.states.GetWebState(ctx, id, time.Now().UTC())
 	if err != nil {
-		return jsonProviderResponse(http.StatusNotFound, map[string]any{"error": map[string]any{"message": "Response 不存在或已过期", "type": "invalid_request_error"}}), nil
+		return jsonProviderResponse(http.StatusNotFound, map[string]any{"error": map[string]any{"message": "Response tidak wujud atau sudah tamat tempoh", "type": "invalid_request_error"}}), nil
 	}
 	return &provider.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: jsonHeaders(), Body: io.NopCloser(strings.NewReader(state.ResponseJSON))}, nil
 }
@@ -706,34 +706,34 @@ func normalizeOpenAIInput(input openAIRequest, operation string) (normalizedChat
 		}
 		trimmed := bytes.TrimSpace(input.Input)
 		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-			return normalizedChatInput{}, errors.New("input 不能为空")
+			return normalizedChatInput{}, errors.New("input tak boleh kosong")
 		}
 		if trimmed[0] == '"' {
 			var text string
 			if json.Unmarshal(trimmed, &text) != nil {
-				return normalizedChatInput{}, errors.New("input 格式无效")
+				return normalizedChatInput{}, errors.New("Format input tidak sah")
 			}
 			content, _ := json.Marshal(text)
 			messages = append(messages, chatMessage{Role: "user", Content: content})
 		} else if err := json.Unmarshal(trimmed, &messages); err != nil {
-			return normalizedChatInput{}, errors.New("input 必须是字符串或消息数组")
+			return normalizedChatInput{}, errors.New("input mesti rentetan atau tatasusunan mesej")
 		}
 	}
 	if len(messages) == 0 {
-		return normalizedChatInput{}, errors.New("messages 不能为空")
+		return normalizedChatInput{}, errors.New("messages tak boleh kosong")
 	}
 	var builder strings.Builder
 	attachments := make([]chatAttachmentInput, 0, 2)
 	for _, message := range messages {
 		typeName := strings.ToLower(strings.TrimSpace(message.Type))
 		if typeName == "function_call" {
-			if !toolNamePattern.MatchString(strings.TrimSpace(message.Name)) {
-				return normalizedChatInput{}, errors.New("function_call.name 无效")
-			}
-			arguments := normalizeToolArguments(message.Arguments)
-			if !json.Valid([]byte(arguments)) {
-				return normalizedChatInput{}, errors.New("function_call.arguments 必须是有效 JSON")
-			}
+		if !toolNamePattern.MatchString(strings.TrimSpace(message.Name)) {
+			return normalizedChatInput{}, errors.New("function_call.name tidak sah")
+		}
+		arguments := normalizeToolArguments(message.Arguments)
+		if !json.Valid([]byte(arguments)) {
+			return normalizedChatInput{}, errors.New("function_call.arguments mesti JSON yang sah")
+		}
 			builder.WriteString("[assistant]\n<tool_calls>\n  <tool_call>\n    <tool_name>")
 			builder.WriteString(message.Name)
 			builder.WriteString("</tool_name>\n    <parameters>")
@@ -744,7 +744,7 @@ func normalizeOpenAIInput(input openAIRequest, operation string) (normalizedChat
 		if typeName == "function_call_output" {
 			text, err := rawTextValue(message.Output)
 			if err != nil {
-				return normalizedChatInput{}, errors.New("function_call_output.output 必须是字符串或 JSON")
+				return normalizedChatInput{}, errors.New("function_call_output.output mesti rentetan atau JSON")
 			}
 			builder.WriteString("[tool result for ")
 			builder.WriteString(strings.TrimSpace(message.CallID))
@@ -780,10 +780,10 @@ func normalizeOpenAIInput(input openAIRequest, operation string) (normalizedChat
 	}
 	value := strings.TrimSpace(builder.String())
 	if value == "" && len(attachments) == 0 {
-		return normalizedChatInput{}, errors.New("消息中没有可发送的文本或附件")
+		return normalizedChatInput{}, errors.New("Tiada teks atau lampiran yang boleh dihantar dalam mesej")
 	}
 	if len(attachments) > maxChatAttachments {
-		return normalizedChatInput{}, fmt.Errorf("单次对话最多支持 %d 个附件", maxChatAttachments)
+		return normalizedChatInput{}, fmt.Errorf("Satu perbualan menyokong maksimum %d lampiran", maxChatAttachments)
 	}
 	return normalizedChatInput{Prompt: value, Attachments: attachments}, nil
 }
@@ -800,28 +800,28 @@ func normalizeLatestImageInput(input openAIRequest, operation string) (normalize
 			}
 			return normalizeImageMessage(message.Content)
 		}
-		return normalizedChatInput{}, errors.New("messages 中缺少用户消息")
+		return normalizedChatInput{}, errors.New("Tiada mesej pengguna dalam messages")
 	}
 
 	trimmed := bytes.TrimSpace(input.Input)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return normalizedChatInput{}, errors.New("input 不能为空")
+		return normalizedChatInput{}, errors.New("input tak boleh kosong")
 	}
 	if trimmed[0] == '"' {
 		var prompt string
 		if json.Unmarshal(trimmed, &prompt) != nil {
-			return normalizedChatInput{}, errors.New("input 格式无效")
+			return normalizedChatInput{}, errors.New("Format input tidak sah")
 		}
 		prompt = strings.TrimSpace(prompt)
 		if prompt == "" {
-			return normalizedChatInput{}, errors.New("图片生成提示词不能为空")
+			return normalizedChatInput{}, errors.New("Prompt penjanaan imej tak boleh kosong")
 		}
 		return normalizedChatInput{Prompt: prompt}, nil
 	}
 
 	var messages []chatMessage
 	if json.Unmarshal(trimmed, &messages) != nil {
-		return normalizedChatInput{}, errors.New("input 必须是字符串或消息数组")
+		return normalizedChatInput{}, errors.New("input mesti rentetan atau tatasusunan mesej")
 	}
 	for index := len(messages) - 1; index >= 0; index-- {
 		message := messages[index]
@@ -830,7 +830,7 @@ func normalizeLatestImageInput(input openAIRequest, operation string) (normalize
 			return normalizeImageMessage(message.Content)
 		}
 	}
-	return normalizedChatInput{}, errors.New("input 中缺少用户消息")
+	return normalizedChatInput{}, errors.New("Tiada mesej pengguna dalam input")
 }
 
 func normalizeImageMessage(content json.RawMessage) (normalizedChatInput, error) {
@@ -840,7 +840,7 @@ func normalizeImageMessage(content json.RawMessage) (normalizedChatInput, error)
 	}
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" && len(attachments) == 0 {
-		return normalizedChatInput{}, errors.New("图片生成提示词不能为空")
+		return normalizedChatInput{}, errors.New("Prompt penjanaan imej tak boleh kosong")
 	}
 	return normalizedChatInput{Prompt: prompt, Attachments: attachments}, nil
 }
@@ -868,13 +868,13 @@ func contentTextAndAttachments(raw json.RawMessage) (string, []chatAttachmentInp
 	if trimmed[0] == '"' {
 		var value string
 		if json.Unmarshal(trimmed, &value) != nil {
-			return "", nil, errors.New("消息 content 字符串无效")
+			return "", nil, errors.New("Rentetan content mesej tidak sah")
 		}
 		return value, nil, nil
 	}
 	var parts []map[string]any
 	if json.Unmarshal(trimmed, &parts) != nil {
-		return "", nil, errors.New("消息 content 必须是字符串或内容数组")
+		return "", nil, errors.New("content mesej mesti rentetan atau tatasusunan kandungan")
 	}
 	values := make([]string, 0, len(parts))
 	attachments := make([]chatAttachmentInput, 0, 2)
@@ -889,9 +889,9 @@ func contentTextAndAttachments(raw json.RawMessage) (string, []chatAttachmentInp
 			if value := extractImageURL(part); value != "" {
 				attachments = append(attachments, chatAttachmentInput{Source: value, Image: true})
 			} else if fileID, _ := part["file_id"].(string); fileID != "" {
-				return "", nil, errors.New("Grok Web 对话暂不支持 input_image.file_id，请使用 image_url 或 Base64 data URI")
+				return "", nil, errors.New("Perbualan Grok Web belum menyokong input_image.file_id, sila gunakan image_url atau Base64 data URI")
 			} else {
-				return "", nil, errors.New("图片内容缺少 image_url")
+				return "", nil, errors.New("Kandungan imej tiada image_url")
 			}
 		case "file", "input_file":
 			attachment, err := extractFileAttachment(part)
@@ -900,9 +900,9 @@ func contentTextAndAttachments(raw json.RawMessage) (string, []chatAttachmentInp
 			}
 			attachments = append(attachments, attachment)
 		case "input_audio":
-			return "", nil, errors.New("Grok Web 对话暂不支持 input_audio 内容")
+			return "", nil, errors.New("Perbualan Grok Web belum menyokong kandungan input_audio")
 		default:
-			return "", nil, fmt.Errorf("Grok Web 对话暂不支持 content.type=%q", typeName)
+			return "", nil, fmt.Errorf("Perbualan Grok Web belum menyokong content.type=%q", typeName)
 		}
 	}
 	return strings.Join(values, "\n"), attachments, nil
@@ -914,19 +914,19 @@ func extractFileAttachment(part map[string]any) (chatAttachmentInput, error) {
 		value = nested
 	}
 	if fileID, _ := value["file_id"].(string); strings.TrimSpace(fileID) != "" {
-		return chatAttachmentInput{}, errors.New("Grok Web 对话暂不支持 input_file.file_id，请使用 file_url 或 file_data")
+		return chatAttachmentInput{}, errors.New("Perbualan Grok Web belum menyokong input_file.file_id, sila gunakan file_url atau file_data")
 	}
 	fileURL, _ := value["file_url"].(string)
 	fileData, _ := value["file_data"].(string)
 	if strings.TrimSpace(fileURL) != "" && strings.TrimSpace(fileData) != "" {
-		return chatAttachmentInput{}, errors.New("input_file 不能同时提供 file_url 和 file_data")
+		return chatAttachmentInput{}, errors.New("input_file tidak boleh menyediakan file_url dan file_data serentak")
 	}
 	source := strings.TrimSpace(fileURL)
 	if source == "" {
 		source = strings.TrimSpace(fileData)
 	}
 	if source == "" {
-		return chatAttachmentInput{}, errors.New("input_file 缺少 file_url 或 file_data")
+		return chatAttachmentInput{}, errors.New("input_file tiada file_url atau file_data")
 	}
 	filename, _ := value["filename"].(string)
 	return chatAttachmentInput{Source: source, Filename: strings.TrimSpace(filename)}, nil
@@ -999,7 +999,7 @@ func consumeJSONObjects(source io.Reader, maxObjectBytes int, consume func([]byt
 		}
 		frame = append(frame, value)
 		if len(frame) > maxObjectBytes {
-			return fmt.Errorf("Grok Web 单个响应帧超过 %d MiB", maxObjectBytes>>20)
+			return fmt.Errorf("Bingkai respons tunggal Grok Web melebihi %d MiB", maxObjectBytes>>20)
 		}
 		if inString {
 			if escaped {
@@ -1185,7 +1185,7 @@ func webResponseError(value map[string]any) error {
 
 func antiBotProviderResponse() *provider.Response {
 	return jsonProviderResponse(http.StatusForbidden, map[string]any{"error": map[string]any{
-		"message": "Grok Web 出口会话被上游反机器人规则拒绝，请检查代理、User-Agent 与 Cloudflare Cookie 是否来自同一浏览器会话",
+		"message": "Sesi egress Grok Web ditolak oleh peraturan anti-bot upstream; sila pastikan proksi, User-Agent dan Cloudflare Cookie berasal daripada sesi pelayar yang sama",
 		"type":    "upstream_error", "code": "anti_bot_rejected",
 	}})
 }
@@ -2277,7 +2277,7 @@ func (s *webMessagesStream) Delta(kind, delta string) error {
 func (s *webMessagesStream) bufferSearchText(delta string) error {
 	pending := s.pendingText.Len()
 	if pending >= maxDeferredSearchTextBytes || len(delta) > maxDeferredSearchTextBytes-pending {
-		return fmt.Errorf("WebSearch 延迟文本缓冲超过 %d MiB", maxDeferredSearchTextBytes>>20)
+		return fmt.Errorf("Penampan teks tertunda WebSearch melebihi %d MiB", maxDeferredSearchTextBytes>>20)
 	}
 	s.pendingText.WriteString(delta)
 	return nil
@@ -2594,7 +2594,7 @@ func writeStreamDelta(writer io.Writer, operation, responseID, model, kind, delt
 		}
 		return writeSSE(writer, "content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": delta}})
 	}
-	return errors.New("Responses 流式 delta 必须通过统一 output 状态机发送")
+	return errors.New("Delta strim Responses mesti dihantar melalui mesin keadaan output yang berpusat")
 }
 
 func writeStreamToolCalls(writer io.Writer, operation, responseID, model string, calls []parsedToolCall) error {
@@ -2637,7 +2637,7 @@ func writeStreamToolCalls(writer io.Writer, operation, responseID, model string,
 		}
 		return nil
 	}
-	return errors.New("Responses 流式 tool call 必须通过统一 output 状态机发送")
+	return errors.New("Tool call strim Responses mesti dihantar melalui mesin keadaan output yang berpusat")
 }
 
 func writeStreamDone(writer io.Writer, operation, responseID, model string, parsed parsedChat, payload map[string]any, includeUsage bool) {

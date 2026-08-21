@@ -22,7 +22,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 	}
 	var choice any
 	if err := json.Unmarshal(raw, &choice); err != nil {
-		return &responsesRequestError{Message: "tool_choice 格式无效", Param: "tool_choice", Code: "invalid_parameter"}
+		return &responsesRequestError{Message: "format tool_choice tidak sah", Param: "tool_choice", Code: "invalid_parameter"}
 	}
 	object, ok := choice.(map[string]any)
 	if !ok {
@@ -48,7 +48,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 				c.addWarning("server_tool_search_choice_downgraded")
 				return nil
 			}
-			return &responsesRequestError{Message: "tool_choice 引用了未声明的 tool_search", Param: "tool_choice", Code: "invalid_parameter"}
+			return &responsesRequestError{Message: "tool_choice merujuk tool_search yang tidak diisytiharkan", Param: "tool_choice", Code: "invalid_parameter"}
 		}
 		object = map[string]any{
 			"type": "function",
@@ -62,12 +62,12 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 		name := strings.TrimSpace(stringField(object, "name"))
 		namespace := strings.TrimSpace(stringField(object, "namespace"))
 		if name == "" {
-			return &responsesRequestError{Message: "tool_choice.name 不能为空", Param: "tool_choice.name", Code: "invalid_parameter"}
+			return &responsesRequestError{Message: "tool_choice.name tak boleh kosong", Param: "tool_choice.name", Code: "invalid_parameter"}
 		}
 		identity := responsesToolIdentity{Kind: responsesCustomTool, Namespace: namespace, Name: name}
 		alias, exists := c.identityAliases[identity.key()]
 		if !exists {
-			return &responsesRequestError{Message: "tool_choice 引用了未声明的 custom 工具", Param: "tool_choice.name", Code: "invalid_parameter"}
+			return &responsesRequestError{Message: "tool_choice merujuk alat custom yang tidak diisytiharkan", Param: "tool_choice.name", Code: "invalid_parameter"}
 		}
 		object["type"] = "function"
 		object["name"] = alias
@@ -80,7 +80,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 		identity := responsesToolIdentity{Kind: responsesApplyPatchTool, Name: "apply_patch"}
 		alias, exists := c.identityAliases[identity.key()]
 		if !exists {
-			return &responsesRequestError{Message: "tool_choice 引用了未声明的 apply_patch 工具", Param: "tool_choice", Code: "invalid_parameter"}
+			return &responsesRequestError{Message: "tool_choice merujuk alat apply_patch yang tidak diisytiharkan", Param: "tool_choice", Code: "invalid_parameter"}
 		}
 		payload["tool_choice"] = mustJSON(map[string]any{"type": "function", "name": alias})
 		c.changed = true
@@ -89,7 +89,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 	if normalizedKind := normalizeHostedToolChoiceKind(kind); normalizedKind != "" {
 		matching := toolsOfType(normalizedTools, normalizedKind)
 		if len(matching) == 0 {
-			return &responsesRequestError{Message: "tool_choice 引用了未声明的 hosted tool", Param: "tool_choice", Code: "invalid_parameter"}
+			return &responsesRequestError{Message: "tool_choice merujuk hosted tool yang tidak diisytiharkan", Param: "tool_choice", Code: "invalid_parameter"}
 		}
 		if len(matching) != len(normalizedTools) {
 			// 上游只支持 required，收窄本轮可见工具即可保持“指定该类工具”的语义。
@@ -101,7 +101,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 		return nil
 	}
 	if kind != "function" {
-		return &responsesRequestError{Message: fmt.Sprintf("Grok Build 不支持 tool_choice.type=%q", kind), Param: "tool_choice.type", Code: "unsupported_parameter"}
+		return &responsesRequestError{Message: fmt.Sprintf("Grok Build tidak menyokong tool_choice.type=%q", kind), Param: "tool_choice.type", Code: "unsupported_parameter"}
 	}
 	name := strings.TrimSpace(stringField(object, "name"))
 	namespace := strings.TrimSpace(stringField(object, "namespace"))
@@ -112,7 +112,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 			identity := responsesToolIdentity{Kind: responsesFunctionTool, Namespace: namespace, Name: name}
 			alias, exists := c.identityAliases[identity.key()]
 			if !exists {
-				return &responsesRequestError{Message: "tool_choice 引用了未声明的 namespace 函数", Param: "tool_choice.function.name", Code: "invalid_parameter"}
+				return &responsesRequestError{Message: "tool_choice merujuk fungsi namespace yang tidak diisytiharkan", Param: "tool_choice.function.name", Code: "invalid_parameter"}
 			}
 			function["name"] = alias
 			delete(function, "namespace")
@@ -127,7 +127,7 @@ func (c *responsesToolCompatibility) normalizeToolChoice(payload map[string]json
 	identity := responsesToolIdentity{Kind: responsesFunctionTool, Namespace: namespace, Name: name}
 	alias, exists := c.identityAliases[identity.key()]
 	if !exists {
-		return &responsesRequestError{Message: "tool_choice 引用了未声明的 namespace 函数", Param: "tool_choice.name", Code: "invalid_parameter"}
+		return &responsesRequestError{Message: "tool_choice merujuk fungsi namespace yang tidak diisytiharkan", Param: "tool_choice.name", Code: "invalid_parameter"}
 	}
 	object["name"] = alias
 	delete(object, "namespace")

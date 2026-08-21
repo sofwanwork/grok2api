@@ -53,11 +53,11 @@ type clashInteger int
 
 func (value *clashInteger) UnmarshalYAML(node *yaml.Node) error {
 	if node == nil || node.Kind != yaml.ScalarNode {
-		return errors.New("Clash 整数字段格式无效")
+		return errors.New("Format medan integer Clash tidak sah")
 	}
 	parsed, err := strconv.ParseInt(strings.TrimSpace(node.Value), 10, 32)
 	if err != nil {
-		return errors.New("Clash 整数字段格式无效")
+		return errors.New("Format medan integer Clash tidak sah")
 	}
 	*value = clashInteger(parsed)
 	return nil
@@ -67,11 +67,11 @@ type clashStringList []string
 
 func (value *clashStringList) UnmarshalYAML(node *yaml.Node) error {
 	if node == nil {
-		return errors.New("Clash 字符串列表格式无效")
+		return errors.New("Format senarai rentetan Clash tidak sah")
 	}
 	if node.Kind == yaml.AliasNode {
 		if node.Alias == nil {
-			return errors.New("Clash 字符串列表格式无效")
+			return errors.New("Format senarai rentetan Clash tidak sah")
 		}
 		node = node.Alias
 	}
@@ -81,10 +81,10 @@ func (value *clashStringList) UnmarshalYAML(node *yaml.Node) error {
 		items = strings.Split(node.Value, ",")
 	case yaml.SequenceNode:
 		if err := node.Decode(&items); err != nil {
-			return errors.New("Clash 字符串列表格式无效")
+			return errors.New("Format senarai rentetan Clash tidak sah")
 		}
 	default:
-		return errors.New("Clash 字符串列表格式无效")
+		return errors.New("Format senarai rentetan Clash tidak sah")
 	}
 	normalized := make([]string, 0, len(items))
 	for _, item := range items {
@@ -154,22 +154,22 @@ func clashProxyURL(proxy clashProxy) (string, error) {
 		return clashStandardProxyURL(scheme, server, proxy.Username, proxy.Password), nil
 	case "socks5":
 		if proxy.TLS {
-			return "", errors.New("暂不支持 TLS SOCKS5")
+			return "", errors.New("TLS SOCKS5 belum disokong buat masa ini")
 		}
 		return clashStandardProxyURL("socks5", server, proxy.Username, proxy.Password), nil
 	case "ss":
 		if strings.TrimSpace(proxy.Plugin) != "" {
-			return "", errors.New("暂不支持 Shadowsocks plugin")
+			return "", errors.New("Plugin Shadowsocks belum disokong buat masa ini")
 		}
 		method := strings.ToLower(strings.TrimSpace(proxy.Cipher))
 		if method == "" || proxy.Password == "" {
-			return "", errors.New("Shadowsocks cipher/password 不能为空")
+			return "", errors.New("Cipher/kata laluan Shadowsocks tak boleh kosong")
 		}
 		credential := base64.RawURLEncoding.EncodeToString([]byte(method + ":" + proxy.Password))
 		return "ss://" + credential + "@" + server, nil
 	case "trojan":
 		if proxy.Password == "" {
-			return "", errors.New("Trojan password 不能为空")
+			return "", errors.New("Kata laluan Trojan tak boleh kosong")
 		}
 		query, err := clashTunnelQuery(proxy, "tls")
 		if err != nil {
@@ -178,7 +178,7 @@ func clashProxyURL(proxy clashProxy) (string, error) {
 		return (&url.URL{Scheme: "trojan", User: url.User(proxy.Password), Host: server, RawQuery: query.Encode()}).String(), nil
 	case "vless":
 		if proxy.UUID == "" {
-			return "", errors.New("VLESS UUID 不能为空")
+			return "", errors.New("UUID VLESS tak boleh kosong")
 		}
 		security := "none"
 		if proxy.RealityOptions.PublicKey != "" || proxy.RealityOptions.ShortID != "" {
@@ -203,14 +203,14 @@ func clashProxyURL(proxy clashProxy) (string, error) {
 	case "vmess":
 		return clashVMessURL(proxy)
 	default:
-		return "", fmt.Errorf("暂不支持 Clash 代理类型 %q", proxyType)
+		return "", fmt.Errorf("Jenis proksi Clash %q belum disokong buat masa ini", proxyType)
 	}
 }
 
 func clashProxyServer(host string, port int) (string, error) {
 	host = strings.Trim(strings.TrimSpace(host), "[]")
 	if host == "" || port < 1 || port > 65535 {
-		return "", errors.New("Clash 代理服务器地址无效")
+		return "", errors.New("Alamat pelayan proksi Clash tidak sah")
 	}
 	return net.JoinHostPort(host, strconv.Itoa(port)), nil
 }
@@ -250,7 +250,7 @@ func clashTunnelQuery(proxy clashProxy, security string) (url.Values, error) {
 
 func clashVMessURL(proxy clashProxy) (string, error) {
 	if proxy.UUID == "" {
-		return "", errors.New("VMess UUID 不能为空")
+		return "", errors.New("UUID VMess tak boleh kosong")
 	}
 	network := strings.ToLower(strings.TrimSpace(proxy.Network))
 	if network == "" {

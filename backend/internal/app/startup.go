@@ -142,7 +142,7 @@ func readinessSnapshot(
 	cancel()
 	if err != nil {
 		snapshot.State = "not_ready"
-		snapshot.Components["runtime_store"] = httpserver.ReadinessComponent{State: "unavailable", Detail: "运行态存储不可用"}
+		snapshot.Components["runtime_store"] = httpserver.ReadinessComponent{State: "unavailable", Detail: "Storan runtime tidak tersedia"}
 		return snapshot
 	}
 	snapshot.Components["runtime_store"] = httpserver.ReadinessComponent{State: "ready"}
@@ -151,7 +151,7 @@ func readinessSnapshot(
 		if ledgerState.Ready {
 			snapshot.Components["billing_ledger"] = httpserver.ReadinessComponent{State: "ready"}
 		} else {
-			detail := fmt.Sprintf("审计账本不可用；连续失败 %d 次，丢失 %d 条，队列 %d/%d", ledgerState.ConsecutiveFailures, ledgerState.Dropped, ledgerState.QueueDepth, ledgerState.QueueCapacity)
+			detail := fmt.Sprintf("Ledger audit tidak tersedia; gagal berturut-turut %d kali, hilang %d rekod, baris gilir %d/%d", ledgerState.ConsecutiveFailures, ledgerState.Dropped, ledgerState.QueueDepth, ledgerState.QueueCapacity)
 			snapshot.Components["billing_ledger"] = httpserver.ReadinessComponent{State: "degraded", Detail: detail}
 			if ledgerState.Irrecoverable || ledgerState.Mode == auditapp.LedgerModeEnforce {
 				snapshot.State = "not_ready"
@@ -164,15 +164,15 @@ func readinessSnapshot(
 	routes, err := models.ListConfiguredEnabled(ctx)
 	if err != nil {
 		snapshot.State = "not_ready"
-		snapshot.Components["model_routes"] = httpserver.ReadinessComponent{State: "unavailable", Detail: "模型路由读取失败"}
+		snapshot.Components["model_routes"] = httpserver.ReadinessComponent{State: "unavailable", Detail: "Membaca laluan model gagal"}
 		return snapshot
 	}
 	if len(routes) == 0 {
 		snapshot.State = "not_ready"
-		snapshot.Components["model_routes"] = httpserver.ReadinessComponent{State: "unavailable", Detail: "没有启用的模型路由"}
+		snapshot.Components["model_routes"] = httpserver.ReadinessComponent{State: "unavailable", Detail: "Tiada laluan model yang diaktifkan"}
 		return snapshot
 	}
-	snapshot.Components["model_routes"] = httpserver.ReadinessComponent{State: "ready", Detail: fmt.Sprintf("%d 条已启用路由", len(routes))}
+	snapshot.Components["model_routes"] = httpserver.ReadinessComponent{State: "ready", Detail: fmt.Sprintf("%d laluan diaktifkan", len(routes))}
 
 	required := make(map[accountdomain.Provider]bool, 3)
 	usable := make(map[accountdomain.Provider]bool, 3)
@@ -220,9 +220,9 @@ func readinessSnapshot(
 			continue
 		}
 		unavailableProviders++
-		detail := "当前没有可用于已启用路由的账号"
+		detail := "Buat masa ini tiada akaun yang boleh digunakan bagi laluan yang diaktifkan"
 		if providerErrors[providerValue] {
-			detail = "账号候选状态读取失败"
+			detail = "Membaca status calon akaun gagal"
 		}
 		snapshot.Components[name] = httpserver.ReadinessComponent{State: "unavailable", Detail: detail}
 	}
@@ -233,7 +233,7 @@ func readinessSnapshot(
 		} else {
 			component.State = "degraded"
 		}
-		component.Detail = "Statsig 尚未完成预热；请求仍可按需刷新"
+		component.Detail = "Statsig belum selesai pemanasan awal; permintaan masih boleh dimuat semula mengikut keperluan"
 		snapshot.Components[string(accountdomain.ProviderWeb)] = component
 		unavailableProviders++
 	}
@@ -354,22 +354,22 @@ func (a *Application) runStatsigWarmup(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
-		a.startup.setStatsig("warming", "正在预热共享签名", 0)
+		a.startup.setStatsig("warming", "Sedang memanaskan tandatangan kongsi", 0)
 		values, err := a.accountRepo.ListEnabled(ctx, accountdomain.ProviderWeb)
 		if err == nil && len(values) == 0 {
-			a.startup.setStatsig("disabled", "没有启用的 Grok Web 账号", 0)
+			a.startup.setStatsig("disabled", "Tiada akaun Grok Web yang diaktifkan", 0)
 		} else if err == nil {
 			warmCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			var warmed int
 			warmed, err = a.web.WarmStatsig(warmCtx, values[0])
 			cancel()
 			if err == nil {
-				a.startup.setStatsig("warm", "共享签名已预热", warmed)
+				a.startup.setStatsig("warm", "Tandatangan kongsi telah dipanaskan", warmed)
 			}
 		}
 		if err != nil && ctx.Err() == nil {
 			a.logger.Warn("web_statsig_warmup_failed", "error", err)
-			a.startup.setStatsig("unavailable", "预热失败，将由请求按需重试", 0)
+			a.startup.setStatsig("unavailable", "Pemanasan awal gagal, permintaan akan mencuba semula mengikut keperluan", 0)
 		}
 		resetTimer(timer, statsigWarmupInterval)
 	}

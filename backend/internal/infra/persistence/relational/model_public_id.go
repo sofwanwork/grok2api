@@ -30,7 +30,7 @@ func (d *Database) ensureCanonicalModelPublicIDs(ctx context.Context) error {
 			providerValue := account.Provider(row.Provider)
 			publicID, ok := modeldomain.NormalizePublicID(providerValue, row.PublicID)
 			if !ok {
-				return fmt.Errorf("模型路由 %d 的公开 ID %q 无法规范化到 %s", row.ID, row.PublicID, providerValue)
+				return fmt.Errorf("ID awam %q bagi laluan model %d tidak dapat dinormalkan kepada %s", row.PublicID, row.ID, providerValue)
 			}
 			if publicID == row.PublicID {
 				continue
@@ -54,7 +54,7 @@ func (d *Database) ensureCanonicalModelPublicIDs(ctx context.Context) error {
 		}
 		for _, migration := range migrations {
 			if err := tx.Model(&modelRouteModel{}).Where("id = ?", migration.ID).Update("public_id", migration.Current).Error; err != nil {
-				return fmt.Errorf("迁移模型路由 %d 到 %q: %w", migration.ID, migration.Current, mapError(err))
+				return fmt.Errorf("Memigrasikan laluan model %d ke %q: %w", migration.ID, migration.Current, mapError(err))
 			}
 		}
 		return nil
@@ -80,7 +80,7 @@ func preserveModelRouteAlias(tx *gorm.DB, alias string, routeID uint64) error {
 		if existing.ModelRouteID == routeID {
 			return nil
 		}
-		return fmt.Errorf("%w: 模型兼容名称 %q 已绑定路由 %d", repository.ErrConflict, alias, existing.ModelRouteID)
+		return fmt.Errorf("%w: Nama serasi model %q telah mengikat laluan %d", repository.ErrConflict, alias, existing.ModelRouteID)
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -101,5 +101,5 @@ func ensureModelPublicIDNotAlias(tx *gorm.DB, publicID string, routeID uint64) e
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("%w: 模型公开 ID %q 已被路由 %d 保留为兼容名称", repository.ErrConflict, publicID, alias.ModelRouteID)
+	return fmt.Errorf("%w: ID awam model %q telah diketepikan sebagai nama serasi oleh laluan %d", repository.ErrConflict, publicID, alias.ModelRouteID)
 }

@@ -223,7 +223,7 @@ func (s *Selector) loadConcurrencySnapshot(ctx context.Context, keys []string) (
 		if batchReader, ok := s.concurrency.(repository.ConcurrencySnapshotReader); ok {
 			values, err := batchReader.CurrentMany(ctx, keys)
 			if err != nil {
-				return nil, fmt.Errorf("批量读取账号并发租约: %w", err)
+				return nil, fmt.Errorf("Membaca secara pukal sewa serentak akaun: %w", err)
 			}
 			return values, nil
 		}
@@ -231,7 +231,7 @@ func (s *Selector) loadConcurrencySnapshot(ctx context.Context, keys []string) (
 		for _, key := range keys {
 			current, err := s.concurrency.Current(ctx, key)
 			if err != nil {
-				return nil, fmt.Errorf("读取账号并发租约: %w", err)
+				return nil, fmt.Errorf("Membaca sewa serentak akaun: %w", err)
 			}
 			values[key] = current
 		}

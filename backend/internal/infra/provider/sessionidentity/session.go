@@ -23,10 +23,10 @@ const responseBodyLimit = 64 << 10
 // Web 与 Console 共用该链路，确保代理、Cookie、UA 和 Resin 身份一致。
 func Fetch(ctx context.Context, baseURL string, credential account.Credential, egress *infraegress.Manager, cipher *security.Cipher) (provider.AccountIdentity, error) {
 	if credential.AuthType != account.AuthTypeSSO || (credential.Provider != account.ProviderWeb && credential.Provider != account.ProviderConsole) {
-		return provider.AccountIdentity{}, fmt.Errorf("仅 Grok Web 与 Console SSO 账号支持身份同步")
+		return provider.AccountIdentity{}, fmt.Errorf("Hanya akaun Grok Web dan Console SSO menyokong penyegerakan identiti")
 	}
 	if egress == nil || cipher == nil {
-		return provider.AccountIdentity{}, fmt.Errorf("Session 身份同步依赖未初始化")
+		return provider.AccountIdentity{}, fmt.Errorf("Kebergantungan penyegerakan identiti Session tidak dimulakan")
 	}
 	token, err := cipher.Decrypt(credential.EncryptedAccessToken)
 	if err != nil {
@@ -48,7 +48,7 @@ func Fetch(ctx context.Context, baseURL string, credential account.Credential, e
 // physical exit, browser fingerprint, and Clearance as the following request.
 func FetchWithLease(ctx context.Context, baseURL, token string, lease *infraegress.Lease, egress *infraegress.Manager) (provider.AccountIdentity, error) {
 	if lease == nil || egress == nil {
-		return provider.AccountIdentity{}, fmt.Errorf("Session 身份同步租约未初始化")
+		return provider.AccountIdentity{}, fmt.Errorf("Pajakan penyegerakan identiti Session tidak dimulakan")
 	}
 	if strings.TrimSpace(token) == "" {
 		return provider.AccountIdentity{}, provider.ErrUnauthorized
@@ -72,14 +72,14 @@ func FetchWithLease(ctx context.Context, baseURL, token string, lease *infraegre
 		return provider.AccountIdentity{}, err
 	}
 	if len(body) > responseBodyLimit {
-		return provider.AccountIdentity{}, fmt.Errorf("Grok Session 响应超过安全上限")
+		return provider.AccountIdentity{}, fmt.Errorf("Respons Grok Session melebihi had selamat")
 	}
 	egress.FeedbackForScope(context.WithoutCancel(ctx), domainegress.ScopeWeb, lease.NodeID, response.StatusCode, nil)
 	if response.StatusCode == http.StatusUnauthorized {
 		return provider.AccountIdentity{}, provider.ErrUnauthorized
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return provider.AccountIdentity{}, fmt.Errorf("Grok Session 接口返回 %d", response.StatusCode)
+		return provider.AccountIdentity{}, fmt.Errorf("Antara muka Grok Session mengembalikan %d", response.StatusCode)
 	}
 	return Parse(body)
 }
@@ -106,7 +106,7 @@ func Parse(body []byte) (provider.AccountIdentity, error) {
 		TeamID string `json:"teamId"`
 	}
 	if err := json.Unmarshal(body, &value); err != nil {
-		return provider.AccountIdentity{}, fmt.Errorf("解析 Grok Session: %w", err)
+		return provider.AccountIdentity{}, fmt.Errorf("Huraian Grok Session: %w", err)
 	}
 	// Reject unavailable sessions before accepting residual identity fields that may still be present.
 	status := strings.TrimSpace(value.Status)
@@ -125,7 +125,7 @@ func Parse(body []byte) (provider.AccountIdentity, error) {
 	identity.Email = strings.TrimSpace(identity.Email)
 	identity.TeamID = strings.TrimSpace(identity.TeamID)
 	if identity.UserID == "" && identity.Email == "" {
-		return provider.AccountIdentity{}, fmt.Errorf("Grok Session 缺少账号身份")
+		return provider.AccountIdentity{}, fmt.Errorf("Grok Session tiada identiti akaun")
 	}
 	return identity, nil
 }

@@ -57,7 +57,7 @@ func (c *oauthClient) startDevice(ctx context.Context) (provider.DeviceAuthoriza
 		return provider.DeviceAuthorization{}, err
 	}
 	if payload.DeviceCode == "" || payload.UserCode == "" || payload.VerificationURI == "" {
-		return provider.DeviceAuthorization{}, fmt.Errorf("xAI Device OAuth 返回字段不完整")
+		return provider.DeviceAuthorization{}, fmt.Errorf("xAI Device OAuth mengembalikan medan yang tidak lengkap")
 	}
 	if payload.Interval <= 0 {
 		payload.Interval = 5
@@ -142,7 +142,7 @@ func (c *oauthClient) exchange(ctx context.Context, form url.Values, fallbackRef
 		IDToken      string `json:"id_token"`
 	}
 	if err := json.Unmarshal(body, &value); err != nil {
-		return tokenPayload{}, fmt.Errorf("解析 xAI OAuth 响应: %w", err)
+		return tokenPayload{}, fmt.Errorf("Huraian respons xAI OAuth: %w", err)
 	}
 	if value.AccessToken == "" {
 		return tokenPayload{}, &provider.CredentialRefreshError{Status: resp.StatusCode, Code: "missing_access_token", Message: "OAuth response did not contain access_token"}
@@ -323,7 +323,7 @@ func (c *oauthClient) postForm(ctx context.Context, endpoint string, form url.Va
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("xAI OAuth 返回 %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("xAI OAuth mengembalikan %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return json.Unmarshal(body, output)
 }

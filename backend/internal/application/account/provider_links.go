@@ -45,7 +45,7 @@ func (s *Service) syncAccountIdentity(ctx context.Context, id uint64) error {
 		return mapRepositoryError(links.ReconcileProviderLinks(ctx, id))
 	}
 	if s.providers == nil {
-		return fmt.Errorf("Provider 注册表未初始化")
+		return fmt.Errorf("Registry Provider belum diinisialisasi")
 	}
 	adapter, ok := s.providers.AccountIdentity(value.Provider)
 	if !ok {
@@ -60,12 +60,12 @@ func (s *Service) syncAccountIdentity(ctx context.Context, id uint64) error {
 		return err
 	}
 	if len(identity.Email) > 255 || len(identity.UserID) > 255 || len(identity.TeamID) > 255 {
-		return fmt.Errorf("Grok Web Session 身份字段超过安全上限")
+		return fmt.Errorf("Medan identiti Grok Web Session melebihi had keselamatan")
 	}
 	if value.Provider == accountdomain.ProviderWeb {
 		identityID, parseErr := uuid.Parse(strings.TrimSpace(identity.UserID))
 		if parseErr != nil || identityID == uuid.Nil {
-			return fmt.Errorf("Grok Web Session 未返回合法的 Gateway 用户 UUID")
+			return fmt.Errorf("Grok Web Session tidak memulangkan UUID pengguna Gateway yang sah")
 		}
 	}
 	if err := links.UpdateIdentityMetadata(ctx, id, identity.Email, identity.UserID, identity.TeamID); err != nil {

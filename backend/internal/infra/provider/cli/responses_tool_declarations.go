@@ -35,7 +35,7 @@ func normalizeResponsesTools(payload map[string]json.RawMessage) (*responsesTool
 	if rawInput := payload["input"]; !isEmptyJSON(rawInput) {
 		var input any
 		if err := json.Unmarshal(rawInput, &input); err != nil {
-			return nil, &responsesRequestError{Message: "input 必须是字符串或数组", Param: "input", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "input mesti string atau array", Param: "input", Code: "invalid_parameter"}
 		}
 		if items, ok := input.([]any); ok {
 			rewritten, loadedTools, visibleTools, rewriteErr := compatibility.normalizeInputItems(items)
@@ -89,7 +89,7 @@ func (c *responsesToolCompatibility) normalizeClientToolSearchParallel(payload m
 	var parallel bool
 	if err := json.Unmarshal(raw, &parallel); err != nil {
 		return &responsesRequestError{
-			Message: "parallel_tool_calls 必须是布尔值",
+			Message: "parallel_tool_calls mesti boolean",
 			Param:   "parallel_tool_calls", Code: "invalid_parameter",
 		}
 	}
@@ -107,7 +107,7 @@ func decodeOptionalArray(raw json.RawMessage, param string) ([]any, bool, error)
 	}
 	var values []any
 	if err := json.Unmarshal(raw, &values); err != nil {
-		return nil, false, &responsesRequestError{Message: param + " 必须是数组", Param: param, Code: "invalid_parameter"}
+		return nil, false, &responsesRequestError{Message: param + " mesti array", Param: param, Code: "invalid_parameter"}
 	}
 	return values, true, nil
 }
@@ -118,7 +118,7 @@ func inspectToolSearch(tools []any) (bool, error) {
 	for index, rawTool := range tools {
 		tool, ok := rawTool.(map[string]any)
 		if !ok {
-			return false, &responsesRequestError{Message: fmt.Sprintf("tools[%d] 必须是对象", index), Param: fmt.Sprintf("tools[%d]", index), Code: "invalid_parameter"}
+			return false, &responsesRequestError{Message: fmt.Sprintf("tools[%d] mesti objek", index), Param: fmt.Sprintf("tools[%d]", index), Code: "invalid_parameter"}
 		}
 		if stringField(tool, "type") != "tool_search" {
 			continue
@@ -127,19 +127,19 @@ func inspectToolSearch(tools []any) (bool, error) {
 		execution := strings.ToLower(strings.TrimSpace(stringField(tool, "execution")))
 		if execution == "" || execution == "server" {
 			if clientSearch {
-				return false, &responsesRequestError{Message: "单次请求不能混用 client 与 server tool_search", Param: param + ".execution", Code: "invalid_parameter"}
+				return false, &responsesRequestError{Message: "satu permintaan tak boleh mencampurkan client dan server tool_search", Param: param + ".execution", Code: "invalid_parameter"}
 			}
 			serverSearch = true
 			continue
 		}
 		if execution != "client" {
-			return false, &responsesRequestError{Message: "tool_search.execution 必须是 client 或 server", Param: param + ".execution", Code: "invalid_parameter"}
+			return false, &responsesRequestError{Message: "tool_search.execution mesti client atau server", Param: param + ".execution", Code: "invalid_parameter"}
 		}
 		if clientSearch {
-			return false, &responsesRequestError{Message: "单次请求只能声明一个客户端 tool_search", Param: param, Code: "invalid_parameter"}
+			return false, &responsesRequestError{Message: "satu permintaan hanya boleh mengisytiharkan satu tool_search klient", Param: param, Code: "invalid_parameter"}
 		}
 		if serverSearch {
-			return false, &responsesRequestError{Message: "单次请求不能混用 client 与 server tool_search", Param: param + ".execution", Code: "invalid_parameter"}
+			return false, &responsesRequestError{Message: "satu permintaan tak boleh mencampurkan client dan server tool_search", Param: param + ".execution", Code: "invalid_parameter"}
 		}
 		clientSearch = true
 	}
@@ -149,14 +149,14 @@ func inspectToolSearch(tools []any) (bool, error) {
 func (c *responsesToolCompatibility) normalizeTool(raw any, namespace string, clientSearch, force bool, param string) ([]any, error) {
 	tool, ok := raw.(map[string]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: param + " 必须是对象", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + " mesti objek", Param: param, Code: "invalid_parameter"}
 	}
 	kind := strings.TrimSpace(stringField(tool, "type"))
 	switch kind {
 	case "function":
 		name := strings.TrimSpace(stringField(tool, "name"))
 		if name == "" {
-			return nil, &responsesRequestError{Message: param + ".name 不能为空", Param: param + ".name", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + ".name tak boleh kosong", Param: param + ".name", Code: "invalid_parameter"}
 		}
 		deferred, _ := tool["defer_loading"].(bool)
 		if deferred && !clientSearch && !force {
@@ -199,11 +199,11 @@ func (c *responsesToolCompatibility) normalizeTool(raw any, namespace string, cl
 	case "namespace":
 		name := strings.TrimSpace(stringField(tool, "name"))
 		if name == "" {
-			return nil, &responsesRequestError{Message: param + ".name 不能为空", Param: param + ".name", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + ".name tak boleh kosong", Param: param + ".name", Code: "invalid_parameter"}
 		}
 		children, ok := tool["tools"].([]any)
 		if !ok {
-			return nil, &responsesRequestError{Message: param + ".tools 必须是数组", Param: param + ".tools", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + ".tools mesti array", Param: param + ".tools", Code: "invalid_parameter"}
 		}
 		c.changed = true
 		c.addWarning("namespace_flattened")
@@ -215,10 +215,10 @@ func (c *responsesToolCompatibility) normalizeTool(raw any, namespace string, cl
 			child, childOK := rawChild.(map[string]any)
 			childParam := fmt.Sprintf("%s.tools[%d]", param, index)
 			if !childOK {
-				return nil, &responsesRequestError{Message: childParam + " 必须是对象", Param: childParam, Code: "invalid_parameter"}
+				return nil, &responsesRequestError{Message: childParam + " mesti objek", Param: childParam, Code: "invalid_parameter"}
 			}
 			if stringField(child, "type") != "function" {
-				return nil, &responsesRequestError{Message: "namespace.tools 只能包含 function 工具", Param: childParam + ".type", Code: "invalid_parameter"}
+				return nil, &responsesRequestError{Message: "namespace.tools hanya boleh mengandungi alat function", Param: childParam + ".type", Code: "invalid_parameter"}
 			}
 			items, err := c.normalizeTool(child, name, clientSearch, force, childParam)
 			if err != nil {
@@ -267,7 +267,7 @@ func (c *responsesToolCompatibility) normalizeTool(raw any, namespace string, cl
 		return nil, unsupportedBuildToolError(kind, param)
 	default:
 		if kind == "" {
-			return nil, &responsesRequestError{Message: param + ".type 不能为空", Param: param + ".type", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + ".type tak boleh kosong", Param: param + ".type", Code: "invalid_parameter"}
 		}
 		return nil, unsupportedBuildToolError(kind, param)
 	}
@@ -449,7 +449,7 @@ func resolveLocalSchemaRef(root map[string]any, ref string) (map[string]any, boo
 
 func invalidBuildFunctionParametersRoot(param string) error {
 	return &responsesRequestError{
-		Message: param + " 顶层必须是非 nullable 的 object schema",
+		Message: param + " akar mesti object schema yang tidak boleh null",
 		Param:   param,
 		Code:    "invalid_parameter",
 	}
@@ -495,7 +495,7 @@ func (c *responsesToolCompatibility) buildClientSearchFunction() (map[string]any
 	if !exists {
 		parameters = map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": true}
 	} else if _, ok := parameters.(map[string]any); !ok {
-		return nil, &responsesRequestError{Message: "tool_search.parameters 必须是对象", Param: c.clientSearchParam + ".parameters", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "tool_search.parameters mesti objek", Param: c.clientSearchParam + ".parameters", Code: "invalid_parameter"}
 	}
 	return map[string]any{
 		"type": "function", "name": c.alias(identity), "description": description,

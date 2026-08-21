@@ -11,7 +11,7 @@ import (
 func (c *responsesToolCompatibility) normalizeShellTool(tool map[string]any, param string) ([]any, error) {
 	if c.legacyLocalShell {
 		return nil, &responsesRequestError{
-			Message: "同一请求不能同时声明 shell 和 local_shell",
+			Message: "satu permintaan tak boleh mengisytiharkan shell dan local_shell serentak",
 			Param:   param + ".type", Code: "invalid_parameter",
 		}
 	}
@@ -23,7 +23,7 @@ func (c *responsesToolCompatibility) normalizeShellTool(tool map[string]any, par
 func (c *responsesToolCompatibility) normalizeLegacyLocalShellTool(tool map[string]any, param string) ([]any, error) {
 	if c.nativeShell || c.legacyLocalShell {
 		return nil, &responsesRequestError{
-			Message: "单次请求只能声明一个 shell/local_shell 工具",
+			Message: "satu permintaan hanya boleh mengisytiharkan satu alat shell/local_shell",
 			Param:   param + ".type", Code: "invalid_parameter",
 		}
 	}
@@ -74,7 +74,7 @@ func (c *responsesToolCompatibility) normalizeApplyPatchTool(tool map[string]any
 func (c *responsesToolCompatibility) normalizeApplyPatchCallInput(item map[string]any, param string) (map[string]any, error) {
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	operation, err := validateApplyPatchOperation(item["operation"], param+".operation")
 	if err != nil {
@@ -94,14 +94,14 @@ func (c *responsesToolCompatibility) normalizeApplyPatchCallInput(item map[strin
 func normalizeApplyPatchOutputInput(item map[string]any, param string) (map[string]any, error) {
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	status := strings.TrimSpace(stringField(item, "status"))
 	if status == "" {
 		status = "completed"
 	}
 	if status != "completed" && status != "failed" {
-		return nil, &responsesRequestError{Message: "apply_patch_call_output.status 只支持 completed 或 failed", Param: param + ".status", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "apply_patch_call_output.status hanya menyokong completed atau failed", Param: param + ".status", Code: "invalid_parameter"}
 	}
 	output := ""
 	if value, exists := item["output"]; exists && value != nil {
@@ -110,7 +110,7 @@ func normalizeApplyPatchOutputInput(item map[string]any, param string) (map[stri
 		} else {
 			encoded, err := json.Marshal(value)
 			if err != nil {
-				return nil, &responsesRequestError{Message: "apply_patch_call_output.output 无法编码", Param: param + ".output", Code: "invalid_parameter"}
+				return nil, &responsesRequestError{Message: "apply_patch_call_output.output tak boleh dikodkan", Param: param + ".output", Code: "invalid_parameter"}
 			}
 			output = string(encoded)
 		}
@@ -125,21 +125,21 @@ func normalizeApplyPatchOutputInput(item map[string]any, param string) (map[stri
 func validateApplyPatchOperation(value any, param string) (map[string]any, error) {
 	operation, ok := value.(map[string]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: "apply_patch operation 必须是对象", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "operation apply_patch mesti objek", Param: param, Code: "invalid_parameter"}
 	}
 	kind := strings.TrimSpace(stringField(operation, "type"))
 	path := strings.TrimSpace(stringField(operation, "path"))
 	if path == "" {
-		return nil, &responsesRequestError{Message: "apply_patch operation.path 不能为空", Param: param + ".path", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "apply_patch operation.path tak boleh kosong", Param: param + ".path", Code: "invalid_parameter"}
 	}
 	switch kind {
 	case "create_file", "update_file":
 		if _, ok := operation["diff"].(string); !ok {
-			return nil, &responsesRequestError{Message: kind + " 必须提供 diff 字符串", Param: param + ".diff", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: kind + " mesti menyediakan string diff", Param: param + ".diff", Code: "invalid_parameter"}
 		}
 	case "delete_file":
 	default:
-		return nil, &responsesRequestError{Message: "apply_patch operation.type 无效", Param: param + ".type", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "apply_patch operation.type tidak sah", Param: param + ".type", Code: "invalid_parameter"}
 	}
 	return cloneJSONObject(operation), nil
 }
@@ -147,11 +147,11 @@ func validateApplyPatchOperation(value any, param string) (map[string]any, error
 func decodeApplyPatchArguments(value any, param string) (map[string]any, error) {
 	text, ok := value.(string)
 	if !ok {
-		return nil, &responsesRequestError{Message: "apply_patch function arguments 必须是字符串", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "function arguments apply_patch mesti string", Param: param, Code: "invalid_parameter"}
 	}
 	var wrapper map[string]any
 	if err := json.Unmarshal([]byte(text), &wrapper); err != nil {
-		return nil, &responsesRequestError{Message: "apply_patch function arguments 不是有效 JSON", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "function arguments apply_patch bukan JSON yang sah", Param: param, Code: "invalid_parameter"}
 	}
 	return validateApplyPatchOperation(wrapper["operation"], param+".operation")
 }
@@ -159,7 +159,7 @@ func decodeApplyPatchArguments(value any, param string) (map[string]any, error) 
 func normalizeLegacyLocalShellCallInput(item map[string]any, param string) (map[string]any, error) {
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	action, err := legacyShellAction(item["action"], param+".action")
 	if err != nil {
@@ -177,10 +177,10 @@ func normalizeLegacyLocalShellCallInput(item map[string]any, param string) (map[
 func legacyShellAction(value any, param string) (map[string]any, error) {
 	action, ok := value.(map[string]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: "local_shell_call.action 必须是对象", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "local_shell_call.action mesti objek", Param: param, Code: "invalid_parameter"}
 	}
 	if kind := strings.TrimSpace(stringField(action, "type")); kind != "" && kind != "exec" {
-		return nil, &responsesRequestError{Message: "local_shell_call.action.type 必须是 exec", Param: param + ".type", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "local_shell_call.action.type mesti exec", Param: param + ".type", Code: "invalid_parameter"}
 	}
 	command, err := legacyShellCommand(action, param)
 	if err != nil {
@@ -199,7 +199,7 @@ func legacyShellCommand(action map[string]any, param string) (string, error) {
 		for index, raw := range value {
 			part, ok := raw.(string)
 			if !ok {
-				return "", &responsesRequestError{Message: "local_shell command 参数必须是字符串", Param: fmt.Sprintf("%s.command[%d]", param, index), Code: "invalid_parameter"}
+				return "", &responsesRequestError{Message: "parameter command local_shell mesti string", Param: fmt.Sprintf("%s.command[%d]", param, index), Code: "invalid_parameter"}
 			}
 			parts = append(parts, quoteShellArgument(part))
 		}
@@ -210,7 +210,7 @@ func legacyShellCommand(action map[string]any, param string) (string, error) {
 			for index, raw := range commands {
 				part, ok := raw.(string)
 				if !ok {
-					return "", &responsesRequestError{Message: "shell commands 必须是字符串", Param: fmt.Sprintf("%s.commands[%d]", param, index), Code: "invalid_parameter"}
+					return "", &responsesRequestError{Message: "commands shell mesti string", Param: fmt.Sprintf("%s.commands[%d]", param, index), Code: "invalid_parameter"}
 				}
 				parts = append(parts, part)
 			}
@@ -218,13 +218,13 @@ func legacyShellCommand(action map[string]any, param string) (string, error) {
 		}
 	}
 	if command == "" {
-		return "", &responsesRequestError{Message: "local_shell_call.action.command 不能为空", Param: param + ".command", Code: "invalid_parameter"}
+		return "", &responsesRequestError{Message: "local_shell_call.action.command tak boleh kosong", Param: param + ".command", Code: "invalid_parameter"}
 	}
 	if environment, ok := action["env"].(map[string]any); ok && len(environment) > 0 {
 		keys := make([]string, 0, len(environment))
 		for key := range environment {
 			if !validEnvironmentName(key) {
-				return "", &responsesRequestError{Message: "local_shell env 名称无效", Param: param + ".env." + key, Code: "invalid_parameter"}
+				return "", &responsesRequestError{Message: "nama env local_shell tidak sah", Param: param + ".env." + key, Code: "invalid_parameter"}
 			}
 			keys = append(keys, key)
 		}
@@ -233,7 +233,7 @@ func legacyShellCommand(action map[string]any, param string) (string, error) {
 		for _, key := range keys {
 			value, ok := environment[key].(string)
 			if !ok {
-				return "", &responsesRequestError{Message: "local_shell env 值必须是字符串", Param: param + ".env." + key, Code: "invalid_parameter"}
+				return "", &responsesRequestError{Message: "nilai env local_shell mesti string", Param: param + ".env." + key, Code: "invalid_parameter"}
 			}
 			assignments = append(assignments, key+"="+quoteShellArgument(value))
 		}
@@ -248,7 +248,7 @@ func legacyShellCommand(action map[string]any, param string) (string, error) {
 func normalizeLegacyLocalShellOutputInput(item map[string]any, param string) (map[string]any, error) {
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	var output []any
 	switch value := item["output"].(type) {
@@ -267,7 +267,7 @@ func normalizeLegacyLocalShellOutputInput(item map[string]any, param string) (ma
 			"outcome": map[string]any{"type": "exit", "exit_code": exitCode},
 		}}
 	default:
-		return nil, &responsesRequestError{Message: "local_shell_call_output.output 必须是字符串或数组", Param: param + ".output", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "local_shell_call_output.output mesti string atau array", Param: param + ".output", Code: "invalid_parameter"}
 	}
 	converted := map[string]any{"type": "shell_call_output", "call_id": callID, "output": output}
 	if value, exists := item["max_output_length"]; exists && value != nil {
@@ -279,7 +279,7 @@ func normalizeLegacyLocalShellOutputInput(item map[string]any, param string) (ma
 func normalizeShellCallOutputInput(item map[string]any, param string) (map[string]any, error) {
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	output, err := normalizeShellOutputBlocks(item["output"], item["status"], param+".output")
 	if err != nil {
@@ -303,7 +303,7 @@ func (c *responsesToolCompatibility) normalizeCustomToolCallOutputInput(item map
 func (c *responsesToolCompatibility) normalizeFunctionLikeCallOutputInput(item map[string]any, param string, allowContentBlocks bool) (map[string]any, error) {
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	output := item["output"]
 	var err error
@@ -342,17 +342,17 @@ func (c *responsesToolCompatibility) normalizeFunctionCallOutputBlocks(blocks []
 		blockParam := fmt.Sprintf("%s[%d]", param, index)
 		block, ok := raw.(map[string]any)
 		if !ok {
-			return nil, &responsesRequestError{Message: blockParam + " 必须是对象", Param: blockParam, Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: blockParam + " mesti objek", Param: blockParam, Code: "invalid_parameter"}
 		}
 		blockType := strings.TrimSpace(stringField(block, "type"))
 		if blockType == "" {
-			return nil, &responsesRequestError{Message: blockParam + ".type 不能为空", Param: blockParam + ".type", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: blockParam + ".type tak boleh kosong", Param: blockParam + ".type", Code: "invalid_parameter"}
 		}
 		switch blockType {
 		case "input_text":
 			text, ok := block["text"].(string)
 			if !ok {
-				return nil, &responsesRequestError{Message: blockParam + ".text 必须是字符串", Param: blockParam + ".text", Code: "invalid_parameter"}
+				return nil, &responsesRequestError{Message: blockParam + ".text mesti string", Param: blockParam + ".text", Code: "invalid_parameter"}
 			}
 			normalized = append(normalized, map[string]any{"type": "input_text", "text": text})
 		case "input_image":
@@ -368,7 +368,7 @@ func (c *responsesToolCompatibility) normalizeFunctionCallOutputBlocks(blocks []
 			}
 			normalized = append(normalized, converted)
 		default:
-			return nil, &responsesRequestError{Message: "Grok Build 不支持该 function_call_output.output 类型", Param: blockParam + ".type", Code: "unsupported_parameter"}
+			return nil, &responsesRequestError{Message: "Grok Build tidak menyokong jenis function_call_output.output ini", Param: blockParam + ".type", Code: "unsupported_parameter"}
 		}
 	}
 	return normalized, nil
@@ -384,7 +384,7 @@ func (c *responsesToolCompatibility) normalizeFunctionCallOutputImageBlock(block
 		return nil, err
 	}
 	if !hasImageURL && !hasFileID {
-		return nil, &responsesRequestError{Message: param + ".image_url 或 .file_id 至少需要一个", Param: param + ".image_url", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".image_url atau .file_id memerlukan sekurang-kurangnya satu", Param: param + ".image_url", Code: "invalid_parameter"}
 	}
 	return c.normalizeInputImagePart(block, param)
 }
@@ -401,7 +401,7 @@ func normalizeFunctionCallOutputFileBlock(block map[string]any, param string) (m
 		}
 	}
 	if !hasSource {
-		return nil, &responsesRequestError{Message: param + " 至少需要 file_data、file_id 或 file_url 之一", Param: param + ".file_data", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + " memerlukan sekurang-kurangnya satu daripada file_data, file_id, atau file_url", Param: param + ".file_data", Code: "invalid_parameter"}
 	}
 	return normalizeInputFilePart(block), nil
 }
@@ -413,7 +413,7 @@ func nonEmptyContentBlockString(block map[string]any, key, param string) (string
 	}
 	value, ok := raw.(string)
 	if !ok || strings.TrimSpace(value) == "" {
-		return "", false, &responsesRequestError{Message: param + "." + key + " 必须是非空字符串", Param: param + "." + key, Code: "invalid_parameter"}
+		return "", false, &responsesRequestError{Message: param + "." + key + " mesti string tidak kosong", Param: param + "." + key, Code: "invalid_parameter"}
 	}
 	return value, true, nil
 }
@@ -427,7 +427,7 @@ func encodeToolOutput(value any, param string) (string, error) {
 	default:
 		encoded, err := json.Marshal(typed)
 		if err != nil {
-			return "", &responsesRequestError{Message: param + " 无法编码", Param: param, Code: "invalid_parameter"}
+			return "", &responsesRequestError{Message: param + " tak boleh dikodkan", Param: param, Code: "invalid_parameter"}
 		}
 		return string(encoded), nil
 	}
@@ -440,7 +440,7 @@ func normalizeShellOutputBlocks(value, status any, param string) ([]any, error) 
 		for index, raw := range typed {
 			block, ok := raw.(map[string]any)
 			if !ok {
-				return nil, &responsesRequestError{Message: fmt.Sprintf("%s[%d] 必须是对象", param, index), Param: fmt.Sprintf("%s[%d]", param, index), Code: "invalid_parameter"}
+				return nil, &responsesRequestError{Message: fmt.Sprintf("%s[%d] mesti objek", param, index), Param: fmt.Sprintf("%s[%d]", param, index), Code: "invalid_parameter"}
 			}
 			normalized, err := normalizeShellOutputBlock(block, fmt.Sprintf("%s[%d]", param, index))
 			if err != nil {
@@ -459,7 +459,7 @@ func normalizeShellOutputBlocks(value, status any, param string) ([]any, error) 
 			"outcome": map[string]any{"type": "exit", "exit_code": exitCode},
 		}}, nil
 	default:
-		return nil, &responsesRequestError{Message: param + " 必须是字符串或数组", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + " mesti string atau array", Param: param, Code: "invalid_parameter"}
 	}
 }
 
@@ -468,7 +468,7 @@ func normalizeShellOutputBlock(block map[string]any, param string) (map[string]a
 	stderr, _ := block["stderr"].(string)
 	outcome, ok := block["outcome"].(map[string]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: param + ".outcome 必须是对象", Param: param + ".outcome", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".outcome mesti objek", Param: param + ".outcome", Code: "invalid_parameter"}
 	}
 	normalizedOutcome := map[string]any{"type": strings.TrimSpace(stringField(outcome, "type"))}
 	switch normalizedOutcome["type"] {
@@ -478,12 +478,12 @@ func normalizeShellOutputBlock(block map[string]any, param string) (map[string]a
 			exitCode, ok = shellExitCode(outcome["exitCode"])
 		}
 		if !ok {
-			return nil, &responsesRequestError{Message: param + ".outcome.exit_code 必须是数字", Param: param + ".outcome.exit_code", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + ".outcome.exit_code mesti nombor", Param: param + ".outcome.exit_code", Code: "invalid_parameter"}
 		}
 		normalizedOutcome["exit_code"] = exitCode
 	case "timeout":
 	default:
-		return nil, &responsesRequestError{Message: param + ".outcome.type 无效", Param: param + ".outcome.type", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".outcome.type tidak sah", Param: param + ".outcome.type", Code: "invalid_parameter"}
 	}
 	return map[string]any{"stdout": stdout, "stderr": stderr, "outcome": normalizedOutcome}, nil
 }
@@ -553,7 +553,7 @@ func (c *responsesToolCompatibility) normalizeAdditionalToolsInput(item map[stri
 	}
 	tools, ok := item["tools"].([]any)
 	if !ok {
-		return nil, nil, nil, &responsesRequestError{Message: param + ".tools 必须是数组", Param: param + ".tools", Code: "invalid_parameter"}
+		return nil, nil, nil, &responsesRequestError{Message: param + ".tools mesti array", Param: param + ".tools", Code: "invalid_parameter"}
 	}
 	c.addWarning("additional_tools_position_approximated")
 	normalized := make([]any, 0, len(tools))

@@ -97,7 +97,7 @@ func (h *Handler) list(c *gin.Context) {
 	page, pageSize := pagination(c)
 	activeScope, ok := parseOptionalBool(c.Query("activeScope"))
 	if !ok {
-		response.Error(c, http.StatusBadRequest, "invalidFilter", "activeScope 必须是 true 或 false")
+		response.Error(c, http.StatusBadRequest, "invalidFilter", "activeScope mesti true atau false")
 		return
 	}
 	values, total, err := h.service.List(c.Request.Context(), page, pageSize, c.Query("search"), modelapp.ListFilter{Provider: c.Query("provider"), Providers: splitScopeQuery(c.QueryArray("providerScope")), Tiers: splitScopeQuery(c.QueryArray("tierScope")), Status: c.Query("status"), ActiveScope: activeScope, Sort: repository.SortQuery{Field: c.Query("sortBy"), Direction: repository.SortDirection(c.Query("sortOrder"))}})
@@ -106,7 +106,7 @@ func (h *Handler) list(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "modelListFailed", "读取模型失败")
+		response.Error(c, http.StatusInternalServerError, "modelListFailed", "Membaca model gagal")
 		return
 	}
 	items := make([]modelResponse, 0, len(values))
@@ -127,7 +127,7 @@ func (h *Handler) listGroups(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "modelListFailed", "读取模型能力组失败")
+		response.Error(c, http.StatusInternalServerError, "modelListFailed", "Membaca kumpulan keupayaan model gagal")
 		return
 	}
 	items := make([]modelGroupResponse, 0, len(values))
@@ -180,7 +180,7 @@ func (h *Handler) listAccounts(c *gin.Context) {
 func (h *Handler) create(c *gin.Context) {
 	var request createRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	accountIDs, err := parseIDs(request.AccountIDs)
@@ -202,14 +202,14 @@ func (h *Handler) create(c *gin.Context) {
 func (h *Handler) batchUpdate(c *gin.Context) {
 	var request batchUpdateRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids := make([]uint64, 0, len(request.IDs))
 	for _, value := range request.IDs {
 		id, err := strconv.ParseUint(value, 10, 64)
 		if err != nil || id == 0 {
-			response.Error(c, http.StatusBadRequest, "invalidId", fmt.Sprintf("无效模型 ID: %s", value))
+			response.Error(c, http.StatusBadRequest, "invalidId", fmt.Sprintf("ID model tidak sah: %s", value))
 			return
 		}
 		ids = append(ids, id)
@@ -225,7 +225,7 @@ func (h *Handler) batchUpdate(c *gin.Context) {
 func (h *Handler) batchDelete(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -277,7 +277,7 @@ func (h *Handler) sync(c *gin.Context) {
 			return
 		case value := <-result:
 			if value.err != nil {
-				_ = writeModelSyncEvent(c, "error", gin.H{"code": "modelSyncFailed", "message": "同步模型能力失败"})
+				_ = writeModelSyncEvent(c, "error", gin.H{"code": "modelSyncFailed", "message": "Menyegerakkan keupayaan model gagal"})
 				return
 			}
 			_ = writeModelSyncEvent(c, "complete", gin.H{"synced": value.synced})
@@ -335,12 +335,12 @@ func setModelSyncWriteDeadline(writer http.ResponseWriter) error {
 func (h *Handler) update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidId", "ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID tidak sah")
 		return
 	}
 	var request updateRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	var accountIDs *[]uint64
@@ -363,7 +363,7 @@ func (h *Handler) update(c *gin.Context) {
 func (h *Handler) delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidId", "ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID tidak sah")
 		return
 	}
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
@@ -383,7 +383,7 @@ func (h *Handler) writeServiceError(c *gin.Context, code string, err error) {
 	case errors.Is(err, modelapp.ErrConflict):
 		response.Error(c, http.StatusConflict, "modelConflict", err.Error())
 	default:
-		response.Error(c, http.StatusInternalServerError, code, "模型操作失败")
+		response.Error(c, http.StatusInternalServerError, code, "Operasi model gagal")
 	}
 }
 
@@ -420,7 +420,7 @@ func parseIDs(values []string) ([]uint64, error) {
 	for _, value := range values {
 		id, err := strconv.ParseUint(value, 10, 64)
 		if err != nil || id == 0 {
-			return nil, fmt.Errorf("无效 ID: %s", value)
+			return nil, fmt.Errorf("ID tidak sah: %s", value)
 		}
 		ids = append(ids, id)
 	}

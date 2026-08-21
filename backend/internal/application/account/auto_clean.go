@@ -261,5 +261,5 @@ func (s *Service) clearDeletedAccountRuntimeState(ctx context.Context, ids []uin
 	if failures == 0 {
 		return 0, nil
 	}
-	return failures, fmt.Errorf("清理已删除账号的会话粘滞状态失败: %w", firstErr)
+	return failures, fmt.Errorf("Gagal membersihkan status sessi lekat bagi akaun yang telah dipadam: %w", firstErr)
 }

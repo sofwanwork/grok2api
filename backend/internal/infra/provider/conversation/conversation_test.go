@@ -565,7 +565,7 @@ func TestConvertAnthropicToolReferenceValidatesDeclaredTool(t *testing.T) {
 		"tools":[{"name":"SearchTools","input_schema":{"type":"object"}}]
 	}`)
 	_, _, err := ConvertRequestWithOptions(body, "grok-4.5", OperationMessages)
-	if err == nil || !strings.Contains(err.Error(), `未声明的工具 "Missing"`) {
+	if err == nil || !strings.Contains(err.Error(), `alat yang tidak diisytiharkan "Missing"`) {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -576,10 +576,10 @@ func TestConvertAnthropicMessagesValidatesToolRelationships(t *testing.T) {
 		messages string
 		want     string
 	}{
-		{name: "orphan result", messages: `[{"role":"user","content":[{"type":"tool_result","tool_use_id":"missing","content":"x"}]}]`, want: "未匹配"},
-		{name: "missing result", messages: `[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]}]`, want: "提供 tool_result"},
-		{name: "result after text", messages: `[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]},{"role":"user","content":[{"type":"text","text":"late"},{"type":"tool_result","tool_use_id":"toolu_1","content":"x"}]}]`, want: "必须位于"},
-		{name: "user tool use", messages: `[{"role":"user","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]}]`, want: "只允许"},
+		{name: "orphan result", messages: `[{"role":"user","content":[{"type":"tool_result","tool_use_id":"missing","content":"x"}]}]`, want: "tidak sepadan"},
+		{name: "missing result", messages: `[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]}]`, want: "menyediakan tool_result"},
+		{name: "result after text", messages: `[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]},{"role":"user","content":[{"type":"text","text":"late"},{"type":"tool_result","tool_use_id":"toolu_1","content":"x"}]}]`, want: "mesti diletakkan"},
+		{name: "user tool use", messages: `[{"role":"user","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]}]`, want: "hanya dibenarkan"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

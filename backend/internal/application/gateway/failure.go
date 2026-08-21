@@ -45,7 +45,7 @@ type UpstreamFailure struct {
 
 func (e *UpstreamFailure) Error() string {
 	if e == nil {
-		return "上游请求失败"
+		return "Permintaan upstream gagal"
 	}
 	if e.UpstreamCode != "" {
 		return fmt.Sprintf("%s: %s", e.Code, e.UpstreamCode)
@@ -99,7 +99,7 @@ func clientCredentialErrorCode(status int, upstreamCode string) string {
 func newHTTPUpstreamFailure(status int, body []byte, accountID uint64, accountName string) *UpstreamFailure {
 	upstreamCode, upstreamType, upstreamMessage := extractUpstreamErrorMetadata(body)
 	failure := &UpstreamFailure{
-		HTTPStatus: status, Code: "upstream_error", PublicMessage: "上游服务返回错误",
+		HTTPStatus: status, Code: "upstream_error", PublicMessage: "Perkhidmatan upstream memulangkan ralat",
 		UpstreamCode: upstreamCode, AccountID: accountID, AccountName: accountName,
 	}
 	if status < 400 || status > 599 {
@@ -109,13 +109,13 @@ func newHTTPUpstreamFailure(status int, body []byte, accountID uint64, accountNa
 	switch status {
 	case http.StatusUnauthorized:
 		failure.Code = "upstream_unauthorized"
-		failure.PublicMessage = "上游账号认证失败"
+		failure.PublicMessage = "Pengesahan akaun upstream gagal"
 		failure.AccountScoped = true
 		failure.CredentialRejected = true
 		failure.AccountBlocked = isDefinitiveAccountBlock(metadataText)
 	case http.StatusPaymentRequired:
 		failure.Code = "upstream_payment_required"
-		failure.PublicMessage = "上游账号额度不足"
+		failure.PublicMessage = "Kuota akaun upstream tidak mencukupi"
 		failure.AccountScoped = true
 		failure.QuotaExhausted = true
 		// spending-limit is account-scoped, but its paid/free recovery kind depends on
@@ -124,7 +124,7 @@ func newHTTPUpstreamFailure(status int, body []byte, accountID uint64, accountNa
 		failure.SpendingLimitBlocked = isPaidQuotaExhaustion(metadataText)
 	case http.StatusForbidden:
 		failure.Code = "upstream_forbidden"
-		failure.PublicMessage = "上游拒绝了该请求"
+		failure.PublicMessage = "Upstream telah menolak permintaan ini"
 		// Console's DPoP requirement is an upstream auth-scheme rollout, not a
 		// property of the selected SSO account. Rotating accounts or browser
 		// egress cannot make the same Bearer-anonymous request valid.
@@ -155,7 +155,7 @@ func newHTTPUpstreamFailure(status int, body []byte, accountID uint64, accountNa
 		failure.AccountScoped = failure.AccountBlocked || failure.PermanentAccountDenial || failure.QuotaExhausted || failure.CredentialRejected || isAccountScopedForbidden(metadataText)
 	case http.StatusTooManyRequests:
 		failure.Code = "upstream_rate_limited"
-		failure.PublicMessage = "上游请求频率受限"
+		failure.PublicMessage = "Frekuensi permintaan upstream terhad"
 		failure.AccountScoped = true
 		// Subscription-level free usage and explicit per-model free usage are
 		// distinct so the gateway can preserve their different recovery scopes.
@@ -164,7 +164,7 @@ func newHTTPUpstreamFailure(status int, body []byte, accountID uint64, accountNa
 		failure.QuotaExhausted = failure.FreeQuotaExhausted || isPaidQuotaExhaustion(metadataText)
 	default:
 		failure.Code = "upstream_server_error"
-		failure.PublicMessage = "上游服务暂时异常"
+		failure.PublicMessage = "Perkhidmatan upstream mengalami gangguan sementara"
 	}
 	fingerprintPart := normalizeFailureCode(firstNonEmptyFailure(upstreamCode, upstreamType, upstreamMessage))
 	if fingerprintPart == "" {
@@ -175,16 +175,16 @@ func newHTTPUpstreamFailure(status int, body []byte, accountID uint64, accountNa
 }
 
 func newTransportUpstreamFailure(err error, accountID uint64, accountName string) *UpstreamFailure {
-	code, message := "upstream_network_error", "连接上游服务失败"
+	code, message := "upstream_network_error", "Gagal menyambung ke perkhidmatan upstream"
 	status := http.StatusBadGateway
 	if neterrorpkg.IsResponseHeaderTimeout(err) {
-		status, code, message = http.StatusGatewayTimeout, "upstream_header_timeout", "等待上游响应头超时"
+		status, code, message = http.StatusGatewayTimeout, "upstream_header_timeout", "Tamat masa menunggu pengepala respons upstream"
 	} else if neterrorpkg.IsUpstreamStreamIdleTimeout(err) {
-		status, code, message = http.StatusGatewayTimeout, "upstream_stream_idle_timeout", "上游流式响应长时间无数据"
+		status, code, message = http.StatusGatewayTimeout, "upstream_stream_idle_timeout", "Respons berstrim upstream tiada data terlalu lama"
 	} else if errors.Is(err, errQualityEmptyStream) {
-		status, code, message = http.StatusBadGateway, "upstream_stream_empty", "上游流式响应为空"
+		status, code, message = http.StatusBadGateway, "upstream_stream_empty", "Respons berstrim upstream kosong"
 	} else if errors.Is(err, context.DeadlineExceeded) {
-		code, message = "upstream_timeout", "上游服务响应超时"
+		code, message = "upstream_timeout", "Respons perkhidmatan upstream tamat masa"
 	}
 	return &UpstreamFailure{
 		HTTPStatus: status, Code: code, PublicMessage: message,
@@ -194,7 +194,7 @@ func newTransportUpstreamFailure(err error, accountID uint64, accountName string
 
 func newCredentialUpstreamFailure(err error, accountID uint64, accountName string) *UpstreamFailure {
 	return &UpstreamFailure{
-		HTTPStatus: http.StatusBadGateway, Code: "upstream_credential_unavailable", PublicMessage: "上游账号凭据不可用",
+		HTTPStatus: http.StatusBadGateway, Code: "upstream_credential_unavailable", PublicMessage: "Kredensial akaun upstream tidak tersedia",
 		AccountID: accountID, AccountName: accountName, AccountScoped: true, Cause: err,
 	}
 }

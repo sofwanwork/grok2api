@@ -62,7 +62,7 @@ type VideoInput struct {
 
 func (s *Service) CreateVideo(ctx context.Context, input VideoInput) (media.Job, error) {
 	if s.mediaJobs == nil || s.mediaQueue == nil {
-		return media.Job{}, fmt.Errorf("视频任务服务未配置")
+		return media.Job{}, fmt.Errorf("Perkhidmatan tugas video tidak dikonfigurasi")
 	}
 	operation := input.Operation
 	if operation == "" {
@@ -71,54 +71,54 @@ func (s *Service) CreateVideo(ctx context.Context, input VideoInput) (media.Job,
 	switch operation {
 	case provider.VideoOperationGenerate, provider.VideoOperationEdit, provider.VideoOperationExtend:
 	default:
-		return media.Job{}, fmt.Errorf("不支持的视频操作")
+		return media.Job{}, fmt.Errorf("Operasi video tidak disokong")
 	}
 	if len(input.Prompt) > 100000 {
-		return media.Job{}, fmt.Errorf("prompt 过长")
+		return media.Job{}, fmt.Errorf("prompt terlalu panjang")
 	}
 	if operation == provider.VideoOperationGenerate {
 		hasImage := strings.TrimSpace(input.ImageURL) != ""
 		hasRefs := len(input.ReferenceURLs) > 0
 		hasRefAudio := len(input.ReferenceAudios) > 0
 		if hasImage && (hasRefs || hasRefAudio) {
-			return media.Job{}, fmt.Errorf("image 不能与 reference_images/reference_audios 同时使用")
+			return media.Job{}, fmt.Errorf("image tidak boleh digunakan serentak dengan reference_images/reference_audios")
 		}
 		if hasRefs || hasRefAudio {
 			if len(input.Prompt) == 0 {
-				return media.Job{}, fmt.Errorf("参考图/参考音频视频必须提供 prompt")
+				return media.Job{}, fmt.Errorf("Video imej rujukan/audio rujukan mesti disertakan dengan prompt")
 			}
 			if resolution := strings.ToLower(strings.TrimSpace(input.Resolution)); resolution == "1080p" {
-				return media.Job{}, fmt.Errorf("参考图视频 resolution 最高 720p")
+				return media.Job{}, fmt.Errorf("resolution video imej rujukan maksimum 720p")
 			}
 		}
 		if len(input.Prompt) == 0 && !hasImage && !hasRefs && !hasRefAudio {
-			return media.Job{}, fmt.Errorf("文本生视频必须提供 prompt；图片生视频可以省略 prompt")
+			return media.Job{}, fmt.Errorf("Teks-ke-video mesti disertakan dengan prompt; imej-ke-video boleh meninggalkan prompt")
 		}
 		if strings.TrimSpace(input.VideoURL) != "" {
-			return media.Job{}, fmt.Errorf("视频生成不支持 video 输入")
+			return media.Job{}, fmt.Errorf("Penjanaan video tidak menyokong input video")
 		}
 		if err := validateVideoReferenceAudios(input.ReferenceAudios); err != nil {
 			return media.Job{}, err
 		}
 	} else {
 		if strings.TrimSpace(input.Prompt) == "" {
-			return media.Job{}, fmt.Errorf("视频编辑/延长必须提供 prompt")
+			return media.Job{}, fmt.Errorf("Penyuntingan/pemanjangan video mesti disertakan dengan prompt")
 		}
 		if strings.TrimSpace(input.VideoURL) == "" {
-			return media.Job{}, fmt.Errorf("视频编辑/延长必须提供 video")
+			return media.Job{}, fmt.Errorf("Penyuntingan/pemanjangan video mesti disertakan dengan video")
 		}
 		if strings.TrimSpace(input.ImageURL) != "" || len(input.ReferenceURLs) > 0 || len(input.ReferenceAudios) > 0 {
-			return media.Job{}, fmt.Errorf("视频编辑/延长不支持 image、reference_images 或 reference_audios")
+			return media.Job{}, fmt.Errorf("Penyuntingan/pemanjangan video tidak menyokong image, reference_images atau reference_audios")
 		}
 		if operation == provider.VideoOperationEdit && input.Duration != 0 {
-			return media.Job{}, fmt.Errorf("视频编辑不支持 duration")
+			return media.Job{}, fmt.Errorf("Penyuntingan video tidak menyokong duration")
 		}
 		if operation == provider.VideoOperationExtend {
 			if input.Duration == 0 {
 				input.Duration = 6
 			}
 			if input.Duration < 2 || input.Duration > 10 {
-				return media.Job{}, fmt.Errorf("视频延长 duration 必须在 2 到 10 秒之间")
+				return media.Job{}, fmt.Errorf("duration pemanjangan video mesti antara 2 hingga 10 saat")
 			}
 		}
 	}
@@ -243,23 +243,23 @@ func validateVideoRouteParameters(providerValue account.Provider, operation prov
 		// 实测：8 张 reference_images 上游回 400
 		// "Too many reference images: 8. Maximum allowed is 7."（两个视频模型一致）。
 		if referenceCount > provider.ConsoleVideoMaxReferenceImages {
-			return fmt.Errorf("%w: Console reference_images 最多 %d 张，当前为 %d 张", ErrVideoParameterInvalid, provider.ConsoleVideoMaxReferenceImages, referenceCount)
+			return fmt.Errorf("%w: Console reference_images maksimum %d keping, semasa %d keping", ErrVideoParameterInvalid, provider.ConsoleVideoMaxReferenceImages, referenceCount)
 		}
 		// 实测：grok-imagine-video 的 reference-to-video 上游回 400
 		// "Duration 15s exceeds the maximum allowed for reference-to-video, which is 10s."；
 		// 走 image 字段的 image-to-video 与 grok-imagine-video-1.5 都保持 15s。
 		if trimmedModel == "grok-imagine-video" && hasReferences && duration > provider.ConsoleVideoMaxReferenceDurationSeconds {
-			return fmt.Errorf("%w: Console %s 的参考图生视频最长 %d 秒，当前为 %d 秒", ErrVideoParameterInvalid, trimmedModel, provider.ConsoleVideoMaxReferenceDurationSeconds, duration)
+			return fmt.Errorf("%w: Video imej rujukan Console %s maksimum %d saat, semasa %d saat", ErrVideoParameterInvalid, trimmedModel, provider.ConsoleVideoMaxReferenceDurationSeconds, duration)
 		}
 	}
 	if !strings.EqualFold(strings.TrimSpace(resolution), "1080p") {
 		return nil
 	}
 	if trimmedModel != "grok-imagine-video-1.5" {
-		return fmt.Errorf("%w: %s 不支持 1080p", ErrVideoOperationUnsupported, upstreamModel)
+		return fmt.Errorf("%w: %s tidak menyokong 1080p", ErrVideoOperationUnsupported, upstreamModel)
 	}
 	if hasReferences {
-		return fmt.Errorf("%w: reference_images 模式最高支持 720p", ErrVideoOperationUnsupported)
+		return fmt.Errorf("%w: Mod reference_images menyokong maksimum 720p", ErrVideoOperationUnsupported)
 	}
 	return nil
 }
@@ -328,7 +328,7 @@ func (s *Service) OpenVideoContent(ctx context.Context, id string, key clientkey
 		return nil, "", 0, err
 	}
 	if job.Status != media.StatusCompleted {
-		return nil, "", 0, fmt.Errorf("视频内容尚未可用")
+		return nil, "", 0, fmt.Errorf("Kandungan video belum tersedia")
 	}
 	// 本地资产优先：XAI ZDR 上传完成后不经公网回环下载。
 	if job.ResultAssetID != "" && s.mediaAssets != nil {
@@ -338,7 +338,7 @@ func (s *Service) OpenVideoContent(ctx context.Context, id string, key clientkey
 		}
 	}
 	if job.UpstreamURL == "" {
-		return nil, "", 0, fmt.Errorf("视频内容尚未可用")
+		return nil, "", 0, fmt.Errorf("Kandungan video belum tersedia")
 	}
 	adapter, ok := s.providers.Videos(account.Provider(job.Provider))
 	if !ok {
@@ -454,7 +454,7 @@ func (s *Service) processVideoJob(ctx context.Context, id string) {
 		route, err = s.models.GetByPublicID(ctx, job.Model)
 	}
 	if err != nil {
-		s.failVideoJob(ctx, job, "model_not_found", errors.New("模型路由不存在"), 0, nil)
+		s.failVideoJob(ctx, job, "model_not_found", errors.New("Laluan model tidak wujud"), 0, nil)
 		return
 	}
 	s.runVideoJob(ctx, job, route)
@@ -704,7 +704,7 @@ func (s *Service) runVideoJob(parent context.Context, job media.Job, route model
 				upstreamStatus = status
 			}
 			if errors.Is(err, provider.ErrUnauthorized) || (hasStatus && (status == http.StatusUnauthorized || status == http.StatusForbidden)) {
-				failureCode, publicErr = "provider_unavailable", errors.New("上游服务暂不可用")
+				failureCode, publicErr = "provider_unavailable", errors.New("Perkhidmatan upstream tidak tersedia buat masa ini")
 			} else if hasStatus && status == http.StatusTooManyRequests {
 				failureCode = "rate_limited"
 			}
@@ -808,7 +808,7 @@ func (s *Service) validateVideoInputReferences(ctx context.Context, references [
 		}
 		_ = body.Close()
 		if asset.Kind != expectedKind {
-			return fmt.Errorf("%w: file_id 必须引用%s", ErrVideoInputUnavailable, expectedKind)
+			return fmt.Errorf("%w: file_id mesti merujuk %s", ErrVideoInputUnavailable, expectedKind)
 		}
 		if !addVideoReferenceBytes(&estimatedBytes, materializedVideoReferenceBytes(asset.MIMEType, asset.SizeBytes)) {
 			return ErrVideoInputTooLarge
@@ -869,15 +869,15 @@ func (s *Service) resolveVideoInputReferences(ctx context.Context, references []
 		}
 		if asset.Kind != expectedKind {
 			_ = body.Close()
-			return nil, fmt.Errorf("%w: file_id 必须引用%s", ErrVideoInputUnavailable, expectedKind)
+			return nil, fmt.Errorf("%w: file_id mesti merujuk %s", ErrVideoInputUnavailable, expectedKind)
 		}
 		data, readErr := io.ReadAll(io.LimitReader(body, media.MaxInputJSONBytes+1))
 		closeErr := body.Close()
 		if readErr != nil {
-			return nil, fmt.Errorf("读取视频临时输入: %w", readErr)
+			return nil, fmt.Errorf("Membaca input sementara video: %w", readErr)
 		}
 		if closeErr != nil {
-			return nil, fmt.Errorf("关闭视频临时输入: %w", closeErr)
+			return nil, fmt.Errorf("Menutup input sementara video: %w", closeErr)
 		}
 		if len(data) == 0 || len(data) > media.MaxInputJSONBytes {
 			return nil, ErrVideoInputTooLarge
@@ -913,11 +913,11 @@ func addVideoReferenceBytes(total *int64, referenceBytes int64) bool {
 // 且所有尝试固定使用创建任务的同一凭据。
 func (s *Service) persistRemoteVideo(ctx context.Context, jobID string, adapter provider.VideoAdapter, credential account.Credential, result provider.VideoResult) (provider.VideoResult, error) {
 	if s.mediaAssets == nil {
-		return result, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, errors.New("视频媒体存储未配置"))
+		return result, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, errors.New("Storan media video tidak dikonfigurasi"))
 	}
 	downloader, ok := adapter.(provider.VideoContentDownloader)
 	if !ok {
-		return result, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, errors.New("Provider 不支持视频内容下载"))
+		return result, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, errors.New("Provider tidak menyokong muat turun kandungan video"))
 	}
 	var lastErr error
 	for attempt := 0; attempt < videoOutputAttempts; attempt++ {
@@ -968,7 +968,7 @@ func (s *Service) reconcileVideoUsage(ctx context.Context) error {
 			durationMS = max(int64(0), job.CompletedAt.Sub(job.CreatedAt).Milliseconds())
 		}
 		if err := s.recordVideoAudit(ctx, job, durationMS, 0, nil); err != nil {
-			result = firstError(result, fmt.Errorf("任务 %s: %w", job.ID, err))
+			result = firstError(result, fmt.Errorf("Tugas %s: %w", job.ID, err))
 		}
 	}
 	return result
@@ -1060,7 +1060,7 @@ func encodeVideoInputFull(operation provider.VideoOperation, imageURL string, re
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("编码视频输入: %w", err)
+		return "", fmt.Errorf("Mengekod input video: %w", err)
 	}
 	if len(data) > media.MaxInputJSONBytes {
 		return "", ErrVideoInputTooLarge
@@ -1165,11 +1165,11 @@ func (s *Service) resolveVideoJobInputs(ctx context.Context, operation provider.
 
 func validateVideoReferenceAudios(values []string) error {
 	if len(values) > 3 {
-		return fmt.Errorf("reference_audios 最多 3 个")
+		return fmt.Errorf("reference_audios maksimum 3")
 	}
 	for _, raw := range values {
 		if strings.TrimSpace(raw) == "" {
-			return fmt.Errorf("reference_audios.voice_id 不能为空")
+			return fmt.Errorf("reference_audios.voice_id tak boleh kosong")
 		}
 	}
 	return nil
@@ -1255,8 +1255,9 @@ func parseUpstreamStatusFromMessage(message string) int {
 	if message == "" {
 		return 0
 	}
-	// Console/Web summaries commonly look like: "Console 媒体上游返回 429: ..."
-	for _, token := range []string{"返回 ", "status ", "Status ", "HTTP "} {
+	// Console/Web summaries commonly look like: "Console media upstream mengembalikan 429: ..."
+	// 注：「mengembalikan 」匹配串与 infra/provider 层产生的错误文案保持一致，勿单独翻译。
+	for _, token := range []string{"mengembalikan ", "返回 ", "status ", "Status ", "HTTP "} {
 		if idx := strings.Index(message, token); idx >= 0 {
 			rest := strings.TrimSpace(message[idx+len(token):])
 			n := 0

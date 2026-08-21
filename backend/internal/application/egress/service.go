@@ -18,17 +18,17 @@ import (
 )
 
 var (
-	ErrInvalidInput            = errors.New("代理节点参数无效")
-	ErrInvalidFilter           = errors.New("出口代理筛选条件无效")
-	ErrInvalidSort             = errors.New("代理节点排序条件无效")
-	ErrNotFound                = errors.New("代理节点不存在")
-	ErrProbeStale              = errors.New("代理配置在探测期间已更新，请重新测试")
-	ErrQualityProbeUnavailable = errors.New("出口质量探测不可用")
-	ErrQualityProbeNoAccount   = errors.New("质量检测暂无可调度账号")
-	ErrClearanceUnavailable    = errors.New("Clearance 刷新不可用")
-	ErrProxyProfileUnavailable = errors.New("共享代理配置功能不可用")
-	ErrProxyProfileInUse       = errors.New("共享代理配置仍被节点使用")
-	ErrProxyProfileNotFound    = errors.New("共享代理配置不存在")
+	ErrInvalidInput            = errors.New("Parameter node proksi tidak sah")
+	ErrInvalidFilter           = errors.New("Syarat tapisan proksi egress tidak sah")
+	ErrInvalidSort             = errors.New("Syarat isihan node proksi tidak sah")
+	ErrNotFound                = errors.New("Node proksi tidak wujud")
+	ErrProbeStale              = errors.New("Konfigurasi proksi telah dikemas kini semasa pengesanan, sila uji semula")
+	ErrQualityProbeUnavailable = errors.New("Pengesanan kualiti egress tidak tersedia")
+	ErrQualityProbeNoAccount   = errors.New("Pengesanan kualiti tiada akaun yang boleh dijadualkan buat masa ini")
+	ErrClearanceUnavailable    = errors.New("Penyegaran Clearance tidak tersedia")
+	ErrProxyProfileUnavailable = errors.New("Fungsi konfigurasi proksi kongsi tidak tersedia")
+	ErrProxyProfileInUse       = errors.New("Konfigurasi proksi kongsi masih digunakan oleh node")
+	ErrProxyProfileNotFound    = errors.New("Konfigurasi proksi kongsi tidak wujud")
 )
 
 const (
@@ -139,7 +139,7 @@ func (s *Service) SetQualityProber(value QualityProber) {
 
 func (s *Service) ProbeQuality(ctx context.Context, nodeID uint64, input QualityProbeInput) (QualityProbeResult, error) {
 	if nodeID == 0 || input.ClientKeyID == 0 {
-		return QualityProbeResult{}, fmt.Errorf("%w: nodeId 和 clientKeyId 必填", ErrInvalidInput)
+		return QualityProbeResult{}, fmt.Errorf("%w: nodeId dan clientKeyId wajib diisi", ErrInvalidInput)
 	}
 	input.Model = strings.TrimSpace(input.Model)
 	input.Prompt = strings.TrimSpace(input.Prompt)
@@ -147,7 +147,7 @@ func (s *Service) ProbeQuality(ctx context.Context, nodeID uint64, input Quality
 	rawMatchMode := strings.TrimSpace(input.MatchMode)
 	input.MatchMode = NormalizeMatchMode(input.MatchMode)
 	if input.Model == "" {
-		return QualityProbeResult{}, fmt.Errorf("%w: model 必填", ErrInvalidInput)
+		return QualityProbeResult{}, fmt.Errorf("%w: model wajib diisi", ErrInvalidInput)
 	}
 	if input.Prompt == "" {
 		input.Prompt = DefaultQualityProbePrompt
@@ -156,13 +156,13 @@ func (s *Service) ProbeQuality(ctx context.Context, nodeID uint64, input Quality
 		input.Expected = DefaultQualityProbeExpected
 	}
 	if len(input.Prompt) > MaxQualityProbePromptBytes || len(input.Expected) > MaxQualityProbeExpectedBytes {
-		return QualityProbeResult{}, fmt.Errorf("%w: 探测文本过长", ErrInvalidInput)
+		return QualityProbeResult{}, fmt.Errorf("%w: Teks pengesanan terlalu panjang", ErrInvalidInput)
 	}
 	if input.MaxOutputTokens == 0 {
 		input.MaxOutputTokens = DefaultQualityProbeMaxOutputTokens
 	}
 	if input.MaxOutputTokens < 1 || input.MaxOutputTokens > MaxQualityProbeOutputTokens {
-		return QualityProbeResult{}, fmt.Errorf("%w: maxOutputTokens 必须在 1 到 %d 之间", ErrInvalidInput, MaxQualityProbeOutputTokens)
+		return QualityProbeResult{}, fmt.Errorf("%w: maxOutputTokens mesti antara 1 hingga %d", ErrInvalidInput, MaxQualityProbeOutputTokens)
 	}
 	node, err := s.repository.GetEgressNode(ctx, nodeID)
 	if errors.Is(err, repository.ErrNotFound) {
@@ -172,7 +172,7 @@ func (s *Service) ProbeQuality(ctx context.Context, nodeID uint64, input Quality
 		return QualityProbeResult{}, err
 	}
 	if node.Scope != domain.ScopeBuild || strings.TrimSpace(node.EncryptedProxyURL) == "" {
-		return QualityProbeResult{}, fmt.Errorf("%w: 质量探测仅支持已配置代理的 grok_build 节点", ErrInvalidInput)
+		return QualityProbeResult{}, fmt.Errorf("%w: Pengesanan kualiti hanya menyokong node grok_build yang telah dikonfigurasi proksi", ErrInvalidInput)
 	}
 	s.mu.RLock()
 	prober := s.qualityProber
@@ -401,7 +401,7 @@ func (s *Service) ProxyURL(ctx context.Context, id uint64) (string, error) {
 		return "", err
 	}
 	if strings.TrimSpace(value.EncryptedProxyURL) == "" {
-		return "", fmt.Errorf("%w: 节点未配置代理地址", ErrInvalidInput)
+		return "", fmt.Errorf("%w: Node belum dikonfigurasi dengan alamat proksi", ErrInvalidInput)
 	}
 	proxyURL, err := s.cipher.Decrypt(value.EncryptedProxyURL)
 	if err != nil {
@@ -542,18 +542,18 @@ func (s *Service) ProxyProfileURL(ctx context.Context, id uint64) (string, error
 func validateProxyProfileInput(input ProxyProfileInput, create bool) (string, string, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" || len(name) > 160 {
-		return "", "", fmt.Errorf("%w: 共享代理配置名称必须在 1 到 160 个字符之间", ErrInvalidInput)
+		return "", "", fmt.Errorf("%w: Nama konfigurasi proksi kongsi mesti antara 1 hingga 160 aksara", ErrInvalidInput)
 	}
 	if input.ProxyURL == nil {
 		if create {
-			return "", "", fmt.Errorf("%w: 代理地址必填", ErrInvalidInput)
+			return "", "", fmt.Errorf("%w: Alamat proksi wajib diisi", ErrInvalidInput)
 		}
 		return name, "", nil
 	}
 	proxyURL, err := NormalizeProxyURL(*input.ProxyURL)
 	if err != nil || proxyURL == "" {
 		if err == nil {
-			err = errors.New("代理地址不能为空")
+			err = errors.New("Alamat proksi tak boleh kosong")
 		}
 		return "", "", fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
@@ -585,12 +585,12 @@ func (s *Service) resolveProxyProfile(ctx context.Context, currentProfileID uint
 	profileID := *input.ProxyProfileID
 	if profileID == 0 {
 		if input.ClearProxyURL {
-			return Input{}, fmt.Errorf("%w: 取消共享代理配置与清除代理不能同时操作", ErrInvalidInput)
+			return Input{}, fmt.Errorf("%w: Membatalkan konfigurasi proksi kongsi dan memadam proksi tidak boleh dilakukan serentak", ErrInvalidInput)
 		}
 		return input, nil
 	}
 	if input.ProxyURL != nil || input.ClearProxyURL {
-		return Input{}, fmt.Errorf("%w: 使用共享代理配置时不能同时修改或清除代理地址", ErrInvalidInput)
+		return Input{}, fmt.Errorf("%w: Tidak boleh mengubah atau memadam alamat proksi serentak apabila menggunakan konfigurasi proksi kongsi", ErrInvalidInput)
 	}
 	if profileID == currentProfileID {
 		return input, nil
@@ -600,7 +600,7 @@ func (s *Service) resolveProxyProfile(ctx context.Context, currentProfileID uint
 	}
 	profile, err := s.proxyProfiles.GetEgressProxyProfile(ctx, profileID)
 	if errors.Is(err, repository.ErrNotFound) {
-		return Input{}, fmt.Errorf("%w: 共享代理配置不存在", ErrInvalidInput)
+		return Input{}, fmt.Errorf("%w: Konfigurasi proksi kongsi tidak wujud", ErrInvalidInput)
 	}
 	if err != nil {
 		return Input{}, err
@@ -611,7 +611,7 @@ func (s *Service) resolveProxyProfile(ctx context.Context, currentProfileID uint
 	}
 	proxyURL, err = NormalizeProxyURL(proxyURL)
 	if err != nil || proxyURL == "" {
-		return Input{}, fmt.Errorf("%w: 共享代理配置的代理地址无效", ErrInvalidInput)
+		return Input{}, fmt.Errorf("%w: Alamat proksi konfigurasi proksi kongsi tidak sah", ErrInvalidInput)
 	}
 	input.ProxyURL = &proxyURL
 	return input, nil
@@ -635,7 +635,7 @@ func (s *Service) validateFallbackNodeUpdateWithConfig(node domain.Node, config 
 			continue
 		}
 		if err := s.validateFixedFallbackNode(scope, node, false); err != nil {
-			return fmt.Errorf("节点已配置为 %s 固定回退，无法应用当前修改: %w", scope, err)
+			return fmt.Errorf("Node telah dikonfigurasi sebagai fallback tetap %s, pengubahsuaian semasa tidak boleh digunakan: %w", scope, err)
 		}
 	}
 	return nil
@@ -646,7 +646,7 @@ func (s *Service) validateFallbackNodeUpdateWithConfig(node domain.Node, config 
 func (s *Service) UpdateManyEnabled(ctx context.Context, nodeIDs []uint64, enabled bool) (int, error) {
 	ids := uniqueIDs(nodeIDs)
 	if len(ids) == 0 {
-		return 0, fmt.Errorf("%w: 代理节点参数无效", ErrInvalidInput)
+		return 0, fmt.Errorf("%w: Parameter node proksi tidak sah", ErrInvalidInput)
 	}
 
 	// Disabling a fixed fallback would make the persisted routing policy
@@ -688,7 +688,7 @@ func (s *Service) UpdateManyEnabled(ctx context.Context, nodeIDs []uint64, enabl
 	if batch, ok := s.repository.(BatchNodeEnabledUpdater); ok {
 		updated, err := batch.UpdateEgressNodesEnabled(ctx, ids, enabled)
 		if errors.Is(err, repository.ErrEgressFallbackInUse) {
-			return 0, fmt.Errorf("%w: 固定回退节点不能被批量禁用", ErrInvalidInput)
+			return 0, fmt.Errorf("%w: Node fallback tetap tidak boleh dilumpuhkan secara pukal", ErrInvalidInput)
 		}
 		if err != nil {
 			return 0, err
@@ -739,7 +739,7 @@ func (s *Service) Delete(ctx context.Context, id uint64) error {
 func (s *Service) DeleteMany(ctx context.Context, nodeIDs []uint64) (int, error) {
 	ids := uniqueIDs(nodeIDs)
 	if len(ids) == 0 {
-		return 0, fmt.Errorf("%w: 代理节点参数无效", ErrInvalidInput)
+		return 0, fmt.Errorf("%w: Parameter node proksi tidak sah", ErrInvalidInput)
 	}
 	if batch, ok := s.repository.(BatchNodeDeleter); ok {
 		deleted, err := batch.DeleteEgressNodes(ctx, ids)
@@ -840,10 +840,10 @@ func (s *Service) RefreshClearance(ctx context.Context, id uint64) error {
 // not a proxy-pool preference: runtime requests must use the selected node.
 func (s *Service) AssignAccounts(ctx context.Context, nodeID uint64, provider accountdomain.Provider, accountIDs []uint64, mode accountdomain.EgressAssignmentMode) (AssignmentResult, error) {
 	if s.accounts == nil {
-		return AssignmentResult{}, errors.New("账号出口绑定不可用")
+		return AssignmentResult{}, errors.New("Pengikatan egress akaun tidak tersedia")
 	}
 	if nodeID == 0 || !provider.IsValid() || !mode.IsValid() || len(accountIDs) == 0 {
-		return AssignmentResult{}, fmt.Errorf("%w: 账号出口绑定参数无效", ErrInvalidInput)
+		return AssignmentResult{}, fmt.Errorf("%w: Parameter pengikatan egress akaun tidak sah", ErrInvalidInput)
 	}
 	node, err := s.repository.GetEgressNode(ctx, nodeID)
 	if errors.Is(err, repository.ErrNotFound) {
@@ -853,10 +853,10 @@ func (s *Service) AssignAccounts(ctx context.Context, nodeID uint64, provider ac
 		return AssignmentResult{}, err
 	}
 	if !node.Enabled || strings.TrimSpace(node.EncryptedProxyURL) == "" {
-		return AssignmentResult{}, fmt.Errorf("%w: 只能绑定启用且已配置代理地址的节点", ErrInvalidInput)
+		return AssignmentResult{}, fmt.Errorf("%w: Hanya node yang diaktifkan dan telah dikonfigurasi alamat proksi boleh diikat", ErrInvalidInput)
 	}
 	if !scopeSupportsProvider(node.Scope, provider) {
-		return AssignmentResult{}, fmt.Errorf("%w: 代理节点作用域与账号来源不兼容", ErrInvalidInput)
+		return AssignmentResult{}, fmt.Errorf("%w: Skop node proksi tidak serasi dengan sumber akaun", ErrInvalidInput)
 	}
 	unique := uniqueIDs(accountIDs)
 	count, err := s.accounts.CountProviderAccountsByIDs(ctx, provider, unique)
@@ -864,7 +864,7 @@ func (s *Service) AssignAccounts(ctx context.Context, nodeID uint64, provider ac
 		return AssignmentResult{}, err
 	}
 	if count != int64(len(unique)) {
-		return AssignmentResult{}, fmt.Errorf("%w: 包含不属于当前账号池的账号", ErrInvalidInput)
+		return AssignmentResult{}, fmt.Errorf("%w: Mengandungi akaun yang tidak tergolong dalam kolam akaun semasa", ErrInvalidInput)
 	}
 	assigned, err := s.accounts.UpdateEgressBindings(ctx, provider, unique, &nodeID, mode, time.Now().UTC())
 	if err != nil {
@@ -876,10 +876,10 @@ func (s *Service) AssignAccounts(ctx context.Context, nodeID uint64, provider ac
 // UnassignAccounts removes an explicit binding and restores scope pool routing.
 func (s *Service) UnassignAccounts(ctx context.Context, provider accountdomain.Provider, accountIDs []uint64) (AssignmentResult, error) {
 	if s.accounts == nil {
-		return AssignmentResult{}, errors.New("账号出口绑定不可用")
+		return AssignmentResult{}, errors.New("Pengikatan egress akaun tidak tersedia")
 	}
 	if !provider.IsValid() || len(accountIDs) == 0 {
-		return AssignmentResult{}, fmt.Errorf("%w: 账号出口解绑参数无效", ErrInvalidInput)
+		return AssignmentResult{}, fmt.Errorf("%w: Parameter nyahikatan egress akaun tidak sah", ErrInvalidInput)
 	}
 	unique := uniqueIDs(accountIDs)
 	count, err := s.accounts.CountProviderAccountsByIDs(ctx, provider, unique)
@@ -887,7 +887,7 @@ func (s *Service) UnassignAccounts(ctx context.Context, provider accountdomain.P
 		return AssignmentResult{}, err
 	}
 	if count != int64(len(unique)) {
-		return AssignmentResult{}, fmt.Errorf("%w: 包含不属于当前账号池的账号", ErrInvalidInput)
+		return AssignmentResult{}, fmt.Errorf("%w: Mengandungi akaun yang tidak tergolong dalam kolam akaun semasa", ErrInvalidInput)
 	}
 	updated, err := s.accounts.UpdateEgressBindings(ctx, provider, unique, nil, "", time.Time{})
 	if err != nil {
@@ -934,7 +934,7 @@ func (s *Service) validateSourceBindingScope(ctx context.Context, sourceID uint6
 func validateBindingProviders(scope domain.Scope, providers []accountdomain.Provider) error {
 	for _, provider := range providers {
 		if !scopeSupportsProvider(scope, provider) {
-			return fmt.Errorf("%w: 当前节点仍绑定 %s 账号，不能改为 %s 作用域", ErrInvalidInput, provider, scope)
+			return fmt.Errorf("%w: Node semasa masih mengikat akaun %s, tidak boleh ditukar kepada skop %s", ErrInvalidInput, provider, scope)
 		}
 	}
 	return nil
@@ -990,15 +990,15 @@ func (s *Service) applyInput(value domain.Node, input Input, create bool) (domai
 	configurationChanged := create || value.Scope != input.Scope || value.ProxyPool != proxyPool || (!value.Enabled && input.Enabled) || input.ClearProxyURL || input.ProxyURL != nil || profileChanged
 	name := strings.TrimSpace(input.Name)
 	if name == "" || len(name) > 160 {
-		return domain.Node{}, fmt.Errorf("%w: 名称必须在 1 到 160 个字符之间", ErrInvalidInput)
+		return domain.Node{}, fmt.Errorf("%w: Nama mesti antara 1 hingga 160 aksara", ErrInvalidInput)
 	}
 	if !validListScope(input.Scope) || input.Scope == "" {
-		return domain.Node{}, fmt.Errorf("%w: scope 必须是 grok_build、grok_web、grok_console、grok_web_asset 或 grok_console_asset", ErrInvalidInput)
+		return domain.Node{}, fmt.Errorf("%w: scope mesti grok_build, grok_web, grok_console, grok_web_asset atau grok_console_asset", ErrInvalidInput)
 	}
 	value.Name, value.Scope, value.Enabled, value.ProxyPool = name, input.Scope, input.Enabled, proxyPool
 	if input.AccountCapacity != nil {
 		if *input.AccountCapacity < 0 || *input.AccountCapacity > 100000 {
-			return domain.Node{}, fmt.Errorf("%w: 每个代理的账号容量必须在 0 到 100000 之间", ErrInvalidInput)
+			return domain.Node{}, fmt.Errorf("%w: Kapasiti akaun setiap proksi mesti antara 0 hingga 100000", ErrInvalidInput)
 		}
 		value.AccountCapacity = *input.AccountCapacity
 	}
@@ -1014,11 +1014,11 @@ func (s *Service) applyInput(value domain.Node, input Input, create bool) (domai
 		s.mu.RUnlock()
 	}
 	if len(value.UserAgent) > 512 {
-		return domain.Node{}, fmt.Errorf("%w: User-Agent 过长", ErrInvalidInput)
+		return domain.Node{}, fmt.Errorf("%w: User-Agent terlalu panjang", ErrInvalidInput)
 	}
 	if input.ProxyProfileID != nil {
 		if value.SourceID != 0 && *input.ProxyProfileID != 0 {
-			return domain.Node{}, fmt.Errorf("%w: 订阅管理的节点不能绑定共享代理配置", ErrInvalidInput)
+			return domain.Node{}, fmt.Errorf("%w: Node terurus langganan tidak boleh mengikat konfigurasi proksi kongsi", ErrInvalidInput)
 		}
 		value.ProxyProfileID = *input.ProxyProfileID
 	} else if input.ClearProxyURL || input.ProxyURL != nil {
@@ -1040,7 +1040,7 @@ func (s *Service) applyInput(value domain.Node, input Input, create bool) (domai
 		}
 	}
 	if value.ProxyPool && strings.TrimSpace(value.EncryptedProxyURL) == "" {
-		return domain.Node{}, fmt.Errorf("%w: 代理池模式需要配置代理地址", ErrInvalidInput)
+		return domain.Node{}, fmt.Errorf("%w: Mod kolam proksi memerlukan konfigurasi alamat proksi", ErrInvalidInput)
 	}
 	if input.Scope == domain.ScopeBuild || input.Scope == domain.ScopeConsoleAsset {
 		value.EncryptedCloudflareCookie = ""
@@ -1048,7 +1048,7 @@ func (s *Service) applyInput(value domain.Node, input Input, create bool) (domai
 		value.EncryptedCloudflareCookie = ""
 	} else if input.CloudflareCookies != nil {
 		if len(*input.CloudflareCookies) > maxCloudflareCookieBytes {
-			return domain.Node{}, fmt.Errorf("%w: Cloudflare Cookie 不能超过 16 KiB", ErrInvalidInput)
+			return domain.Node{}, fmt.Errorf("%w: Cloudflare Cookie tidak boleh melebihi 16 KiB", ErrInvalidInput)
 		}
 		cookies := SanitizeCloudflareCookies(*input.CloudflareCookies)
 		if cookies != "" || create {
@@ -1171,24 +1171,24 @@ func NormalizeProxyURL(value string) (string, error) {
 		return "", nil
 	}
 	if len(value) > maxProxyURLBytes || strings.IndexFunc(value, func(character rune) bool { return character < 0x20 || character == 0x7f }) >= 0 {
-		return "", errors.New("代理地址过长或包含控制字符")
+		return "", errors.New("Alamat proksi terlalu panjang atau mengandungi aksara kawalan")
 	}
 	hasAccountPlaceholder := strings.Contains(value, ProxyAccountPlaceholder)
 	if strings.Count(value, ProxyAccountPlaceholder) > 1 {
-		return "", errors.New("代理地址最多包含一个 {account} 占位符")
+		return "", errors.New("Alamat proksi mengandungi maksimum satu pemegang tempat {account}")
 	}
 	if hasAccountPlaceholder && strings.Contains(value, proxyAccountSentinel) {
-		return "", errors.New("代理地址包含保留的账号占位符文本")
+		return "", errors.New("Alamat proksi mengandungi teks pemegang tempat akaun yang dikhaskan")
 	}
 	parseValue := strings.ReplaceAll(value, ProxyAccountPlaceholder, proxyAccountSentinel)
 	parsed, err := url.Parse(parseValue)
 	if err != nil {
-		return "", errors.New("代理地址格式无效")
+		return "", errors.New("Format alamat proksi tidak sah")
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	if tunnelproxy.IsSupportedScheme(scheme) {
 		if hasAccountPlaceholder {
-			return "", errors.New("隧道代理不支持 {account} 占位符")
+			return "", errors.New("Proksi terowong tidak menyokong pemegang tempat {account}")
 		}
 		normalized, normalizeErr := tunnelproxy.Normalize(value)
 		if normalizeErr != nil {
@@ -1197,19 +1197,19 @@ func NormalizeProxyURL(value string) (string, error) {
 		return normalized, nil
 	}
 	if parsed.Host == "" || parsed.Hostname() == "" {
-		return "", errors.New("代理地址格式无效")
+		return "", errors.New("Format alamat proksi tidak sah")
 	}
 	switch scheme {
 	case "http", "https", "socks4", "socks4a", "socks5", "socks5h":
 	default:
-		return "", errors.New("代理地址协议必须是 HTTP、HTTPS、SOCKS4、SOCKS5、Trojan、VLESS、SS 或 VMess")
+		return "", errors.New("Protokol alamat proksi mesti HTTP, HTTPS, SOCKS4, SOCKS5, Trojan, VLESS, SS atau VMess")
 	}
 	if parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
-		return "", errors.New("代理地址不能包含路径、查询参数或片段")
+		return "", errors.New("Alamat proksi tidak boleh mengandungi laluan, parameter pertanyaan atau fragmen")
 	}
 	if hasAccountPlaceholder {
 		if parsed.User == nil || !strings.Contains(parsed.User.Username(), proxyAccountSentinel) {
-			return "", errors.New("{account} 只能用于代理认证用户名")
+			return "", errors.New("{account} hanya boleh digunakan untuk nama pengguna pengesahan proksi")
 		}
 		return strings.ReplaceAll(parsed.String(), proxyAccountSentinel, ProxyAccountPlaceholder), nil
 	}

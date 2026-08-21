@@ -21,15 +21,15 @@ import (
 )
 
 var (
-	ErrAssetNotFound         = errors.New("媒体资源不存在")
-	ErrInvalidImage          = errors.New("图片内容无效")
-	ErrInvalidImageSelection = errors.New("图片选择无效")
-	ErrInvalidVideoSelection = errors.New("视频任务选择无效")
-	ErrActiveVideoSelection  = errors.New("排队中或生成中的视频任务不能删除")
-	ErrInvalidFilter         = errors.New("媒体筛选条件无效")
-	ErrMediaJobsUnavailable  = errors.New("视频任务仓储未配置")
-	ErrInputAssetNotFound    = errors.New("临时输入资产不存在或已过期")
-	ErrMediaCapacity         = errors.New("媒体存储容量不足")
+	ErrAssetNotFound         = errors.New("Aset media tidak wujud")
+	ErrInvalidImage          = errors.New("Kandungan imej tidak sah")
+	ErrInvalidImageSelection = errors.New("Pemilihan imej tidak sah")
+	ErrInvalidVideoSelection = errors.New("Pemilihan tugas video tidak sah")
+	ErrActiveVideoSelection  = errors.New("Tugas video yang sedang menunggu atau dijana tidak boleh dipadam")
+	ErrInvalidFilter         = errors.New("Syarat tapisan media tidak sah")
+	ErrMediaJobsUnavailable  = errors.New("Repositori tugas video tidak dikonfigurasi")
+	ErrInputAssetNotFound    = errors.New("Aset input sementara tidak wujud atau telah tamat tempoh")
+	ErrMediaCapacity         = errors.New("Kapasiti storan media tidak mencukupi")
 )
 
 // InputAssetTTL 是临时输入的硬保留上限；无论任务状态如何，超过后都可回收。
@@ -594,7 +594,7 @@ func (s *Service) Cleanup(ctx context.Context) (int, error) {
 			}
 			if err := s.objects.Delete(ctx, asset.StorageKey); err != nil {
 				if errors.Is(err, os.ErrNotExist) {
-					return deleted, fmt.Errorf("媒体对象缺失，已保留共享元数据: %s: %w", asset.StorageKey, err)
+					return deleted, fmt.Errorf("Objek media hilang, metadata kongsi telah dikekalkan: %s: %w", asset.StorageKey, err)
 				}
 				return deleted, err
 			}
@@ -637,7 +637,7 @@ func cleanupThresholdBytes(cfg Config) int64 {
 func newAssetID(prefix string) (string, error) {
 	raw := make([]byte, 24)
 	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("生成媒体资源 ID: %w", err)
+		return "", fmt.Errorf("Menjana ID sumber media: %w", err)
 	}
 	return prefix + base64.RawURLEncoding.EncodeToString(raw), nil
 }

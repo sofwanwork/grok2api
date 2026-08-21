@@ -25,7 +25,7 @@ func DecodeCredentialJSONEntries[T any](data []byte, expectedProvider string, li
 			if errors.Is(err, io.EOF) {
 				return entries, nil
 			}
-			return nil, fmt.Errorf("第 %d 行的账号 JSON 格式无效", jsonErrorLine(data, start, err))
+			return nil, fmt.Errorf("Format JSON akaun pada baris %d tidak sah", jsonErrorLine(data, start, err))
 		}
 
 		line := lineAtJSONOffset(data, start)
@@ -35,20 +35,20 @@ func DecodeCredentialJSONEntries[T any](data []byte, expectedProvider string, li
 		if trimmed := bytes.TrimSpace(raw); len(trimmed) > 0 && trimmed[0] == '[' {
 			var elements []json.RawMessage
 			if err := json.Unmarshal(raw, &elements); err != nil {
-				return nil, fmt.Errorf("第 %d 行的账号数组 JSON 格式无效", line)
+				return nil, fmt.Errorf("Format JSON tatasusunan akaun pada baris %d tidak sah", line)
 			}
 			// 超限先于逐元素解析拦截，数组中混有非法元素时同样优先报告限额。
 			if limit > 0 && len(elements) > limit-len(entries) {
-				return nil, fmt.Errorf("%w: 单次最多导入 %d 个账号", ErrCredentialLimit, limit)
+				return nil, fmt.Errorf("%w: import maksimum %d akaun setiap kali", ErrCredentialLimit, limit)
 			}
 			for index, element := range elements {
 				// 结构预检：仅兼容对象与 null（null 归一为零值，交后续 normalize 报出带序号的明确错误）。
 				if e := bytes.TrimSpace(element); len(e) == 0 || (e[0] != '{' && !bytes.Equal(e, []byte("null"))) {
-					return nil, fmt.Errorf("第 %d 行账号数组的第 %d 个元素必须是 JSON 对象", line, index+1)
+					return nil, fmt.Errorf("Elemen ke-%d tatasusunan akaun pada baris %d mesti objek JSON", index+1, line)
 				}
 				var value T
 				if err := json.Unmarshal(element, &value); err != nil {
-					return nil, fmt.Errorf("第 %d 行账号数组的第 %d 个元素内容无效", line, index+1)
+					return nil, fmt.Errorf("Kandungan elemen ke-%d tatasusunan akaun pada baris %d tidak sah", index+1, line)
 				}
 				entries = append(entries, value)
 			}
@@ -56,23 +56,23 @@ func DecodeCredentialJSONEntries[T any](data []byte, expectedProvider string, li
 		}
 		var object map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &object); err != nil || object == nil {
-			return nil, fmt.Errorf("第 %d 行必须是 JSON 对象", line)
+			return nil, fmt.Errorf("Baris %d mesti objek JSON", line)
 		}
 		if rawProvider, exists := object["provider"]; exists {
 			var providerName string
 			if err := json.Unmarshal(rawProvider, &providerName); err != nil {
-				return nil, fmt.Errorf("第 %d 行的 provider 必须是字符串", line)
+				return nil, fmt.Errorf("provider pada baris %d mesti rentetan", line)
 			}
 			providerName = strings.TrimSpace(providerName)
 			if providerName != "" && providerName != expectedProvider {
-				return nil, fmt.Errorf("第 %d 行的 Provider 必须是 %s", line, expectedProvider)
+				return nil, fmt.Errorf("Provider pada baris %d mesti %s", line, expectedProvider)
 			}
 		}
 
 		if rawAccounts, batch := object["accounts"]; batch {
 			var values []T
 			if err := json.Unmarshal(rawAccounts, &values); err != nil {
-				return nil, fmt.Errorf("第 %d 行的 accounts 必须是 JSON 对象数组", line)
+				return nil, fmt.Errorf("accounts pada baris %d mesti tatasusunan objek JSON", line)
 			}
 			if err := appendCredentialJSONEntries(&entries, values, limit); err != nil {
 				return nil, err
@@ -82,7 +82,7 @@ func DecodeCredentialJSONEntries[T any](data []byte, expectedProvider string, li
 
 		var value T
 		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, fmt.Errorf("第 %d 行的账号 JSON 格式无效", line)
+			return nil, fmt.Errorf("Format JSON akaun pada baris %d tidak sah", line)
 		}
 		if err := appendCredentialJSONEntries(&entries, []T{value}, limit); err != nil {
 			return nil, err
@@ -92,7 +92,7 @@ func DecodeCredentialJSONEntries[T any](data []byte, expectedProvider string, li
 
 func appendCredentialJSONEntries[T any](target *[]T, values []T, limit int) error {
 	if limit > 0 && len(values) > limit-len(*target) {
-		return fmt.Errorf("%w: 单次最多导入 %d 个账号", ErrCredentialLimit, limit)
+		return fmt.Errorf("%w: import maksimum %d akaun setiap kali", ErrCredentialLimit, limit)
 	}
 	*target = append(*target, values...)
 	return nil

@@ -196,7 +196,7 @@ func newCodexModelCatalog(items []modelListItem) codexModelCatalog {
 func writeCodexModelCatalog(c *gin.Context, catalog codexModelCatalog) {
 	body, err := json.Marshal(catalog)
 	if err != nil {
-		writeOpenAIError(c, http.StatusInternalServerError, "model_list_failed", "编码模型列表失败")
+		writeOpenAIError(c, http.StatusInternalServerError, "model_list_failed", "Mengodkan senarai model gagal")
 		return
 	}
 	sum := sha256.Sum256(body)

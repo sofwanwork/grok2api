@@ -426,7 +426,7 @@ func TestWebMessagesStreamRejectsOversizedDeferredText(t *testing.T) {
 	var output bytes.Buffer
 	stream := newWebMessagesStream(&output, "resp_test", "grok-chat-fast", 3, conversation.ResponseOptions{AnthropicWebSearch: true})
 	err := stream.Delta("text", strings.Repeat("x", (8<<20)+1))
-	if err == nil || !strings.Contains(err.Error(), "缓冲") {
+	if err == nil || !strings.Contains(err.Error(), "Penampan teks tertunda") {
 		t.Fatalf("oversized deferred text error = %v", err)
 	}
 }

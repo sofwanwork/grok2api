@@ -145,7 +145,7 @@ func (a *Adapter) forwardGatewayCompactionWithPolicy(
 			return nil, readErr
 		}
 		if len(data) > maxCompatibleResponseBytes {
-			return gatewayCompactionFailureProviderResponse(resp.Header, reqURL, modelCatalogChanged, warnings, "上游 compaction 响应超过 128 MiB"), nil
+			return gatewayCompactionFailureProviderResponse(resp.Header, reqURL, modelCatalogChanged, warnings, "respons compaction upstream melebihi 128 MiB"), nil
 		}
 		sample, sampleErr := parseGatewayCompactionStream(data)
 		if sampleErr == nil && isDegenerateGatewayCompactionSummary(sample.summary) {
@@ -162,11 +162,11 @@ func (a *Adapter) forwardGatewayCompactionWithPolicy(
 		continuation := gatewayCompactionContinuation(sample.summary)
 		blob, encodeErr := a.compaction.encode(request.PromptCacheKey, continuation)
 		if encodeErr != nil {
-			return gatewayCompactionFailureProviderResponse(resp.Header, reqURL, modelCatalogChanged, warnings, "服务端 compaction 编码失败"), nil
+			return gatewayCompactionFailureProviderResponse(resp.Header, reqURL, modelCatalogChanged, warnings, "pengekodan compaction pelayan gagal"), nil
 		}
 		converted, contentType, convertErr := buildGatewayCompactionResponse(sample.response, blob, request.Model, request.Streaming)
 		if convertErr != nil {
-			return gatewayCompactionFailureProviderResponse(resp.Header, reqURL, modelCatalogChanged, warnings, "服务端 compaction 响应编码失败"), nil
+			return gatewayCompactionFailureProviderResponse(resp.Header, reqURL, modelCatalogChanged, warnings, "pengekodan respons compaction pelayan gagal"), nil
 		}
 		headers := resp.Header.Clone()
 		headers.Del("Content-Encoding")
@@ -446,7 +446,7 @@ func gatewayCompactionStatusTransient(status int, body string) bool {
 
 func gatewayCompactionFailureProviderResponse(headers http.Header, reqURL string, modelCatalogChanged bool, warnings, detail string) *provider.Response {
 	body, _ := json.Marshal(map[string]any{"error": map[string]any{
-		"type": "server_error", "code": "compaction_failed", "message": "Grok Build compaction 失败",
+		"type": "server_error", "code": "compaction_failed", "message": "compaction Grok Build gagal",
 	}})
 	headers = headers.Clone()
 	headers.Set("Content-Type", "application/json")

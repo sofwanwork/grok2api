@@ -62,7 +62,7 @@ func TestRunWebAccountScriptsRejectsOversizedSelectionBeforeSSE(t *testing.T) {
 
 	new(Handler).runWebAccountScripts(ctx)
 
-	if recorder.Code != 400 || !strings.Contains(recorder.Body.String(), "单次最多处理 1000 个账号") {
+	if recorder.Code != 400 || !strings.Contains(recorder.Body.String(), "Maksimum 1000 akaun diproses setiap kali") {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 	if contentType := recorder.Header().Get("Content-Type"); strings.HasPrefix(contentType, "text/event-stream") {

@@ -120,60 +120,60 @@ func (d Definition) SupportsModelCapability(capability modeldomain.Capability) b
 // Validate 检查静态描述内部是否自洽，避免接口实现和后台路由配置悄悄漂移。
 func (d Definition) Validate() error {
 	if !d.Provider.IsValid() {
-		return fmt.Errorf("Provider %q 无效", d.Provider)
+		return fmt.Errorf("Provider %q tidak sah", d.Provider)
 	}
 	if strings.TrimSpace(d.ModelNamespace) == "" || d.ModelNamespace != d.Provider.ModelNamespace() {
-		return fmt.Errorf("Provider %s 的模型命名空间无效", d.Provider)
+		return fmt.Errorf("Ruang nama model Provider %s tidak sah", d.Provider)
 	}
 	if d.ModelCatalog != ModelCatalogRemote && d.ModelCatalog != ModelCatalogStatic {
-		return fmt.Errorf("Provider %s 的模型目录类型无效", d.Provider)
+		return fmt.Errorf("Jenis katalog model Provider %s tidak sah", d.Provider)
 	}
 	if len(d.ModelCapabilities) == 0 {
-		return fmt.Errorf("Provider %s 未声明模型能力", d.Provider)
+		return fmt.Errorf("Provider %s tidak mengisytiharkan keupayaan model", d.Provider)
 	}
 	capabilities := make(map[modeldomain.Capability]struct{}, len(d.ModelCapabilities))
 	for _, capability := range d.ModelCapabilities {
 		switch capability {
 		case modeldomain.CapabilityResponses, modeldomain.CapabilityChat, modeldomain.CapabilityImage, modeldomain.CapabilityImageEdit, modeldomain.CapabilityVideo, modeldomain.CapabilityTTS, modeldomain.CapabilitySTT, modeldomain.CapabilityRealtime:
 		default:
-			return fmt.Errorf("Provider %s 声明了无效模型能力 %q", d.Provider, capability)
+			return fmt.Errorf("Provider %s mengisytiharkan keupayaan model tidak sah %q", d.Provider, capability)
 		}
 		if _, exists := capabilities[capability]; exists {
-			return fmt.Errorf("Provider %s 重复声明模型能力 %q", d.Provider, capability)
+			return fmt.Errorf("Provider %s mengisytiharkan keupayaan model %q berulang", d.Provider, capability)
 		}
 		capabilities[capability] = struct{}{}
 	}
 	if d.Quota != QuotaBilling && d.Quota != QuotaRemoteWindow && d.Quota != QuotaLocalWindow {
-		return fmt.Errorf("Provider %s 的额度策略无效", d.Provider)
+		return fmt.Errorf("Strategi kuota Provider %s tidak sah", d.Provider)
 	}
 	if d.Credential.AuthType != account.AuthTypeOAuth && d.Credential.AuthType != account.AuthTypeSSO {
-		return fmt.Errorf("Provider %s 的认证类型无效", d.Provider)
+		return fmt.Errorf("Jenis pengesahan Provider %s tidak sah", d.Provider)
 	}
 	if d.Inference.Usage != UsageUpstream && d.Inference.Usage != UsageEstimated {
-		return fmt.Errorf("Provider %s 的 usage 策略无效", d.Provider)
+		return fmt.Errorf("Strategi usage Provider %s tidak sah", d.Provider)
 	}
 	if (d.Conversation.Compact || d.Conversation.StoredResponses) && !d.Conversation.Responses {
-		return fmt.Errorf("Provider %s 的 Responses 扩展能力缺少 Responses 基础能力", d.Provider)
+		return fmt.Errorf("Keupayaan lanjutan Responses Provider %s tiada keupayaan asas Responses", d.Provider)
 	}
 	if d.Credential.AuthType != account.AuthTypeOAuth && (d.Credential.Refresh || d.Credential.DeviceOAuth) {
-		return fmt.Errorf("Provider %s 的非 OAuth 凭据不能声明刷新或 Device OAuth", d.Provider)
+		return fmt.Errorf("Kredensial bukan OAuth Provider %s tidak boleh mengisytiharkan pembaruan atau Device OAuth", d.Provider)
 	}
 	mediaCapabilities := []struct {
 		enabled    bool
 		capability modeldomain.Capability
 		name       string
 	}{
-		{enabled: d.Media.ImageGeneration, capability: modeldomain.CapabilityImage, name: "图像生成"},
-		{enabled: d.Media.ImageEdit, capability: modeldomain.CapabilityImageEdit, name: "图像编辑"},
-		{enabled: d.Media.VideoGeneration, capability: modeldomain.CapabilityVideo, name: "视频生成"},
-		{enabled: d.Media.TTS, capability: modeldomain.CapabilityTTS, name: "语音合成"},
-		{enabled: d.Media.STT, capability: modeldomain.CapabilitySTT, name: "语音识别"},
-		{enabled: d.Media.Realtime, capability: modeldomain.CapabilityRealtime, name: "实时语音"},
+		{enabled: d.Media.ImageGeneration, capability: modeldomain.CapabilityImage, name: "penjanaan imej"},
+		{enabled: d.Media.ImageEdit, capability: modeldomain.CapabilityImageEdit, name: "penyuntingan imej"},
+		{enabled: d.Media.VideoGeneration, capability: modeldomain.CapabilityVideo, name: "penjanaan video"},
+		{enabled: d.Media.TTS, capability: modeldomain.CapabilityTTS, name: "sintesis suara"},
+		{enabled: d.Media.STT, capability: modeldomain.CapabilitySTT, name: "pengecaman suara"},
+		{enabled: d.Media.Realtime, capability: modeldomain.CapabilityRealtime, name: "suara masa nyata"},
 	}
 	for _, item := range mediaCapabilities {
 		_, declared := capabilities[item.capability]
 		if item.enabled != declared {
-			return fmt.Errorf("Provider %s 的%s接口与模型能力声明不一致", d.Provider, item.name)
+			return fmt.Errorf("Antara muka %s Provider %s tidak sepadan dengan perisytiharan keupayaan model", d.Provider, item.name)
 		}
 	}
 	return nil

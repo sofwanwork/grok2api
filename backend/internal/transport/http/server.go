@@ -119,7 +119,7 @@ type ReadinessSnapshot struct {
 // New 创建完整 HTTP 路由并明确区分公共、管理员和客户端鉴权边界。
 func New(deps Dependencies) *gin.Engine {
 	if deps.ConcurrencyGate == nil {
-		panic("httpserver: ConcurrencyGate 不能为空")
+		panic("httpserver: ConcurrencyGate tak boleh kosong")
 	}
 	gin.SetMode(gin.ReleaseMode)
 	if deps.Logger == nil {
@@ -127,7 +127,7 @@ func New(deps Dependencies) *gin.Engine {
 	}
 	router := gin.New()
 	if err := router.SetTrustedProxies(deps.TrustedProxies); err != nil {
-		panic("httpserver: trustedProxies 配置无效: " + err.Error())
+		panic("httpserver: konfigurasi trustedProxies tidak sah: " + err.Error())
 	}
 	router.Use(gin.Recovery(), middleware.RequestID(), middleware.ClientIP(), middleware.SecurityHeaders(), middleware.MaxBodyBytes(deps.MaxBodyBytes), middleware.Timeout(deps.RequestTimeout), middleware.AccessLog(deps.Logger))
 	router.GET("/healthz", func(c *gin.Context) {
@@ -213,7 +213,7 @@ func New(deps Dependencies) *gin.Engine {
 				return
 			}
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{
-				"code": "service_reconciling", "message": "服务正在完成启动恢复，请稍后重试", "param": nil, "type": "server_error",
+				"code": "service_reconciling", "message": "Perkhidmatan sedang menyiapkan pemulihan permulaan, sila cuba semula kemudian", "param": nil, "type": "server_error",
 			}})
 		})
 	}

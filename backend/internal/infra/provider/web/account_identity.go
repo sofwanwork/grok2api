@@ -13,7 +13,7 @@ import (
 // 请求复用账号的 Web 出口、浏览器指纹、Cookie 与 Resin 身份。
 func (a *Adapter) SyncAccountIdentity(ctx context.Context, credential account.Credential) (provider.AccountIdentity, error) {
 	if credential.Provider != account.ProviderWeb || credential.AuthType != account.AuthTypeSSO {
-		return provider.AccountIdentity{}, fmt.Errorf("仅 Grok Web SSO 账号支持身份同步")
+		return provider.AccountIdentity{}, fmt.Errorf("Hanya akaun Grok Web SSO menyokong penyegerakan identiti")
 	}
 	return sessionidentity.Fetch(ctx, a.config().BaseURL, credential, a.egress, a.cipher)
 }

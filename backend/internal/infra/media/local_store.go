@@ -22,11 +22,11 @@ type LocalStore struct {
 func NewLocalStore(root string) (*LocalStore, error) {
 	absolute, err := filepath.Abs(strings.TrimSpace(root))
 	if err != nil || strings.TrimSpace(root) == "" {
-		return nil, fmt.Errorf("媒体存储目录无效")
+		return nil, fmt.Errorf("Direktori storan media tidak sah")
 	}
 	absolute = filepath.Clean(absolute)
 	if err := os.MkdirAll(absolute, 0o700); err != nil {
-		return nil, fmt.Errorf("创建媒体存储目录: %w", err)
+		return nil, fmt.Errorf("Mencipta direktori storan media: %w", err)
 	}
 	return &LocalStore{root: absolute, removeTemporary: os.Remove}, nil
 }
@@ -47,7 +47,7 @@ func (s *LocalStore) BeginVideoUpload(ctx context.Context, id, mimeType string) 
 	}
 	extension, ok := mediafile.VideoExtension(mimeType)
 	if !ok || len(id) < 2 {
-		return "", "", fmt.Errorf("视频存储参数无效")
+		return "", "", fmt.Errorf("Parameter storan video tidak sah")
 	}
 	storageKey = filepath.ToSlash(filepath.Join("videos", id[:2], id+extension))
 	path, err := s.resolve(storageKey)
@@ -55,17 +55,17 @@ func (s *LocalStore) BeginVideoUpload(ctx context.Context, id, mimeType string) 
 		return "", "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", "", fmt.Errorf("创建视频目录: %w", err)
+		return "", "", fmt.Errorf("Mencipta direktori video: %w", err)
 	}
 	// 禁止覆盖已有文件：目标已存在时拒绝新的上传会话。
 	if _, statErr := os.Stat(path); statErr == nil {
-		return "", "", fmt.Errorf("视频对象已存在")
+		return "", "", fmt.Errorf("Objek video sudah wujud")
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return "", "", statErr
 	}
 	temporary, err := os.CreateTemp(filepath.Dir(path), ".video-*")
 	if err != nil {
-		return "", "", fmt.Errorf("创建视频临时文件: %w", err)
+		return "", "", fmt.Errorf("Mencipta fail sementara video: %w", err)
 	}
 	tempPath = temporary.Name()
 	if err := temporary.Chmod(0o600); err != nil {
@@ -96,17 +96,17 @@ func (s *LocalStore) CommitVideoUpload(ctx context.Context, tempPath, storageKey
 	// O_RDWR 不含 O_TRUNC，不会改动文件内容。
 	file, err := os.OpenFile(tempPath, os.O_RDWR, 0)
 	if err != nil {
-		return fmt.Errorf("打开视频临时文件: %w", err)
+		return fmt.Errorf("Membuka fail sementara video: %w", err)
 	}
 	if err := file.Sync(); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("同步视频文件: %w", err)
+		return fmt.Errorf("Menyelaras fail video: %w", err)
 	}
 	if err := file.Close(); err != nil {
 		return err
 	}
 	if err := os.Link(tempPath, path); err != nil {
-		return fmt.Errorf("提交视频文件: %w", err)
+		return fmt.Errorf("Menyerahkan fail video: %w", err)
 	}
 	if cleanupErr := s.removeTemporary(tempPath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
 		slog.Warn("media_temp_cleanup_failed", "path", tempPath, "error", cleanupErr)
@@ -131,7 +131,7 @@ func (s *LocalStore) saveObject(ctx context.Context, kindDir, tempPattern, id, m
 	}
 	extension, ok := extFn(mimeType)
 	if !ok || len(id) < 2 {
-		return "", fmt.Errorf("媒体存储参数无效")
+		return "", fmt.Errorf("Parameter storan media tidak sah")
 	}
 	storageKey := filepath.ToSlash(filepath.Join(kindDir, id[:2], id+extension))
 	path, err := s.resolve(storageKey)
@@ -139,11 +139,11 @@ func (s *LocalStore) saveObject(ctx context.Context, kindDir, tempPattern, id, m
 		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", fmt.Errorf("创建媒体目录: %w", err)
+		return "", fmt.Errorf("Mencipta direktori media: %w", err)
 	}
 	temporary, err := os.CreateTemp(filepath.Dir(path), tempPattern)
 	if err != nil {
-		return "", fmt.Errorf("创建媒体临时文件: %w", err)
+		return "", fmt.Errorf("Mencipta fail sementara media: %w", err)
 	}
 	temporaryPath := temporary.Name()
 	cleanupPending := true
@@ -159,17 +159,17 @@ func (s *LocalStore) saveObject(ctx context.Context, kindDir, tempPattern, id, m
 		return "", err
 	}
 	if _, err := temporary.Write(data); err != nil {
-		return "", fmt.Errorf("写入媒体: %w", err)
+		return "", fmt.Errorf("Menulis media: %w", err)
 	}
 	if err := temporary.Sync(); err != nil {
-		return "", fmt.Errorf("同步媒体文件: %w", err)
+		return "", fmt.Errorf("Menyelaras fail media: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
-		return "", fmt.Errorf("关闭媒体文件: %w", err)
+		return "", fmt.Errorf("Menutup fail media: %w", err)
 	}
 	// 硬链接提交具有 no-replace 语义，极端 ID 冲突时不会覆盖已有对象。
 	if err := os.Link(temporaryPath, path); err != nil {
-		return "", fmt.Errorf("提交媒体文件: %w", err)
+		return "", fmt.Errorf("Menyerahkan fail media: %w", err)
 	}
 	cleanupErr := s.removeTemporary(temporaryPath)
 	cleanupPending = cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist)
@@ -189,7 +189,7 @@ func (s *LocalStore) Open(ctx context.Context, storageKey string) (io.ReadCloser
 		return nil, os.ErrNotExist
 	}
 	if err != nil {
-		return nil, fmt.Errorf("打开媒体文件: %w", err)
+		return nil, fmt.Errorf("Membuka fail media: %w", err)
 	}
 	return file, nil
 }
@@ -206,7 +206,7 @@ func (s *LocalStore) Delete(ctx context.Context, storageKey string) error {
 		if errors.Is(err, os.ErrNotExist) {
 			return os.ErrNotExist
 		}
-		return fmt.Errorf("删除媒体文件: %w", err)
+		return fmt.Errorf("Memadam fail media: %w", err)
 	}
 	return nil
 }
@@ -214,12 +214,12 @@ func (s *LocalStore) Delete(ctx context.Context, storageKey string) error {
 func (s *LocalStore) resolve(storageKey string) (string, error) {
 	clean := filepath.Clean(filepath.FromSlash(strings.TrimSpace(storageKey)))
 	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("媒体存储路径无效")
+		return "", fmt.Errorf("Laluan storan media tidak sah")
 	}
 	full := filepath.Join(s.root, clean)
 	relative, err := filepath.Rel(s.root, full)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("媒体存储路径越界")
+		return "", fmt.Errorf("Laluan storan media melampaui had")
 	}
 	return full, nil
 }

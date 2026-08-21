@@ -74,11 +74,11 @@ func Normalize(value string) (string, error) {
 func Parse(value string) (Config, error) {
 	value = strings.TrimSpace(value)
 	if strings.IndexFunc(value, func(character rune) bool { return character < 0x20 || character == 0x7f }) >= 0 {
-		return Config{}, errors.New("隧道代理地址包含控制字符")
+		return Config{}, errors.New("Alamat proksi terowong mengandungi aksara kawalan")
 	}
 	scheme, _, ok := strings.Cut(value, "://")
 	if !ok || !IsSupportedScheme(scheme) {
-		return Config{}, errors.New("不支持的隧道代理协议")
+		return Config{}, errors.New("Protokol proksi terowong tidak disokong")
 	}
 	switch strings.ToLower(scheme) {
 	case "ss":
@@ -93,18 +93,18 @@ func Parse(value string) (Config, error) {
 func parseUserInfoProxy(value string) (Config, error) {
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Hostname() == "" || parsed.User == nil {
-		return Config{}, errors.New("隧道代理地址格式无效")
+		return Config{}, errors.New("Format alamat proksi terowong tidak sah")
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	credential := parsed.User.Username()
 	if credential == "" {
-		return Config{}, errors.New("隧道代理凭据不能为空")
+		return Config{}, errors.New("Kredensial proksi terowong tak boleh kosong")
 	}
 	if _, hasPassword := parsed.User.Password(); hasPassword {
-		return Config{}, errors.New("隧道代理凭据格式无效")
+		return Config{}, errors.New("Format kredensial proksi terowong tidak sah")
 	}
 	if parsed.Path != "" && parsed.Path != "/" {
-		return Config{}, errors.New("隧道代理地址路径无效")
+		return Config{}, errors.New("Laluan alamat proksi terowong tidak sah")
 	}
 	server, err := canonicalServer(parsed.Hostname(), parsed.Port())
 	if err != nil {
@@ -119,17 +119,17 @@ func parseUserInfoProxy(value string) (Config, error) {
 		transport = "ws"
 	}
 	if transport != "tcp" && transport != "ws" {
-		return Config{}, fmt.Errorf("暂不支持 %s 传输", transport)
+		return Config{}, fmt.Errorf("Pengangkutan %s belum disokong", transport)
 	}
 	flow := strings.ToLower(strings.TrimSpace(query.Get("flow")))
 	if scheme == "vless" {
 		parsedUUID, err := uuid.Parse(credential)
 		if err != nil {
-			return Config{}, errors.New("VLESS UUID 无效")
+			return Config{}, errors.New("UUID VLESS tidak sah")
 		}
 		credential = parsedUUID.String()
 		if encryption := strings.ToLower(strings.TrimSpace(query.Get("encryption"))); encryption != "" && encryption != "none" {
-			return Config{}, errors.New("VLESS encryption 必须为 none")
+			return Config{}, errors.New("encryption VLESS mesti none")
 		}
 	}
 	security := strings.ToLower(strings.TrimSpace(query.Get("security")))
@@ -149,26 +149,26 @@ func parseUserInfoProxy(value string) (Config, error) {
 		securityMode = "none"
 	case "reality":
 		if scheme != "vless" {
-			return Config{}, errors.New("Reality security 当前仅支持 VLESS")
+			return Config{}, errors.New("Reality security buat masa ini hanya menyokong VLESS")
 		}
 		if transport != "tcp" {
-			return Config{}, errors.New("VLESS Reality 当前仅支持 TCP 传输")
+			return Config{}, errors.New("VLESS Reality buat masa ini hanya menyokong pengangkutan TCP")
 		}
 		tlsEnabled = true
 		securityMode = "reality"
 	default:
-		return Config{}, fmt.Errorf("暂不支持 %s security %q", strings.ToUpper(scheme), security)
+		return Config{}, fmt.Errorf("%s security %q belum disokong", strings.ToUpper(scheme), security)
 	}
 	if flow != "" {
 		if scheme != "vless" || flow != "xtls-rprx-vision" {
-			return Config{}, fmt.Errorf("暂不支持 VLESS flow %q", flow)
+			return Config{}, fmt.Errorf("VLESS flow %q belum disokong", flow)
 		}
 		if transport != "tcp" || (securityMode != "tls" && securityMode != "reality") {
-			return Config{}, errors.New("VLESS Vision 需要 TCP 和 TLS 或 Reality security")
+			return Config{}, errors.New("VLESS Vision memerlukan TCP dan TLS atau Reality security")
 		}
 	}
 	if headerType := strings.ToLower(strings.TrimSpace(query.Get("headerType"))); headerType != "" && headerType != "none" {
-		return Config{}, fmt.Errorf("暂不支持 %s headerType %q", strings.ToUpper(scheme), headerType)
+		return Config{}, fmt.Errorf("%s headerType %q belum disokong", strings.ToUpper(scheme), headerType)
 	}
 	insecure, err := queryBool(query, "allowInsecure", "insecure", "skip-cert-verify")
 	if err != nil {
@@ -181,16 +181,16 @@ func parseUserInfoProxy(value string) (Config, error) {
 	spiderX := firstNonEmpty(query.Get("spx"), query.Get("spider-x"), query.Get("spiderX"))
 	if securityMode == "reality" {
 		if realityPublicKey == "" {
-			return Config{}, errors.New("VLESS Reality public key 不能为空")
+			return Config{}, errors.New("Public key VLESS Reality tak boleh kosong")
 		}
 		if fingerprint == "" {
 			fingerprint = "chrome"
 		}
 		if _, supported := realityClientHelloID(fingerprint); !supported {
-			return Config{}, fmt.Errorf("VLESS Reality 暂不支持客户端指纹 %q", fingerprint)
+			return Config{}, fmt.Errorf("VLESS Reality belum menyokong cap jari klien %q", fingerprint)
 		}
 	} else if realityPublicKey != "" || realityShortID != "" || fingerprint != "" || spiderX != "" {
-		return Config{}, errors.New("Reality 参数只能用于 Reality security")
+		return Config{}, errors.New("Parameter Reality hanya boleh digunakan dengan Reality security")
 	}
 	wsHost := firstNonEmpty(query.Get("host"), serverName)
 	if err := validateWebSocketHost(wsHost); transport == "ws" && err != nil {
@@ -203,7 +203,7 @@ func parseUserInfoProxy(value string) (Config, error) {
 		wsPath = "/" + wsPath
 	}
 	if transport == "tcp" && (query.Get("path") != "" || query.Get("host") != "") {
-		return Config{}, errors.New("TCP 隧道不能包含 WebSocket host/path")
+		return Config{}, errors.New("Terowong TCP tidak boleh mengandungi host/path WebSocket")
 	}
 	config := Config{
 		Scheme: scheme, Server: server, Credential: credential, Transport: transport,
@@ -213,7 +213,7 @@ func parseUserInfoProxy(value string) (Config, error) {
 	}
 	config.CanonicalProxyURL = canonicalUserInfoProxyURL(config)
 	if err := validateConfig(config); err != nil {
-		return Config{}, fmt.Errorf("创建 %s 隧道配置: %w", strings.ToUpper(scheme), err)
+		return Config{}, fmt.Errorf("Mencipta konfigurasi terowong %s: %w", strings.ToUpper(scheme), err)
 	}
 	return config, nil
 }
@@ -270,13 +270,13 @@ func parseShadowsocks(value string) (Config, error) {
 	if before, rawQuery, found := strings.Cut(payload, "?"); found {
 		query, err := url.ParseQuery(rawQuery)
 		if err != nil {
-			return Config{}, errors.New("Shadowsocks 查询参数无效")
+			return Config{}, errors.New("Parameter pertanyaan Shadowsocks tidak sah")
 		}
 		if plugin := strings.TrimSpace(query.Get("plugin")); plugin != "" {
-			return Config{}, errors.New("暂不支持 Shadowsocks plugin")
+			return Config{}, errors.New("Plugin Shadowsocks belum disokong")
 		}
 		if len(query) != 0 {
-			return Config{}, errors.New("Shadowsocks 查询参数无效")
+			return Config{}, errors.New("Parameter pertanyaan Shadowsocks tidak sah")
 		}
 		payload = before
 	}
@@ -285,39 +285,39 @@ func parseShadowsocks(value string) (Config, error) {
 		userPart, serverPart = payload[:separator], payload[separator+1:]
 		decoded, err := url.PathUnescape(userPart)
 		if err != nil {
-			return Config{}, errors.New("Shadowsocks 凭据无效")
+			return Config{}, errors.New("Kredensial Shadowsocks tidak sah")
 		}
 		if !strings.Contains(decoded, ":") {
 			decoded, err = decodeBase64String(decoded)
 			if err != nil {
-				return Config{}, errors.New("Shadowsocks 凭据不是有效的 Base64")
+				return Config{}, errors.New("Kredensial Shadowsocks bukan Base64 yang sah")
 			}
 		}
 		userPart = decoded
 	} else {
 		decoded, err := decodeBase64String(payload)
 		if err != nil {
-			return Config{}, errors.New("旧式 Shadowsocks 地址不是有效的 Base64")
+			return Config{}, errors.New("Alamat Shadowsocks gaya lama bukan Base64 yang sah")
 		}
 		separator := strings.LastIndex(decoded, "@")
 		if separator < 0 {
-			return Config{}, errors.New("旧式 Shadowsocks 地址格式无效")
+			return Config{}, errors.New("Format alamat Shadowsocks gaya lama tidak sah")
 		}
 		userPart, serverPart = decoded[:separator], decoded[separator+1:]
 	}
 	method, password, ok := strings.Cut(userPart, ":")
 	if !ok || strings.TrimSpace(method) == "" || password == "" {
-		return Config{}, errors.New("Shadowsocks method/password 不能为空")
+		return Config{}, errors.New("Shadowsocks method/password tak boleh kosong")
 	}
 	method = strings.ToLower(strings.TrimSpace(method))
 	switch method {
 	case "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305":
 	default:
-		return Config{}, fmt.Errorf("暂不支持 Shadowsocks method %q", method)
+		return Config{}, fmt.Errorf("Shadowsocks method %q belum disokong", method)
 	}
 	serverURL, err := url.Parse("ss://" + serverPart)
 	if err != nil || serverURL.User != nil || (serverURL.Path != "" && serverURL.Path != "/") || serverURL.RawQuery != "" || serverURL.Fragment != "" {
-		return Config{}, errors.New("Shadowsocks 服务器地址无效")
+		return Config{}, errors.New("Alamat pelayan Shadowsocks tidak sah")
 	}
 	server, err := canonicalServer(serverURL.Hostname(), serverURL.Port())
 	if err != nil {
@@ -329,7 +329,7 @@ func parseShadowsocks(value string) (Config, error) {
 		CanonicalProxyURL: "ss://" + base64.RawURLEncoding.EncodeToString([]byte(credential)) + "@" + server,
 	}
 	if err := validateConfig(config); err != nil {
-		return Config{}, fmt.Errorf("创建 Shadowsocks 隧道配置: %w", err)
+		return Config{}, fmt.Errorf("Mencipta konfigurasi terowong Shadowsocks: %w", err)
 	}
 	return config, nil
 }
@@ -357,11 +357,11 @@ func parseVMess(value string) (Config, error) {
 	}
 	decoded, err := decodeBase64Bytes(payload)
 	if err != nil {
-		return Config{}, errors.New("VMess 配置不是有效的 Base64")
+		return Config{}, errors.New("Konfigurasi VMess bukan Base64 yang sah")
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(decoded, &raw); err != nil {
-		return Config{}, errors.New("VMess 配置不是有效的 JSON")
+		return Config{}, errors.New("Konfigurasi VMess bukan JSON yang sah")
 	}
 	address := jsonString(raw, "add")
 	port := jsonString(raw, "port")
@@ -371,32 +371,32 @@ func parseVMess(value string) (Config, error) {
 	}
 	parsedUUID, err := uuid.Parse(jsonString(raw, "id"))
 	if err != nil {
-		return Config{}, errors.New("VMess UUID 无效")
+		return Config{}, errors.New("UUID VMess tidak sah")
 	}
 	userID := parsedUUID.String()
 	alterID, err := strconv.Atoi(firstNonEmpty(jsonString(raw, "aid"), "0"))
 	if err != nil || alterID < 0 || alterID > 65535 {
-		return Config{}, errors.New("VMess alterId 无效")
+		return Config{}, errors.New("alterId VMess tidak sah")
 	}
 	cipher := strings.ToLower(firstNonEmpty(jsonString(raw, "scy"), jsonString(raw, "security"), "auto"))
 	switch cipher {
 	case "auto", "aes-128-gcm", "chacha20-poly1305", "none":
 	default:
-		return Config{}, fmt.Errorf("暂不支持 VMess cipher %q", cipher)
+		return Config{}, fmt.Errorf("Cipher VMess %q belum disokong", cipher)
 	}
 	transport := strings.ToLower(firstNonEmpty(jsonString(raw, "net"), "tcp"))
 	if transport == "websocket" {
 		transport = "ws"
 	}
 	if transport != "tcp" && transport != "ws" {
-		return Config{}, fmt.Errorf("暂不支持 VMess %s 传输", transport)
+		return Config{}, fmt.Errorf("Pengangkutan VMess %s belum disokong", transport)
 	}
 	if headerType := strings.ToLower(jsonString(raw, "type")); headerType != "" && headerType != "none" {
-		return Config{}, fmt.Errorf("暂不支持 VMess header type %q", headerType)
+		return Config{}, fmt.Errorf("Header type VMess %q belum disokong", headerType)
 	}
 	tlsMode := strings.ToLower(jsonString(raw, "tls"))
 	if tlsMode != "" && tlsMode != "none" && tlsMode != "tls" {
-		return Config{}, fmt.Errorf("暂不支持 VMess TLS 模式 %q", tlsMode)
+		return Config{}, fmt.Errorf("Mod TLS VMess %q belum disokong", tlsMode)
 	}
 	tlsEnabled := tlsMode == "tls"
 	serverName := firstNonEmpty(jsonString(raw, "sni"), address)
@@ -415,7 +415,7 @@ func parseVMess(value string) (Config, error) {
 		path = "/" + path
 	}
 	if transport == "tcp" && (jsonString(raw, "path") != "" || jsonString(raw, "host") != "") {
-		return Config{}, errors.New("VMess TCP 隧道不能包含 WebSocket host/path")
+		return Config{}, errors.New("Terowong TCP VMess tidak boleh mengandungi host/path WebSocket")
 	}
 	insecure, err := jsonBool(raw, "allowInsecure")
 	if err != nil {
@@ -443,7 +443,7 @@ func parseVMess(value string) (Config, error) {
 		CanonicalProxyURL: "vmess://" + base64.RawStdEncoding.EncodeToString(canonicalJSON),
 	}
 	if err := validateConfig(config); err != nil {
-		return Config{}, fmt.Errorf("创建 VMess 隧道配置: %w", err)
+		return Config{}, fmt.Errorf("Mencipta konfigurasi terowong VMess: %w", err)
 	}
 	return config, nil
 }
@@ -479,10 +479,10 @@ func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	if d == nil || (d.proxy == nil && d.shadowsocksCipher == nil) {
-		return nil, errors.New("隧道代理拨号器未初始化")
+		return nil, errors.New("Pengurai dail proksi terowong tidak dimulakan")
 	}
 	if !strings.HasPrefix(network, "tcp") {
-		return nil, fmt.Errorf("隧道代理不支持网络 %q", network)
+		return nil, fmt.Errorf("Proksi terowong tidak menyokong rangkaian %q", network)
 	}
 	if d.shadowsocksCipher != nil {
 		return d.dialShadowsocks(ctx, address)
@@ -497,7 +497,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 func (d *Dialer) dialShadowsocks(ctx context.Context, address string) (net.Conn, error) {
 	target := socks.ParseAddr(address)
 	if target == nil {
-		return nil, errors.New("Shadowsocks 目标地址无效")
+		return nil, errors.New("Alamat sasaran Shadowsocks tidak sah")
 	}
 	connection, err := newServerNetDialer().DialContext(ctx, "tcp", d.server)
 	if err != nil {
@@ -506,7 +506,7 @@ func (d *Dialer) dialShadowsocks(ctx context.Context, address string) (net.Conn,
 	connection = d.shadowsocksCipher.StreamConn(connection)
 	if _, err := connection.Write(target); err != nil {
 		_ = connection.Close()
-		return nil, fmt.Errorf("写入 Shadowsocks 目标地址: %w", err)
+		return nil, fmt.Errorf("Menulis alamat sasaran Shadowsocks: %w", err)
 	}
 	return connection, nil
 }
@@ -528,7 +528,7 @@ func buildProxy(config Config) (netapi.Proxy, error) {
 		var err error
 		current, err = newRealityProxy(config, current)
 		if err != nil {
-			return nil, fmt.Errorf("创建 Reality 客户端: %w", err)
+			return nil, fmt.Errorf("Mencipta klien Reality: %w", err)
 		}
 	} else if config.TLS {
 		current = &tlsProxy{config: config, dialer: current}
@@ -549,7 +549,7 @@ func buildProxy(config Config) (netapi.Proxy, error) {
 		protocolConfig.SetSecurity(config.Cipher)
 		return vmess.NewClient(protocolConfig, current)
 	default:
-		return nil, errors.New("不支持的隧道代理协议")
+		return nil, errors.New("Protokol proksi terowong tidak disokong")
 	}
 }
 
@@ -573,7 +573,7 @@ func newOwnedVLESSProxy(config *protocol.Vless, dialer netapi.Proxy, flow string
 	if flow == "xtls-rprx-vision" {
 		userID, err := uuid.Parse(config.GetUuid())
 		if err != nil {
-			return nil, errors.New("VLESS Vision UUID 无效")
+			return nil, errors.New("UUID VLESS Vision tidak sah")
 		}
 		copy(proxy.uuid[:], userID[:])
 	}
@@ -589,12 +589,12 @@ func (p *ownedVLESSProxy) Conn(ctx context.Context, address netapi.Address) (net
 		result, requestErr := newVisionVLESSConn(connection, address, p.uuid, p.flow)
 		if requestErr != nil {
 			_ = connection.Close()
-			return nil, fmt.Errorf("发送 VLESS Vision 请求: %w", requestErr)
+			return nil, fmt.Errorf("Menghantar permintaan VLESS Vision: %w", requestErr)
 		}
 		visionConnection, visionErr := visionproxy.NewVisionConn(result, connection, p.uuid)
 		if visionErr != nil {
 			_ = result.Close()
-			return nil, fmt.Errorf("创建 VLESS Vision 连接: %w", visionErr)
+			return nil, fmt.Errorf("Mencipta sambungan VLESS Vision: %w", visionErr)
 		}
 		return visionConnection, nil
 	}
@@ -621,7 +621,7 @@ func newVisionVLESSConn(connection net.Conn, address netapi.Address, userID [16]
 }
 
 func (p *ownedVLESSProxy) PacketConn(ctx context.Context, address netapi.Address) (net.PacketConn, error) {
-	return nil, errors.New("VLESS 隧道不支持 UDP")
+	return nil, errors.New("Terowong VLESS tidak menyokong UDP")
 }
 
 type singleConnectionProxy struct {
@@ -631,7 +631,7 @@ type singleConnectionProxy struct {
 
 func (p *singleConnectionProxy) Conn(context.Context, netapi.Address) (net.Conn, error) {
 	if p.connection == nil {
-		return nil, errors.New("VLESS 底层连接不可用")
+		return nil, errors.New("Sambungan asas VLESS tidak tersedia")
 	}
 	connection := p.connection
 	p.connection = nil
@@ -639,7 +639,7 @@ func (p *singleConnectionProxy) Conn(context.Context, netapi.Address) (net.Conn,
 }
 
 func (p *singleConnectionProxy) PacketConn(context.Context, netapi.Address) (net.PacketConn, error) {
-	return nil, errors.New("VLESS 隧道不支持 UDP")
+	return nil, errors.New("Terowong VLESS tidak menyokong UDP")
 }
 
 type tlsProxy struct {
@@ -658,13 +658,13 @@ func (p *tlsProxy) Conn(ctx context.Context, address netapi.Address) (net.Conn, 
 	defer cancel()
 	if err := tlsConnection.HandshakeContext(handshakeCtx); err != nil {
 		_ = connection.Close()
-		return nil, fmt.Errorf("隧道 TLS 握手: %w", err)
+		return nil, fmt.Errorf("Persiapan TLS terowong: %w", err)
 	}
 	return tlsConnection, nil
 }
 
 func (p *tlsProxy) PacketConn(context.Context, netapi.Address) (net.PacketConn, error) {
-	return nil, errors.New("TLS 隧道不支持 UDP")
+	return nil, errors.New("Terowong TLS tidak menyokong UDP")
 }
 
 func (p *tlsProxy) tlsConfig() *tls.Config {
@@ -703,13 +703,13 @@ func (p *websocketProxy) Conn(ctx context.Context, address netapi.Address) (net.
 	})
 	if err != nil {
 		transport.CloseIdleConnections()
-		return nil, fmt.Errorf("隧道 WebSocket 握手: %w", err)
+		return nil, fmt.Errorf("Persiapan WebSocket terowong: %w", err)
 	}
 	return websocket.NetConn(context.Background(), connection, websocket.MessageBinary), nil
 }
 
 func (p *websocketProxy) PacketConn(context.Context, netapi.Address) (net.PacketConn, error) {
-	return nil, errors.New("WebSocket 隧道不支持 UDP")
+	return nil, errors.New("Terowong WebSocket tidak menyokong UDP")
 }
 
 type serverDialer struct {
@@ -738,28 +738,28 @@ func websocketTLSConfig(config Config) *tls.Config {
 func validateWebSocketHost(host string) error {
 	parsed, err := url.Parse("http://" + strings.TrimSpace(host))
 	if err != nil || parsed.Hostname() == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return errors.New("WebSocket host 无效")
+		return errors.New("Host WebSocket tidak sah")
 	}
 	if parsed.Port() != "" {
 		if _, err := canonicalServer(parsed.Hostname(), parsed.Port()); err != nil {
-			return errors.New("WebSocket host 无效")
+			return errors.New("Host WebSocket tidak sah")
 		}
 	}
 	return nil
 }
 
 func (d *serverDialer) PacketConn(context.Context, netapi.Address) (net.PacketConn, error) {
-	return nil, errors.New("当前隧道代理不支持 UDP")
+	return nil, errors.New("Proksi terowong semasa tidak menyokong UDP")
 }
 
 func canonicalServer(host, port string) (string, error) {
 	host = strings.TrimSpace(strings.Trim(host, "[]"))
 	if host == "" {
-		return "", errors.New("隧道代理服务器不能为空")
+		return "", errors.New("Pelayan proksi terowong tak boleh kosong")
 	}
 	parsedPort, err := strconv.ParseUint(strings.TrimSpace(port), 10, 16)
 	if err != nil || parsedPort == 0 {
-		return "", errors.New("隧道代理端口无效")
+		return "", errors.New("Port proksi terowong tidak sah")
 	}
 	return net.JoinHostPort(host, strconv.FormatUint(parsedPort, 10)), nil
 }
@@ -820,7 +820,7 @@ func jsonBool(value map[string]any, name string) (bool, error) {
 	case float64:
 		return parseBool(strconv.FormatFloat(typed, 'f', -1, 64), name)
 	default:
-		return false, fmt.Errorf("%s 必须是布尔值", name)
+		return false, fmt.Errorf("%s mesti nilai boolean", name)
 	}
 }
 
@@ -831,7 +831,7 @@ func parseBool(value, name string) (bool, error) {
 	case "", "0", "false", "no":
 		return false, nil
 	default:
-		return false, fmt.Errorf("%s 必须是布尔值", name)
+		return false, fmt.Errorf("%s mesti nilai boolean", name)
 	}
 }
 
@@ -860,13 +860,13 @@ func jsonStringList(value map[string]any, name string) ([]string, error) {
 	}
 	items, ok := raw.([]any)
 	if !ok {
-		return nil, fmt.Errorf("%s 必须是字符串或字符串数组", name)
+		return nil, fmt.Errorf("%s mesti rentetan atau tatasusunan rentetan", name)
 	}
 	result := make([]string, 0, len(items))
 	for _, item := range items {
 		text, ok := item.(string)
 		if !ok {
-			return nil, fmt.Errorf("%s 必须是字符串或字符串数组", name)
+			return nil, fmt.Errorf("%s mesti rentetan atau tatasusunan rentetan", name)
 		}
 		if text = strings.TrimSpace(text); text != "" {
 			result = append(result, text)

@@ -28,7 +28,7 @@ func (a *Adapter) SyncQuota(ctx context.Context, credential account.Credential) 
 
 func (a *Adapter) SyncQuotaMode(ctx context.Context, credential account.Credential, mode string) (account.QuotaWindow, error) {
 	if !isConsoleQuotaMode(mode) {
-		return account.QuotaWindow{}, fmt.Errorf("不支持的 Console 额度模式 %q", mode)
+		return account.QuotaWindow{}, fmt.Errorf("Mod kuota Console tidak disokong: %q", mode)
 	}
 	windows, _, err := a.syncConsoleQuotas(ctx, credential)
 	if err != nil {
@@ -39,7 +39,7 @@ func (a *Adapter) SyncQuotaMode(ctx context.Context, credential account.Credenti
 			return window, nil
 		}
 	}
-	return account.QuotaWindow{}, fmt.Errorf("Console usage 响应缺少 %s 额度", consoleQuotaKind(mode))
+	return account.QuotaWindow{}, fmt.Errorf("Respons Console usage tiada kuota %s", consoleQuotaKind(mode))
 }
 
 func (a *Adapter) syncConsoleQuotas(ctx context.Context, credential account.Credential) ([]account.QuotaWindow, time.Time, error) {
@@ -79,9 +79,9 @@ func (a *Adapter) syncConsoleQuotas(ctx context.Context, credential account.Cred
 		}
 		suffix := ""
 		if truncated {
-			suffix = " (响应已截断)"
+			suffix = " (respons dipotong)"
 		}
-		return nil, time.Time{}, fmt.Errorf("Console usage 接口返回 %d%s", response.StatusCode, suffix)
+		return nil, time.Time{}, fmt.Errorf("Antara muka Console usage mengembalikan %d%s", response.StatusCode, suffix)
 	}
 	a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsole, lease.NodeID, response.StatusCode, nil)
 	var payload struct {
@@ -94,7 +94,7 @@ func (a *Adapter) syncConsoleQuotas(ctx context.Context, credential account.Cred
 		} `json:"quotas"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil, time.Time{}, fmt.Errorf("解析 Console usage: %w", err)
+		return nil, time.Time{}, fmt.Errorf("Huraian Console usage: %w", err)
 	}
 	now := time.Now().UTC()
 	byMode := make(map[string]account.QuotaWindow, 3)
@@ -104,7 +104,7 @@ func (a *Adapter) syncConsoleQuotas(ctx context.Context, credential account.Cred
 			continue
 		}
 		if quota.Limit < 0 || quota.Used < 0 || quota.Remaining < 0 || quota.Remaining > quota.Limit {
-			return nil, time.Time{}, fmt.Errorf("Console %s 额度响应无效", consoleQuotaKind(mode))
+			return nil, time.Time{}, fmt.Errorf("Respons kuota Console %s tidak sah", consoleQuotaKind(mode))
 		}
 		usagePercent := 0.0
 		if quota.Limit > 0 {
@@ -127,7 +127,7 @@ func (a *Adapter) syncConsoleQuotas(ctx context.Context, credential account.Cred
 	}
 	for _, mode := range []string{QuotaMode, QuotaModeImage, QuotaModeVideo} {
 		if _, ok := byMode[mode]; !ok {
-			return nil, time.Time{}, fmt.Errorf("Console usage 响应缺少 %s 额度", consoleQuotaKind(mode))
+			return nil, time.Time{}, fmt.Errorf("Respons Console usage tiada kuota %s", consoleQuotaKind(mode))
 		}
 	}
 	windows := make([]account.QuotaWindow, 0, 3)

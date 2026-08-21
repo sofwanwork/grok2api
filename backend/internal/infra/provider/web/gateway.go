@@ -82,13 +82,13 @@ func (a *Adapter) openGatewayChat(ctx context.Context, credential account.Creden
 		if stateErr != nil {
 			lease.Release()
 			if errors.Is(stateErr, repository.ErrNotFound) {
-				return nil, nil, nil, "", fmt.Errorf("previous_response_id 不存在或已过期")
+				return nil, nil, nil, "", fmt.Errorf("previous_response_id tidak wujud atau sudah tamat tempoh")
 			}
 			return nil, nil, nil, "", stateErr
 		}
 		if state.AccountID != credential.ID {
 			lease.Release()
-			return nil, nil, nil, "", fmt.Errorf("previous_response_id 绑定的账号不一致")
+			return nil, nil, nil, "", fmt.Errorf("previous_response_id terikat kepada akaun yang tidak sepadan")
 		}
 		previous = &state
 	}
@@ -164,7 +164,7 @@ func (a *Adapter) resolveGatewayUserID(ctx context.Context, baseURL string, cred
 	// account synchronization path persists the same identity for later calls.
 	identity, err := sessionidentity.FetchWithLease(ctx, baseURL, token, lease, a.egress)
 	if err != nil {
-		return "", fmt.Errorf("同步 Grok Web Gateway 用户身份: %w", err)
+		return "", fmt.Errorf("Menyegerakkan identiti pengguna Grok Web Gateway: %w", err)
 	}
 	return normalizeGatewayUserID(identity.UserID)
 }
@@ -172,7 +172,7 @@ func (a *Adapter) resolveGatewayUserID(ctx context.Context, baseURL string, cred
 func normalizeGatewayUserID(value string) (string, error) {
 	parsed, err := uuid.Parse(strings.TrimSpace(value))
 	if err != nil {
-		return "", fmt.Errorf("Grok Web 账号缺少有效 user_id，请先同步账号资料")
+		return "", fmt.Errorf("Akaun Grok Web tiada user_id yang sah, sila segerakkan profil akaun terlebih dahulu")
 	}
 	return parsed.String(), nil
 }
@@ -180,7 +180,7 @@ func normalizeGatewayUserID(value string) (string, error) {
 func gatewayEndpoint(baseURL, userID string) (string, string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || parsed.Host == "" {
-		return "", "", fmt.Errorf("Grok Web Base URL 无效")
+		return "", "", fmt.Errorf("Base URL Grok Web tidak sah")
 	}
 	origin := (&url.URL{Scheme: parsed.Scheme, Host: parsed.Host}).String()
 	switch parsed.Scheme {
@@ -189,7 +189,7 @@ func gatewayEndpoint(baseURL, userID string) (string, string, error) {
 	case "http":
 		parsed.Scheme = "ws"
 	default:
-		return "", "", fmt.Errorf("Grok Web Base URL 协议无效")
+		return "", "", fmt.Errorf("Protokol Base URL Grok Web tidak sah")
 	}
 	parsed.Path = "/ws/mgw/"
 	parsed.RawPath = ""
@@ -247,7 +247,7 @@ func runGatewayStream(ctx context.Context, connection *websocket.Conn, writer io
 		initial["session_id"] = currentSessionID
 	}
 	if err := sender.write(initial); err != nil {
-		return fmt.Errorf("发送 Grok Gateway session.create: %w", err)
+		return fmt.Errorf("Menghantar Grok Gateway session.create: %w", err)
 	}
 	heartbeatDone := make(chan struct{})
 	defer close(heartbeatDone)
@@ -258,13 +258,13 @@ func runGatewayStream(ctx context.Context, connection *websocket.Conn, writer io
 	for {
 		messageType, data, err := connection.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("读取 Grok Gateway: %w", err)
+			return fmt.Errorf("Membaca Grok Gateway: %w", err)
 		}
 		if messageType != websocket.TextMessage {
 			continue
 		}
 		if len(data) > gatewayMaxFrameBytes {
-			return fmt.Errorf("Grok Gateway 响应帧超过安全上限")
+			return fmt.Errorf("Bingkai respons Grok Gateway melebihi had selamat")
 		}
 		var envelope gatewayEnvelope
 		if err := json.Unmarshal(data, &envelope); err != nil {
@@ -288,21 +288,21 @@ func runGatewayStream(ctx context.Context, connection *websocket.Conn, writer io
 				currentSessionID = envelope.Event.Conversation.ID
 			}
 			if envelope.Event.Conversation.ID == "" || envelope.Event.Conversation.ID != currentSessionID {
-				return fmt.Errorf("Grok Gateway 返回了不一致的 conversation id")
+				return fmt.Errorf("Grok Gateway mengembalikan conversation id yang tidak sepadan")
 			}
 		case "response.done", "error":
 			return nil
 		case "session.ended":
-			return fmt.Errorf("Grok Gateway session 在响应完成前结束")
+			return fmt.Errorf("Sesi Grok Gateway berakhir sebelum respons selesai")
 		}
 		if created && attached && !turnSent {
 			turnSent = true
 			item, response := gatewayTurnEvents(currentSessionID, prompt, attachments, previous)
 			if err := sender.write(item); err != nil {
-				return fmt.Errorf("发送 Grok Gateway conversation.item.create: %w", err)
+				return fmt.Errorf("Menghantar Grok Gateway conversation.item.create: %w", err)
 			}
 			if err := sender.write(response); err != nil {
-				return fmt.Errorf("发送 Grok Gateway response.create: %w", err)
+				return fmt.Errorf("Menghantar Grok Gateway response.create: %w", err)
 			}
 		}
 	}
@@ -415,7 +415,7 @@ func parseGatewayEvent(event map[string]any, parsed *parsedChat) (string, string
 		parsed.ParentID, _ = response["id"].(string)
 		status, _ := response["status"].(string)
 		if status != "" && status != "completed" {
-			return "", "", fmt.Errorf("Grok Gateway response 状态为 %s", status)
+			return "", "", fmt.Errorf("Status respons Grok Gateway ialah %s", status)
 		}
 	case "response.search.result":
 		result, _ := event["result"].(map[string]any)
@@ -652,7 +652,7 @@ func appendGatewayDelta(parsed *parsedChat, channel, delta string) (string, stri
 func gatewayEventError(event map[string]any) error {
 	errorValue, _ := event["error"].(map[string]any)
 	if errorValue == nil {
-		return errors.New("Grok Gateway 返回未知错误")
+		return errors.New("Grok Gateway mengembalikan ralat yang tidak diketahui")
 	}
 	return webResponseError(errorValue)
 }

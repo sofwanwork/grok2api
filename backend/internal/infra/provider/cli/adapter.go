@@ -463,7 +463,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 			allowClientTools := request.AllowClientToolCacheRoute || (account.RoutingCandidate{Credential: request.Credential, Billing: request.Billing}).IsKnownFreeBuild()
 			body, cacheRoute, err = prepareBuildPromptCacheRoute(body, request.Operation, request.Model, request.PromptCacheKey, allowClientTools)
 			if err != nil {
-				err = fmt.Errorf("准备 Build prompt cache 路由: %w", err)
+				err = fmt.Errorf("Menyediakan laluan prompt cache Build: %w", err)
 				if request.Operation == conversation.OperationChat || request.Operation == conversation.OperationMessages {
 					return invalidConversationResponse(request.Operation, err), nil
 				}
@@ -471,7 +471,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 			}
 			body, err = injectPromptCacheKey(body, request.PromptCacheKey)
 			if err != nil {
-				err = fmt.Errorf("写入 prompt_cache_key: %w", err)
+				err = fmt.Errorf("Menulis prompt_cache_key: %w", err)
 				if request.Operation == conversation.OperationChat || request.Operation == conversation.OperationMessages {
 					return invalidConversationResponse(request.Operation, err), nil
 				}
@@ -596,7 +596,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 				return nil, readErr
 			}
 			if len(data) > maxCompatibleResponseBytes {
-				return nil, fmt.Errorf("上游兼容 Responses 响应超过 128 MiB")
+				return nil, fmt.Errorf("Respons Responses serasi upstream melebihi 128 MiB")
 			}
 			converted, convertErr := toolCompatibility.normalizeResponseJSON(data)
 			if convertErr != nil {
@@ -626,7 +626,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 				return nil, readErr
 			}
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 && len(data) > 64<<20 {
-				return nil, fmt.Errorf("上游对话响应超过 64 MiB")
+				return nil, fmt.Errorf("Respons perbualan upstream melebihi 64 MiB")
 			}
 			var diagnostic *provider.DiagnosticResponse
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -816,7 +816,7 @@ func (a *Adapter) ListModels(ctx context.Context, credential account.Credential)
 	if models != nil {
 		return models, nil
 	}
-	return nil, fmt.Errorf("上游模型接口返回 %d", status)
+	return nil, fmt.Errorf("Antara muka model upstream mengembalikan %d", status)
 }
 
 // NormalizeAccountModelCapabilities normalizes capabilities that the OAuth
@@ -1060,7 +1060,7 @@ func (a *Adapter) PrepareImportedCredential(ctx context.Context, seed provider.C
 	defer cancel()
 	tokens, err := a.oauth.refreshWithClientID(refreshCtx, strings.TrimSpace(seed.RefreshToken), seed.OIDCClientID)
 	if err != nil {
-		return provider.CredentialSeed{}, fmt.Errorf("验证 Grok Build refresh token: %w", err)
+		return provider.CredentialSeed{}, fmt.Errorf("Mengesahkan refresh token Grok Build: %w", err)
 	}
 	claims := decodeJWTClaims(firstNonEmpty(tokens.IDToken, tokens.AccessToken))
 	seed.AccessToken = tokens.AccessToken
@@ -1233,7 +1233,7 @@ func (a *Adapter) getBilling(ctx context.Context, credential account.Credential,
 		return account.Billing{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return account.Billing{}, fmt.Errorf("上游 Billing 接口返回 %d", resp.StatusCode)
+		return account.Billing{}, fmt.Errorf("Antara muka Billing upstream mengembalikan %d", resp.StatusCode)
 	}
 	return parseBilling(body)
 }
@@ -1262,7 +1262,7 @@ func (a *Adapter) getSubscriptionTier(ctx context.Context, credential account.Cr
 		return "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("上游订阅接口返回 %d", resp.StatusCode)
+		return "", fmt.Errorf("Antara muka langganan upstream mengembalikan %d", resp.StatusCode)
 	}
 	return parseSubscriptionTier(body)
 }

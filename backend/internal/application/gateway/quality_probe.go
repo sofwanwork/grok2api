@@ -49,10 +49,10 @@ type qualityProbeChatEvent struct {
 func (s *Service) ProbeEgressQuality(ctx context.Context, nodeID uint64, input egressapp.QualityProbeInput) (egressapp.QualityProbeResult, error) {
 	key, err := s.clientKeys.Get(ctx, input.ClientKeyID)
 	if err != nil {
-		return egressapp.QualityProbeResult{}, fmt.Errorf("读取质量探测 Client Key: %w", err)
+		return egressapp.QualityProbeResult{}, fmt.Errorf("Membaca Client Key pengesanan kualiti: %w", err)
 	}
 	if !key.IsAvailable(time.Now().UTC()) {
-		return egressapp.QualityProbeResult{}, fmt.Errorf("质量探测 Client Key 已禁用或过期")
+		return egressapp.QualityProbeResult{}, fmt.Errorf("Client Key pengesanan kualiti telah dilumpuhkan atau tamat tempoh")
 	}
 	requestIDPart, err := security.NewOpaqueToken(12)
 	if err != nil {
@@ -73,7 +73,7 @@ func (s *Service) ProbeEgressQuality(ctx context.Context, nodeID uint64, input e
 	startedAt := time.Now()
 	publicModel, ok := qualityProbeBuildPublicModel(input.Model)
 	if !ok {
-		return egressapp.QualityProbeResult{}, fmt.Errorf("%w: 质量探测模型必须属于 Grok Build", egressapp.ErrInvalidInput)
+		return egressapp.QualityProbeResult{}, fmt.Errorf("%w: Model pengesanan kualiti mesti tergolong dalam Grok Build", egressapp.ErrInvalidInput)
 	}
 	probeCtx := infraegress.WithQualityProbe(ctx)
 	result, err := s.CreateChatCompletion(probeCtx, Input{
@@ -92,7 +92,7 @@ func (s *Service) ProbeEgressQuality(ctx context.Context, nodeID uint64, input e
 	if result.StatusCode < http.StatusOK || result.StatusCode >= http.StatusMultipleChoices {
 		errorCode = "quality_probe_upstream_error"
 		body, _ := io.ReadAll(io.LimitReader(result.Body, 32<<10))
-		return egressapp.QualityProbeResult{}, fmt.Errorf("质量探测上游返回 %d: %s", result.StatusCode, strings.TrimSpace(string(body)))
+		return egressapp.QualityProbeResult{}, fmt.Errorf("Upstream pengesanan kualiti memulangkan %d: %s", result.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var firstGeneratedAt time.Time
@@ -107,7 +107,7 @@ func (s *Service) ProbeEgressQuality(ctx context.Context, nodeID uint64, input e
 		totalBytes += len(line) + 1
 		if totalBytes > qualityProbeMaxStreamBytes {
 			errorCode = "quality_probe_response_too_large"
-			return egressapp.QualityProbeResult{}, fmt.Errorf("质量探测响应超过 %d MiB", qualityProbeMaxStreamBytes>>20)
+			return egressapp.QualityProbeResult{}, fmt.Errorf("Respons pengesanan kualiti melebihi %d MiB", qualityProbeMaxStreamBytes>>20)
 		}
 		line = []byte(strings.TrimSpace(string(line)))
 		if bytes.Equal(line, []byte(": grok2api-reasoning-start")) {
@@ -159,11 +159,11 @@ func (s *Service) ProbeEgressQuality(ctx context.Context, nodeID uint64, input e
 	}
 	if err := scanner.Err(); err != nil {
 		errorCode = "quality_probe_stream_interrupted"
-		return egressapp.QualityProbeResult{}, fmt.Errorf("读取质量探测流: %w", err)
+		return egressapp.QualityProbeResult{}, fmt.Errorf("Membaca strim pengesanan kualiti: %w", err)
 	}
 	if !terminal {
 		errorCode = "quality_probe_stream_incomplete"
-		return egressapp.QualityProbeResult{}, errors.New("质量探测流未正常结束")
+		return egressapp.QualityProbeResult{}, errors.New("Strim pengesanan kualiti tidak berakhir dengan normal")
 	}
 
 	completedAt := time.Now()

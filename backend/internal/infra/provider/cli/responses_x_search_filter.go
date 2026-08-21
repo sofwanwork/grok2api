@@ -46,7 +46,7 @@ func filterBuildPromptCacheResponse(response *http.Response, streaming bool, rou
 		return err
 	}
 	if len(data) > maxCompatibleResponseBytes {
-		return fmt.Errorf("Grok Build Responses 响应超过 %d MiB", maxCompatibleResponseBytes>>20)
+		return fmt.Errorf("Respons Grok Build Responses melebihi %d MiB", maxCompatibleResponseBytes>>20)
 	}
 	filtered, err := filter.filterJSON(data)
 	if err != nil {
@@ -88,14 +88,14 @@ func (f *buildXSearchResponseFilter) stream(source io.ReadCloser) io.ReadCloser 
 func (f *buildXSearchResponseFilter) filterJSON(body []byte) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("解析 Grok Build Responses 响应: %w", err)
+		return nil, fmt.Errorf("Huraian respons Grok Build Responses: %w", err)
 	}
 	if err := f.filterEnvelope(payload); err != nil {
 		return nil, err
 	}
 	filtered, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("编码 Grok Build Responses 响应: %w", err)
+		return nil, fmt.Errorf("Mengkod respons Grok Build Responses: %w", err)
 	}
 	return filtered, nil
 }
@@ -152,7 +152,7 @@ func (f *buildXSearchResponseFilter) filterOutput(envelope map[string]json.RawMe
 	}
 	var output []json.RawMessage
 	if json.Unmarshal(raw, &output) != nil {
-		return fmt.Errorf("解析 Grok Build Responses output 失败")
+		return fmt.Errorf("Huraian output Grok Build Responses gagal")
 	}
 	filtered := make([]json.RawMessage, 0, len(output))
 	for _, rawItem := range output {
@@ -175,7 +175,7 @@ func (f *buildXSearchResponseFilter) filterTools(envelope map[string]json.RawMes
 	}
 	var tools []json.RawMessage
 	if json.Unmarshal(raw, &tools) != nil {
-		return fmt.Errorf("解析 Grok Build Responses tools 失败")
+		return fmt.Errorf("Huraian tools Grok Build Responses gagal")
 	}
 	filtered := make([]json.RawMessage, 0, len(tools))
 	for _, rawTool := range tools {

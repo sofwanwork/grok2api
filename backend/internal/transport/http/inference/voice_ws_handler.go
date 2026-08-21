@@ -78,7 +78,7 @@ func (h *Handler) proxyRealtimeWebSocket(c *gin.Context) {
 
 func (h *Handler) proxySTTWebSocket(c *gin.Context) {
 	if !clientws.IsWebSocketUpgrade(c.Request) {
-		writeOpenAIError(c, http.StatusMethodNotAllowed, "invalid_request", "STT 流式接口需要 WebSocket Upgrade")
+		writeOpenAIError(c, http.StatusMethodNotAllowed, "invalid_request", "Antara muka strim STT memerlukan WebSocket Upgrade")
 		return
 	}
 	h.proxyVoiceWebSocket(c, "/stt")
@@ -86,7 +86,7 @@ func (h *Handler) proxySTTWebSocket(c *gin.Context) {
 
 func (h *Handler) proxyVoiceWebSocket(c *gin.Context, pathValue string) {
 	if !clientws.IsWebSocketUpgrade(c.Request) {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "请求不是有效的 WebSocket Upgrade")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan bukan WebSocket Upgrade yang sah")
 		return
 	}
 	clientKey, requestID, ok := requestIdentity(c)
@@ -95,7 +95,7 @@ func (h *Handler) proxyVoiceWebSocket(c *gin.Context, pathValue string) {
 	}
 	// Rate limit WebSocket connections per client key.
 	if limiter := voiceWSRateLimiter(clientKey.ID); limiter != nil && !limiter.Allow() {
-		writeOpenAIError(c, http.StatusTooManyRequests, "rate_limit_exceeded", "WebSocket 连接频率受限")
+		writeOpenAIError(c, http.StatusTooManyRequests, "rate_limit_exceeded", "Frekuensi sambungan WebSocket terhad")
 		return
 	}
 	model := strings.TrimSpace(c.Query("model"))

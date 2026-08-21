@@ -665,7 +665,7 @@ func TestStreamRejectsOversizedDeferredSearchText(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = converter.handle("response.output_text.delta", data)
-	if err == nil || !strings.Contains(err.Error(), "缓冲") {
+	if err == nil || !strings.Contains(err.Error(), "penimbal teks tertangguh") {
 		t.Fatalf("oversized deferred text error = %v", err)
 	}
 }

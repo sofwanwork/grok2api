@@ -24,7 +24,7 @@ func normalizeRequest(body []byte, spec ModelSpec) ([]byte, error) {
 func normalizeRequestWithMetadata(body []byte, spec ModelSpec, metadata *provider.NormalizedRequestMetadata) ([]byte, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("解析 Console Responses 请求: %w", err)
+		return nil, fmt.Errorf("Huraian permintaan Console Responses: %w", err)
 	}
 	payload["model"] = spec.UpstreamModel
 	// Console is stateless. Replay the supplied input and silently discard

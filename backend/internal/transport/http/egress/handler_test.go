@@ -194,7 +194,7 @@ func TestWriteQualityProbeErrorUsesSpecificSafeMessage(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	NewHandler(nil).writeQualityProbeError(context, errors.New("sensitive upstream failure"))
-	if recorder.Code != 502 || !strings.Contains(recorder.Body.String(), `"code":"egressQualityProbeFailed"`) || !strings.Contains(recorder.Body.String(), "质量检测暂不可用") || strings.Contains(recorder.Body.String(), "sensitive upstream failure") {
+	if recorder.Code != 502 || !strings.Contains(recorder.Body.String(), `"code":"egressQualityProbeFailed"`) || !strings.Contains(recorder.Body.String(), "Pengesanan kualiti tidak tersedia buat sementara waktu") || strings.Contains(recorder.Body.String(), "sensitive upstream failure") {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
@@ -203,7 +203,7 @@ func TestWriteQualityProbeErrorIdentifiesMissingProbeAccount(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	NewHandler(nil).writeQualityProbeError(context, egressapp.ErrQualityProbeNoAccount)
-	if recorder.Code != 503 || !strings.Contains(recorder.Body.String(), `"code":"egressQualityProbeNoAccount"`) || !strings.Contains(recorder.Body.String(), "暂无可调度账号") {
+	if recorder.Code != 503 || !strings.Contains(recorder.Body.String(), `"code":"egressQualityProbeNoAccount"`) || !strings.Contains(recorder.Body.String(), "tiada akaun yang boleh dijadualkan") {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

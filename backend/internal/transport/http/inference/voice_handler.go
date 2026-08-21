@@ -30,18 +30,18 @@ type ttsRequest struct {
 func (h *Handler) synthesizeSpeech(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.maxBodyBytes)
 	if !isJSONRequest(c) {
-		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "TTS 仅支持 application/json")
+		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "TTS hanya menyokong application/json")
 		return
 	}
 	var request ttsRequest
 	if err := decodeSingleJSON(c.Request.Body, &request, false); err != nil {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "TTS 请求无效")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan TTS tidak sah")
 		return
 	}
 	text := strings.TrimSpace(request.Text)
 	language := strings.TrimSpace(request.Language)
 	if text == "" || language == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "TTS 缺少有效 text 或 language")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "TTS tiada text atau language yang sah")
 		return
 	}
 	model := strings.TrimSpace(request.Model)
@@ -132,7 +132,7 @@ func (h *Handler) transcribeSpeechRequest(c *gin.Context, openAICompatible bool)
 	unsupportedOpenAIParameter := ""
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		if err := c.Request.ParseMultipartForm(h.maxBodyBytes); err != nil {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "STT multipart 请求无效")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan multipart STT tidak sah")
 			return
 		}
 		form := c.Request.MultipartForm
@@ -187,11 +187,11 @@ func (h *Handler) transcribeSpeechRequest(c *gin.Context, openAICompatible bool)
 			defer file.Close()
 			data, readErr := io.ReadAll(io.LimitReader(file, h.maxBodyBytes+1))
 			if readErr != nil {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "读取音频文件失败")
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Membaca fail audio gagal")
 				return
 			}
 			if int64(len(data)) > h.maxBodyBytes {
-				writeOpenAIError(c, http.StatusRequestEntityTooLarge, "request_too_large", "音频文件超过限制")
+				writeOpenAIError(c, http.StatusRequestEntityTooLarge, "request_too_large", "Fail audio melebihi had")
 				return
 			}
 			input.FileData = data
@@ -220,7 +220,7 @@ func (h *Handler) transcribeSpeechRequest(c *gin.Context, openAICompatible bool)
 			TimestampGranularities []string `json:"timestamp_granularities"`
 		}
 		if err := decodeSingleJSON(c.Request.Body, &payload, false); err != nil {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "STT JSON 请求无效")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan JSON STT tidak sah")
 			return
 		}
 		if strings.TrimSpace(payload.Model) != "" {
@@ -254,12 +254,12 @@ func (h *Handler) transcribeSpeechRequest(c *gin.Context, openAICompatible bool)
 			}
 		}
 	} else {
-		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "STT 支持 multipart/form-data 或 application/json")
+		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "STT menyokong multipart/form-data atau application/json")
 		return
 	}
 	if openAICompatible {
 		if unsupportedOpenAIParameter != "" {
-			writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", unsupportedOpenAIParameter+" 暂不支持，不能无损转换到 Console STT")
+			writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", unsupportedOpenAIParameter+" belum disokong, tidak boleh ditukar secara lossless ke STT Console")
 			return
 		}
 		input.ResponseFormat = strings.ToLower(strings.TrimSpace(input.ResponseFormat))
@@ -269,12 +269,12 @@ func (h *Handler) transcribeSpeechRequest(c *gin.Context, openAICompatible bool)
 		switch input.ResponseFormat {
 		case "json", "verbose_json", "text":
 		default:
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "response_format 必须是 json、verbose_json 或 text")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "response_format mesti json, verbose_json atau text")
 			return
 		}
 	}
 	if len(input.FileData) == 0 && strings.TrimSpace(input.URL) == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "STT 必须提供 file 或 url")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "STT mesti menyediakan file atau url")
 		return
 	}
 	clientKey, requestID, ok := requestIdentity(c)
@@ -306,18 +306,18 @@ func parseTTSOutputFormat(value json.RawMessage) (provider.TTSOutputFormat, erro
 		BitRate    *int   `json:"bit_rate"`
 	}
 	if err := json.Unmarshal(value, &raw); err != nil {
-		return format, errors.New("output_format 无效")
+		return format, errors.New("output_format tidak sah")
 	}
 	format.Codec = strings.ToLower(strings.TrimSpace(raw.Codec))
 	if raw.SampleRate != nil {
 		if *raw.SampleRate <= 0 {
-			return provider.TTSOutputFormat{}, errors.New("output_format.sample_rate 必须大于 0")
+			return provider.TTSOutputFormat{}, errors.New("output_format.sample_rate mesti lebih besar daripada 0")
 		}
 		format.SampleRate = *raw.SampleRate
 	}
 	if raw.BitRate != nil {
 		if *raw.BitRate <= 0 {
-			return provider.TTSOutputFormat{}, errors.New("output_format.bit_rate 必须大于 0")
+			return provider.TTSOutputFormat{}, errors.New("output_format.bit_rate mesti lebih besar daripada 0")
 		}
 		format.BitRate = *raw.BitRate
 	}
@@ -329,7 +329,7 @@ func parseTTSSpeed(value *float64) (float64, error) {
 		return 0, nil
 	}
 	if math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0.25 || *value > 4 {
-		return 0, errors.New("speed 必须在 0.25 到 4.0 之间")
+		return 0, errors.New("speed mesti antara 0.25 hingga 4.0")
 	}
 	return *value, nil
 }
@@ -343,18 +343,18 @@ func parseOptimizeStreamingLatency(value json.RawMessage) (int, error) {
 	if json.Unmarshal(value, &asString) == nil {
 		parsed, err := strconv.Atoi(strings.TrimSpace(asString))
 		if err != nil {
-			return 0, errors.New("optimize_streaming_latency 必须是 0 到 4 的整数")
+			return 0, errors.New("optimize_streaming_latency mesti integer 0 hingga 4")
 		}
 		result = parsed
 	} else {
 		var asNumber float64
 		if json.Unmarshal(value, &asNumber) != nil || math.IsNaN(asNumber) || math.IsInf(asNumber, 0) || math.Trunc(asNumber) != asNumber {
-			return 0, errors.New("optimize_streaming_latency 必须是 0 到 4 的整数")
+			return 0, errors.New("optimize_streaming_latency mesti integer 0 hingga 4")
 		}
 		result = int(asNumber)
 	}
 	if result < 0 || result > 4 {
-		return 0, errors.New("optimize_streaming_latency 必须是 0 到 4 的整数")
+		return 0, errors.New("optimize_streaming_latency mesti integer 0 hingga 4")
 	}
 	return result, nil
 }

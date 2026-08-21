@@ -43,11 +43,11 @@ type ssoBuildFlow struct {
 
 func (a *Adapter) ConvertToBuild(ctx context.Context, credential accountdomain.Credential) (provider.CredentialSeed, error) {
 	if credential.Provider != accountdomain.ProviderWeb || credential.AuthType != accountdomain.AuthTypeSSO {
-		return provider.CredentialSeed{}, fmt.Errorf("仅 Grok Web SSO 账号支持转换")
+		return provider.CredentialSeed{}, fmt.Errorf("Hanya akaun Grok Web SSO menyokong penukaran")
 	}
 	token, err := a.cipher.Decrypt(credential.EncryptedAccessToken)
 	if err != nil {
-		return provider.CredentialSeed{}, fmt.Errorf("解密 Grok Web SSO: %w", err)
+		return provider.CredentialSeed{}, fmt.Errorf("Menyahkod Grok Web SSO: %w", err)
 	}
 	token = normalizeSSOToken(token)
 	if token == "" {
@@ -80,7 +80,7 @@ func (f *ssoBuildFlow) convert(ctx context.Context, credential accountdomain.Cre
 		return provider.CredentialSeed{}, err
 	}
 	if status < 200 || status >= 300 {
-		return provider.CredentialSeed{}, fmt.Errorf("xAI Device Flow 启动失败: %w", conversionHTTPError{status: status})
+		return provider.CredentialSeed{}, fmt.Errorf("Pelancaran xAI Device Flow gagal: %w", conversionHTTPError{status: status})
 	}
 	var device struct {
 		DeviceCode string `json:"device_code"`
@@ -89,10 +89,10 @@ func (f *ssoBuildFlow) convert(ctx context.Context, credential accountdomain.Cre
 		ExpiresIn  int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(body, &device); err != nil {
-		return provider.CredentialSeed{}, fmt.Errorf("解析 xAI Device Flow: %w", err)
+		return provider.CredentialSeed{}, fmt.Errorf("Huraian xAI Device Flow: %w", err)
 	}
 	if device.DeviceCode == "" || device.UserCode == "" {
-		return provider.CredentialSeed{}, fmt.Errorf("xAI Device Flow 返回字段不完整")
+		return provider.CredentialSeed{}, fmt.Errorf("xAI Device Flow mengembalikan medan yang tidak lengkap")
 	}
 	if device.Interval <= 0 {
 		device.Interval = 5
@@ -111,13 +111,13 @@ func (f *ssoBuildFlow) convert(ctx context.Context, credential accountdomain.Cre
 		return provider.CredentialSeed{}, provider.ErrUnauthorized
 	}
 	if status < 200 || status >= 400 {
-		return provider.CredentialSeed{}, fmt.Errorf("SSO 自动验证 Device Flow 失败: %w", conversionHTTPError{status: status})
+		return provider.CredentialSeed{}, fmt.Errorf("Pengesahan automatik SSO Device Flow gagal: %w", conversionHTTPError{status: status})
 	}
 	if redirectState := ssoDeviceRedirectState(finalURL); redirectState != "consent" {
 		if redirectState == "sign-in" {
 			return provider.CredentialSeed{}, provider.ErrUnauthorized
 		}
-		return provider.CredentialSeed{}, fmt.Errorf("SSO 自动验证 Device Flow 失败")
+		return provider.CredentialSeed{}, fmt.Errorf("Pengesahan automatik SSO Device Flow gagal")
 	}
 	status, finalURL, _, err = f.doWithFollow(ctx, http.MethodPost, ssoApproveURL, url.Values{
 		"user_code": {device.UserCode}, "action": {"allow"}, "principal_type": {"User"}, "principal_id": {""},
@@ -126,13 +126,13 @@ func (f *ssoBuildFlow) convert(ctx context.Context, credential accountdomain.Cre
 		return provider.CredentialSeed{}, err
 	}
 	if status < 200 || status >= 400 {
-		return provider.CredentialSeed{}, fmt.Errorf("SSO 自动批准 Device Flow 失败: %w", conversionHTTPError{status: status})
+		return provider.CredentialSeed{}, fmt.Errorf("Kelulusan automatik SSO Device Flow gagal: %w", conversionHTTPError{status: status})
 	}
 	if redirectState := ssoDeviceRedirectState(finalURL); redirectState != "done" {
 		if redirectState == "sign-in" {
 			return provider.CredentialSeed{}, provider.ErrUnauthorized
 		}
-		return provider.CredentialSeed{}, fmt.Errorf("SSO 自动批准 Device Flow 失败")
+		return provider.CredentialSeed{}, fmt.Errorf("Kelulusan automatik SSO Device Flow gagal")
 	}
 
 	token, err := f.pollToken(ctx, device.DeviceCode, time.Duration(device.Interval)*time.Second, time.Duration(device.ExpiresIn)*time.Second)
@@ -190,7 +190,7 @@ func (f *ssoBuildFlow) pollToken(ctx context.Context, deviceCode string, interva
 			ErrorDescription string `json:"error_description"`
 		}
 		if err := json.Unmarshal(body, &payload); err != nil {
-			return ssoBuildToken{}, fmt.Errorf("解析 xAI OAuth Token: %w", err)
+			return ssoBuildToken{}, fmt.Errorf("Huraian xAI OAuth Token: %w", err)
 		}
 		if status >= 200 && status < 300 && payload.AccessToken != "" {
 			if payload.ExpiresIn <= 0 {
@@ -208,12 +208,12 @@ func (f *ssoBuildFlow) pollToken(ctx context.Context, deviceCode string, interva
 			return ssoBuildToken{}, provider.ErrAuthorizationDenied
 		default:
 			if status >= 400 {
-				return ssoBuildToken{}, fmt.Errorf("xAI OAuth Token 失败 (%s): %w", firstValue(payload.ErrorDescription, payload.Error), conversionHTTPError{status: status})
+				return ssoBuildToken{}, fmt.Errorf("xAI OAuth Token gagal (%s): %w", firstValue(payload.ErrorDescription, payload.Error), conversionHTTPError{status: status})
 			}
-			return ssoBuildToken{}, fmt.Errorf("xAI OAuth Token 失败: %s", firstValue(payload.ErrorDescription, payload.Error, strconv.Itoa(status)))
+			return ssoBuildToken{}, fmt.Errorf("xAI OAuth Token gagal: %s", firstValue(payload.ErrorDescription, payload.Error, strconv.Itoa(status)))
 		}
 	}
-	return ssoBuildToken{}, fmt.Errorf("xAI Device Flow 轮询超时")
+	return ssoBuildToken{}, fmt.Errorf("Tinjauan xAI Device Flow tamat tempoh")
 }
 
 func (f *ssoBuildFlow) do(ctx context.Context, method, endpoint string, form url.Values) (int, string, []byte, error) {
@@ -224,7 +224,7 @@ func (f *ssoBuildFlow) do(ctx context.Context, method, endpoint string, form url
 // 用于重定向目标域会被 Cloudflare 拦截（accounts.x.ai）的请求。
 func (f *ssoBuildFlow) doWithFollow(ctx context.Context, method, endpoint string, form url.Values, follow bool) (int, string, []byte, error) {
 	if !safeXAIURL(endpoint) {
-		return 0, "", nil, fmt.Errorf("xAI OAuth URL 不安全")
+		return 0, "", nil, fmt.Errorf("URL xAI OAuth tidak selamat")
 	}
 	currentURL := endpoint
 	currentMethod := method
@@ -256,14 +256,14 @@ func (f *ssoBuildFlow) doWithFollow(ctx context.Context, method, endpoint string
 			return response.StatusCode, currentURL, nil, readErr
 		}
 		if len(data) > maxAuthBody {
-			return response.StatusCode, currentURL, nil, fmt.Errorf("xAI OAuth 响应超过 2 MiB")
+			return response.StatusCode, currentURL, nil, fmt.Errorf("Respons xAI OAuth melebihi 2 MiB")
 		}
 		if response.StatusCode < 300 || response.StatusCode > 399 {
 			return response.StatusCode, currentURL, data, nil
 		}
 		location := strings.TrimSpace(response.Header.Get("Location"))
 		if location == "" {
-			return response.StatusCode, currentURL, data, fmt.Errorf("xAI OAuth 重定向缺少 Location")
+			return response.StatusCode, currentURL, data, fmt.Errorf("Pelencongan xAI OAuth tiada Location")
 		}
 		base, _ := url.Parse(currentURL)
 		next, err := url.Parse(location)
@@ -272,7 +272,7 @@ func (f *ssoBuildFlow) doWithFollow(ctx context.Context, method, endpoint string
 		}
 		currentURL = base.ResolveReference(next).String()
 		if !safeXAIURL(currentURL) {
-			return response.StatusCode, currentURL, data, fmt.Errorf("xAI OAuth 重定向到非受信域名")
+			return response.StatusCode, currentURL, data, fmt.Errorf("Pelencongan xAI OAuth ke domain yang tidak dipercayai")
 		}
 		if !follow {
 			return response.StatusCode, currentURL, nil, nil
@@ -282,7 +282,7 @@ func (f *ssoBuildFlow) doWithFollow(ctx context.Context, method, endpoint string
 			currentForm = nil
 		}
 	}
-	return 0, currentURL, nil, fmt.Errorf("xAI OAuth 重定向次数过多")
+	return 0, currentURL, nil, fmt.Errorf("Pelencongan xAI OAuth terlalu banyak kali")
 }
 
 func (f *ssoBuildFlow) captureCookies(response *http.Response) {

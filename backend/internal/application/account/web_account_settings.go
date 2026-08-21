@@ -32,12 +32,12 @@ func (s *Service) SetWebBirthDate(ctx context.Context, id uint64) error {
 // randomWebBirthDate 在所有可形成 20–40 周岁年龄的自然日中均匀取值。
 func randomWebBirthDate(now time.Time, source io.Reader) (time.Time, error) {
 	if source == nil {
-		return time.Time{}, fmt.Errorf("随机源不能为空")
+		return time.Time{}, fmt.Errorf("Sumber rawak tak boleh kosong")
 	}
 	earliest, latest := webBirthDateRange(now)
 	dayCount := int64(latest.Sub(earliest)/(24*time.Hour)) + 1
 	if dayCount <= 0 {
-		return time.Time{}, fmt.Errorf("随机生日范围无效")
+		return time.Time{}, fmt.Errorf("Julat tarikh lahir rawak tidak sah")
 	}
 	offset, err := cryptorand.Int(source, big.NewInt(dayCount))
 	if err != nil {
@@ -90,7 +90,7 @@ func (s *Service) runWebAccountScript(ctx context.Context, id uint64, options We
 		return nil
 	}
 	if options.AcceptTerms {
-		if err := s.runWebAccountSetting(ctx, credential, "接受服务协议", func() error {
+		if err := s.runWebAccountSetting(ctx, credential, "Menerima perjanjian perkhidmatan", func() error {
 			return adapter.AcceptTerms(ctx, credential)
 		}); err != nil {
 			return err
@@ -105,7 +105,7 @@ func (s *Service) runWebAccountScript(ctx context.Context, id uint64, options We
 		}
 	}
 	if options.EnableNSFW {
-		if err := s.runWebAccountSetting(ctx, credential, "开启 NSFW", func() error {
+		if err := s.runWebAccountSetting(ctx, credential, "Mengaktifkan NSFW", func() error {
 			return adapter.EnableNSFW(ctx, credential)
 		}); err != nil {
 			return err
@@ -139,7 +139,7 @@ func (s *Service) recordWebTermsAccepted(ctx context.Context, id uint64) error {
 	err := s.accounts.MarkWebTermsAccepted(writeCtx, id, accountdomain.CurrentWebTermsVersion, s.now().UTC())
 	cancel()
 	if err != nil {
-		return fmt.Errorf("记录服务协议状态: %w", mapRepositoryError(err))
+		return fmt.Errorf("Merakam status perjanjian perkhidmatan: %w", mapRepositoryError(err))
 	}
 	return nil
 }
@@ -147,15 +147,15 @@ func (s *Service) recordWebTermsAccepted(ctx context.Context, id uint64) error {
 func (s *Service) setRandomWebBirthDate(ctx context.Context, credential accountdomain.Credential, adapter provider.WebAccountSettingsAdapter) error {
 	birthDate, err := randomWebBirthDate(s.now().In(time.Local), cryptorand.Reader)
 	if err != nil {
-		return fmt.Errorf("生成随机生日: %w", err)
+		return fmt.Errorf("Menjana tarikh lahir rawak: %w", err)
 	}
-	err = s.runWebAccountSetting(ctx, credential, "设置生日", func() error {
+	err = s.runWebAccountSetting(ctx, credential, "Menetapkan tarikh lahir", func() error {
 		return adapter.SetBirthDate(ctx, credential, birthDate)
 	})
 	if err != nil && !errors.Is(err, provider.ErrBirthDateAlreadySet) {
 		return err
 	}
-	return s.recordWebAccountState(ctx, credential.ID, "生日", s.accounts.MarkWebBirthDateSet)
+	return s.recordWebAccountState(ctx, credential.ID, "tarikh lahir", s.accounts.MarkWebBirthDateSet)
 }
 
 func (s *Service) recordWebAccountState(ctx context.Context, id uint64, state string, mark func(context.Context, uint64, time.Time) error) error {
@@ -163,7 +163,7 @@ func (s *Service) recordWebAccountState(ctx context.Context, id uint64, state st
 	err := mark(writeCtx, id, s.now().UTC())
 	cancel()
 	if err != nil {
-		return fmt.Errorf("记录%s状态: %w", state, mapRepositoryError(err))
+		return fmt.Errorf("Merakam status %s: %w", state, mapRepositoryError(err))
 	}
 	return nil
 }
@@ -174,14 +174,14 @@ func (s *Service) webAccountSettings(ctx context.Context, id uint64) (accountdom
 		return accountdomain.Credential{}, nil, mapRepositoryError(err)
 	}
 	if credential.Provider != accountdomain.ProviderWeb || credential.AuthType != accountdomain.AuthTypeSSO {
-		return accountdomain.Credential{}, nil, fmt.Errorf("%w: 仅 Grok Web SSO 账号支持该操作", ErrUnsupported)
+		return accountdomain.Credential{}, nil, fmt.Errorf("%w: Hanya akaun Grok Web SSO menyokong operasi ini", ErrUnsupported)
 	}
 	if s.providers == nil {
-		return accountdomain.Credential{}, nil, fmt.Errorf("Grok Web Provider 未注册")
+		return accountdomain.Credential{}, nil, fmt.Errorf("Grok Web Provider tidak berdaftar")
 	}
 	adapter, ok := s.providers.WebAccountSettings()
 	if !ok {
-		return accountdomain.Credential{}, nil, fmt.Errorf("%w: Grok Web Provider 不支持账号资料设置", ErrUnsupported)
+		return accountdomain.Credential{}, nil, fmt.Errorf("%w: Grok Web Provider tidak menyokong penetapan profil akaun", ErrUnsupported)
 	}
 	return credential, adapter, nil
 }

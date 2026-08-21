@@ -227,7 +227,7 @@ func TestGenerateVideoRejectsTooManyImagesBeforeUpstream(t *testing.T) {
 		Prompt:        "animate",
 		ReferenceURLs: references,
 	})
-	if err == nil || !strings.Contains(err.Error(), "最多支持") {
+	if err == nil || !strings.Contains(err.Error(), "menyokong maksimum") {
 		t.Fatalf("error = %v", err)
 	}
 	if hits.Load() != 0 {
@@ -582,7 +582,7 @@ func TestGenerateVideoFailedStatusAndDownloadTrustedURL(t *testing.T) {
 	}
 
 	_, _, _, err = adapter.DownloadVideo(context.Background(), account.Credential{EncryptedAccessToken: encrypted}, "https://evil.example/video.mp4")
-	if err == nil || !strings.Contains(err.Error(), "不受信任") {
+	if err == nil || !strings.Contains(err.Error(), "tidak dipercayai") {
 		t.Fatalf("untrusted download err = %v", err)
 	}
 }

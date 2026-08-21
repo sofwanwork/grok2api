@@ -41,20 +41,20 @@ type realityProxy struct {
 func newRealityProxy(config Config, dialer netapi.Proxy) (netapi.Proxy, error) {
 	publicKeyBytes, err := base64.RawURLEncoding.DecodeString(config.RealityPublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("解析 Reality public key: %w", err)
+		return nil, fmt.Errorf("Huraian public key Reality: %w", err)
 	}
 	publicKey, err := ecdh.X25519().NewPublicKey(publicKeyBytes)
 	if err != nil {
-		return nil, errors.New("Reality public key 无效")
+		return nil, errors.New("Public key Reality tidak sah")
 	}
 	var shortID [8]byte
 	decodedLength, err := hex.Decode(shortID[:], []byte(config.RealityShortID))
 	if err != nil || decodedLength > len(shortID) {
-		return nil, errors.New("Reality short ID 无效")
+		return nil, errors.New("Short ID Reality tidak sah")
 	}
 	helloID, ok := realityClientHelloID(config.ClientFingerprint)
 	if !ok {
-		return nil, fmt.Errorf("VLESS Reality 暂不支持客户端指纹 %q", config.ClientFingerprint)
+		return nil, fmt.Errorf("VLESS Reality belum menyokong cap jari klien %q", config.ClientFingerprint)
 	}
 	return &realityProxy{
 		dialer: dialer, serverName: config.ServerName, publicKey: publicKey,
@@ -91,13 +91,13 @@ func (p *realityProxy) Conn(ctx context.Context, address netapi.Address) (net.Co
 	secure, err := p.handshake(handshakeCtx, connection)
 	if err != nil {
 		_ = connection.Close()
-		return nil, fmt.Errorf("Reality 握手: %w", err)
+		return nil, fmt.Errorf("Persiapan Reality: %w", err)
 	}
 	return secure, nil
 }
 
 func (p *realityProxy) PacketConn(context.Context, netapi.Address) (net.PacketConn, error) {
-	return nil, errors.New("Reality 隧道不支持 UDP")
+	return nil, errors.New("Terowong Reality tidak menyokong UDP")
 }
 
 func (p *realityProxy) handshake(ctx context.Context, connection net.Conn) (net.Conn, error) {
@@ -145,7 +145,7 @@ func (p *realityProxy) handshake(ctx context.Context, connection net.Conn) (net.
 		return nil, err
 	}
 	if !verifier.verified {
-		return nil, errors.New("Reality 身份验证失败")
+		return nil, errors.New("Pengesahan identiti Reality gagal")
 	}
 	return secure, nil
 }
@@ -160,7 +160,7 @@ func buildRealityClientHello(connection net.Conn, serverName string, alpn []stri
 		return nil, err
 	}
 	if secure.HandshakeState.Hello == nil || len(secure.HandshakeState.Hello.Raw) < 71 {
-		return nil, errors.New("Reality ClientHello 无效")
+		return nil, errors.New("ClientHello Reality tidak sah")
 	}
 	if len(alpn) != 0 {
 		patched := false
@@ -179,7 +179,7 @@ func buildRealityClientHello(connection net.Conn, serverName string, alpn []stri
 	}
 	privateKey := secure.HandshakeState.State13.EcdheKey
 	if privateKey == nil || privateKey.Curve() != ecdh.X25519() {
-		return nil, fmt.Errorf("Reality 客户端指纹 %q 未提供 X25519 TLS 1.3 key share", helloID.Client)
+		return nil, fmt.Errorf("Cap jari klien Reality %q tidak menyediakan key share X25519 TLS 1.3", helloID.Client)
 	}
 	return secure, nil
 }
@@ -215,7 +215,7 @@ func (v *realityVerifier) verifyPeerCertificate(rawCertificates [][]byte, _ [][]
 		certificates = append(certificates, certificate)
 	}
 	if len(certificates) == 0 {
-		return errors.New("Reality 服务端未返回证书")
+		return errors.New("Pelayan Reality tidak mengembalikan sijil")
 	}
 	if publicKey, ok := certificates[0].PublicKey.(ed25519.PublicKey); ok {
 		digest := hmac.New(sha512.New, v.authKey)

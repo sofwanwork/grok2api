@@ -143,10 +143,10 @@ func (s *Service) refreshDueCredentials(ctx context.Context) error {
 			return err
 		})
 		if batchErr != nil {
-			return fmt.Errorf("自动刷新批次执行失败: %w", batchErr)
+			return fmt.Errorf("Pelaksanaan kelompok penyegaran automatik gagal: %w", batchErr)
 		}
 		if failed > 0 {
-			return fmt.Errorf("自动刷新批次失败 %d/%d", failed, len(ids))
+			return fmt.Errorf("Kelompok penyegaran automatik gagal %d/%d", failed, len(ids))
 		}
 		if len(ids) < credentialRefreshBatchSize {
 			return nil

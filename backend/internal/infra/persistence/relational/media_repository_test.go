@@ -294,7 +294,7 @@ func TestAccountDeleteDetachesTerminalMediaJobsAndRejectsActiveJobs(t *testing.T
 	if err := jobs.CreateMediaJob(ctx, activeJob); err != nil {
 		t.Fatal(err)
 	}
-	if err := accounts.Delete(ctx, activeAccount.ID); !errors.Is(err, repository.ErrConflict) || !strings.Contains(err.Error(), "进行中") {
+	if err := accounts.Delete(ctx, activeAccount.ID); !errors.Is(err, repository.ErrConflict) || !strings.Contains(err.Error(), "sedang berjalan") {
 		t.Fatalf("delete account with active media job error = %v", err)
 	}
 	if _, err := accounts.Get(ctx, activeAccount.ID); err != nil {

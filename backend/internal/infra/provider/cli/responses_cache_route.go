@@ -21,7 +21,7 @@ func prepareBuildPromptCacheRoute(body []byte, operation, model, promptCacheKey 
 	}
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, route, fmt.Errorf("解析 Build prompt cache 请求: %w", err)
+		return nil, route, fmt.Errorf("Huraian permintaan prompt cache Build: %w", err)
 	}
 	if payload == nil {
 		payload = make(map[string]json.RawMessage)
@@ -74,7 +74,7 @@ func prepareBuildPromptCacheRoute(body []byte, operation, model, promptCacheKey 
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return nil, route, fmt.Errorf("编码 Build prompt cache 请求: %w", err)
+		return nil, route, fmt.Errorf("Mengkod permintaan prompt cache Build: %w", err)
 	}
 	return encoded, route, nil
 }
@@ -114,7 +114,7 @@ func buildCacheRouteTools(payload map[string]json.RawMessage) ([]json.RawMessage
 	}
 	var tools []json.RawMessage
 	if json.Unmarshal(raw, &tools) != nil {
-		return nil, &responsesRequestError{Message: "tools 必须是数组", Param: "tools", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "tools mesti tatasusunan", Param: "tools", Code: "invalid_parameter"}
 	}
 	return tools, nil
 }

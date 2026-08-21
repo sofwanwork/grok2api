@@ -18,7 +18,7 @@ type PanicError struct {
 }
 
 func (e *PanicError) Error() string {
-	return fmt.Sprintf("批量任务 panic: %v", e.Value)
+	return fmt.Sprintf("Panic tugas pukal: %v", e.Value)
 }
 
 // Pool 在多个批量操作之间共享并发容量，避免并发请求叠加突破上游保护阈值。

@@ -13,12 +13,12 @@ import (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("管理员账号或密码错误")
-	ErrInvalidSession     = errors.New("管理员会话无效")
-	ErrBootstrapRequired  = errors.New("首次启动需要设置管理员账号和密码")
-	ErrInvalidPassword    = errors.New("新密码至少需要 8 个字符")
-	ErrLoginRateLimited   = errors.New("管理员登录尝试过于频繁")
-	ErrRuntimeUnavailable = errors.New("管理员认证运行态暂不可用")
+	ErrInvalidCredentials = errors.New("Nama pengguna atau kata laluan pentadbir salah")
+	ErrInvalidSession     = errors.New("Sesi pentadbir tidak sah")
+	ErrBootstrapRequired  = errors.New("Pelancaran pertama memerlukan penetapan nama pengguna dan kata laluan pentadbir")
+	ErrInvalidPassword    = errors.New("Kata laluan baharu memerlukan sekurang-kurangnya 8 aksara")
+	ErrLoginRateLimited   = errors.New("Percubaan log masuk pentadbir terlalu kerap")
+	ErrRuntimeUnavailable = errors.New("Runtime pengesahan pentadbir tidak tersedia buat masa ini")
 )
 
 type Tokens struct {

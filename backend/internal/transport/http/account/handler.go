@@ -419,7 +419,7 @@ func (h *Handler) list(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "accountListFailed", "读取账号失败")
+		response.Error(c, http.StatusInternalServerError, "accountListFailed", "Gagal membaca akaun")
 		return
 	}
 	items := make([]accountResponse, 0, len(values))
@@ -432,7 +432,7 @@ func (h *Handler) list(c *gin.Context) {
 func (h *Handler) summary(c *gin.Context) {
 	value, err := h.service.Summary(c.Request.Context())
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "accountSummaryFailed", "读取账号统计失败")
+		response.Error(c, http.StatusInternalServerError, "accountSummaryFailed", "Gagal membaca statistik akaun")
 		return
 	}
 	build := value.Providers[string(accountdomain.ProviderBuild)]
@@ -453,7 +453,7 @@ func (h *Handler) summary(c *gin.Context) {
 func (h *Handler) batchUpdate(c *gin.Context) {
 	var request batchUpdateRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -463,7 +463,7 @@ func (h *Handler) batchUpdate(c *gin.Context) {
 	}
 	updated, err := h.service.BatchUpdate(c.Request.Context(), accountdomain.Provider(request.Provider), ids, accountapp.UpdateInput{Enabled: request.Enabled, Priority: request.Priority, MaxConcurrent: request.MaxConcurrent, MinimumRemaining: request.MinimumRemaining})
 	if err != nil {
-		h.writeServiceError(c, "accountBatchUpdateFailed", err, http.StatusInternalServerError, "批量更新账号失败")
+		h.writeServiceError(c, "accountBatchUpdateFailed", err, http.StatusInternalServerError, "Gagal mengemas kini akaun secara pukal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"updated": updated})
@@ -472,7 +472,7 @@ func (h *Handler) batchUpdate(c *gin.Context) {
 func (h *Handler) batchDelete(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -490,7 +490,7 @@ func (h *Handler) batchDelete(c *gin.Context) {
 	}
 	result, err := h.service.BatchDeleteWithLinked(c.Request.Context(), accountdomain.Provider(request.Provider), ids, targets)
 	if err != nil {
-		h.writeServiceError(c, "accountBatchDeleteFailed", err, http.StatusInternalServerError, "批量删除账号失败")
+		h.writeServiceError(c, "accountBatchDeleteFailed", err, http.StatusInternalServerError, "Gagal memadam akaun secara pukal")
 		return
 	}
 	response.Success(c, http.StatusOK, newAccountDeleteResponse(result))
@@ -499,7 +499,7 @@ func (h *Handler) batchDelete(c *gin.Context) {
 func (h *Handler) previewDeletion(c *gin.Context) {
 	var request deletionPreviewRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -517,7 +517,7 @@ func (h *Handler) previewDeletion(c *gin.Context) {
 	}
 	resolution, err := h.service.PreviewLinkedDelete(c.Request.Context(), accountdomain.Provider(request.Provider), ids, targets)
 	if err != nil {
-		h.writeServiceError(c, "accountDeletionPreviewFailed", err, http.StatusInternalServerError, "预览删除账号失败")
+		h.writeServiceError(c, "accountDeletionPreviewFailed", err, http.StatusInternalServerError, "Gagal pratonton pemadaman akaun")
 		return
 	}
 	linked := gin.H{}
@@ -534,7 +534,7 @@ func (h *Handler) previewDeletion(c *gin.Context) {
 func (h *Handler) batchRefreshBilling(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -543,7 +543,7 @@ func (h *Handler) batchRefreshBilling(c *gin.Context) {
 		return
 	}
 	if request.Provider != string(accountdomain.ProviderBuild) {
-		response.Error(c, http.StatusBadRequest, "invalidProvider", "仅 Grok Build 账号支持 Billing 同步")
+		response.Error(c, http.StatusBadRequest, "invalidProvider", "Hanya akaun Grok Build menyokong penyegerakan Billing")
 		return
 	}
 	if !h.validateProviderIDs(c, ids, request.Provider) {
@@ -551,7 +551,7 @@ func (h *Handler) batchRefreshBilling(c *gin.Context) {
 	}
 	succeeded, failed, err := h.service.BatchRefreshBilling(c.Request.Context(), ids)
 	if err != nil {
-		h.writeServiceError(c, "billingBatchRefreshFailed", err, http.StatusBadGateway, "批量同步 Billing 失败")
+		h.writeServiceError(c, "billingBatchRefreshFailed", err, http.StatusBadGateway, "Gagal menyegerakkan Billing secara pukal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"succeeded": succeeded, "failed": failed})
@@ -561,17 +561,17 @@ func (h *Handler) detectBuildAccounts(c *gin.Context) {
 	var request detectBuildAccountsRequest
 	if c.Request.Body != nil {
 		if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-			response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+			response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 			return
 		}
 	}
 	if request.Provider != "" && request.Provider != string(accountdomain.ProviderBuild) {
-		response.Error(c, http.StatusBadRequest, "invalidProvider", "仅 Grok Build 账号支持可用性检测")
+		response.Error(c, http.StatusBadRequest, "invalidProvider", "Hanya akaun Grok Build menyokong pengesanan ketersediaan")
 		return
 	}
 	hasIDs := len(request.IDs) > 0
 	if request.All == hasIDs {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "必须明确选择全部账号或提供非空账号 ID")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Mesti memilih semua akaun secara jelas atau menyediakan ID akaun yang tidak kosong")
 		return
 	}
 	var ids []uint64
@@ -600,7 +600,7 @@ func (h *Handler) detectBuildAccounts(c *gin.Context) {
 	}
 	succeeded, failed, err := h.service.DetectBuildAccountsWithProgress(c.Request.Context(), ids, request.All, stream.ProgressObserver(), itemObserver)
 	if err != nil {
-		stream.WriteError("accountDetectFailed", "检测 Grok Build 账号失败")
+		stream.WriteError("accountDetectFailed", "Gagal mengesan akaun Grok Build")
 		return
 	}
 	_ = stream.Write("complete", accountBatchResponse{Succeeded: succeeded, Failed: failed})
@@ -609,7 +609,7 @@ func (h *Handler) detectBuildAccounts(c *gin.Context) {
 func (h *Handler) batchResetQuota(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -618,12 +618,12 @@ func (h *Handler) batchResetQuota(c *gin.Context) {
 		return
 	}
 	if request.Provider != string(accountdomain.ProviderBuild) {
-		response.Error(c, http.StatusBadRequest, "invalidProvider", "仅 Grok Build 账号支持手动重置额度状态")
+		response.Error(c, http.StatusBadRequest, "invalidProvider", "Hanya akaun Grok Build menyokong penyetelan semula status kuota secara manual")
 		return
 	}
 	reset, err := h.service.BatchResetQuotaState(c.Request.Context(), ids)
 	if err != nil {
-		h.writeServiceError(c, "quotaBatchResetFailed", err, http.StatusInternalServerError, "批量重置额度状态失败")
+		h.writeServiceError(c, "quotaBatchResetFailed", err, http.StatusInternalServerError, "Gagal menetapkan semula status kuota secara pukal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"reset": reset})
@@ -632,7 +632,7 @@ func (h *Handler) batchResetQuota(c *gin.Context) {
 func (h *Handler) resetAllBuildQuota(c *gin.Context) {
 	reset, err := h.service.ResetAllBuildQuotaState(c.Request.Context())
 	if err != nil {
-		h.writeServiceError(c, "quotaResetFailed", err, http.StatusInternalServerError, "重置全部 Grok Build 额度状态失败")
+		h.writeServiceError(c, "quotaResetFailed", err, http.StatusInternalServerError, "Gagal menetapkan semula semua status kuota Grok Build")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"reset": reset})
@@ -641,7 +641,7 @@ func (h *Handler) resetAllBuildQuota(c *gin.Context) {
 func (h *Handler) cleanup(c *gin.Context) {
 	var request accountCleanupRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	targets, err := parseLinkedDeleteTargets(request.LinkedDeleteTargets)
@@ -651,7 +651,7 @@ func (h *Handler) cleanup(c *gin.Context) {
 	}
 	result, err := h.service.CleanupAccounts(c.Request.Context(), accountdomain.Provider(request.Provider), request.Statuses, targets)
 	if err != nil {
-		h.writeServiceError(c, "accountCleanupFailed", err, http.StatusInternalServerError, "清理账号失败")
+		h.writeServiceError(c, "accountCleanupFailed", err, http.StatusInternalServerError, "Gagal membersihkan akaun")
 		return
 	}
 	byProvider := gin.H{}
@@ -671,7 +671,7 @@ func (h *Handler) cleanup(c *gin.Context) {
 func (h *Handler) cleanupPreview(c *gin.Context) {
 	var request accountCleanupRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	targets, err := parseLinkedDeleteTargets(request.LinkedDeleteTargets)
@@ -681,7 +681,7 @@ func (h *Handler) cleanupPreview(c *gin.Context) {
 	}
 	preview, err := h.service.PreviewCleanup(c.Request.Context(), accountdomain.Provider(request.Provider), request.Statuses, targets)
 	if err != nil {
-		h.writeServiceError(c, "accountCleanupPreviewFailed", err, http.StatusInternalServerError, "预览清理账号失败")
+		h.writeServiceError(c, "accountCleanupPreviewFailed", err, http.StatusInternalServerError, "Gagal pratonton pembersihan akaun")
 		return
 	}
 	rootsByStatus := gin.H{}
@@ -703,7 +703,7 @@ func (h *Handler) cleanupPreview(c *gin.Context) {
 func (h *Handler) batchRefreshQuotas(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -713,7 +713,7 @@ func (h *Handler) batchRefreshQuotas(c *gin.Context) {
 	}
 	providerValue := accountdomain.Provider(request.Provider)
 	if !providerValue.IsValid() {
-		response.Error(c, http.StatusBadRequest, "invalidProvider", "账号来源无效")
+		response.Error(c, http.StatusBadRequest, "invalidProvider", "Sumber akaun tidak sah")
 		return
 	}
 	if !h.validateProviderIDs(c, ids, request.Provider) {
@@ -726,7 +726,7 @@ func (h *Handler) batchRefreshQuotas(c *gin.Context) {
 		succeeded, failed, err = h.service.BatchRefreshQuota(c.Request.Context(), ids)
 	}
 	if err != nil {
-		h.writeServiceError(c, "quotaBatchRefreshFailed", err, http.StatusBadGateway, "批量同步账号额度失败")
+		h.writeServiceError(c, "quotaBatchRefreshFailed", err, http.StatusBadGateway, "Gagal menyegerakkan kuota akaun secara pukal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"succeeded": succeeded, "failed": failed})
@@ -735,7 +735,7 @@ func (h *Handler) batchRefreshQuotas(c *gin.Context) {
 func (h *Handler) batchRefreshTokens(c *gin.Context) {
 	var request batchDeleteRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -744,7 +744,7 @@ func (h *Handler) batchRefreshTokens(c *gin.Context) {
 		return
 	}
 	if request.Provider != string(accountdomain.ProviderBuild) {
-		response.Error(c, http.StatusBadRequest, "invalidProvider", "仅 Grok Build 账号支持凭据刷新")
+		response.Error(c, http.StatusBadRequest, "invalidProvider", "Hanya akaun Grok Build menyokong penyegaran kredensial")
 		return
 	}
 	if !h.validateProviderIDs(c, ids, request.Provider) {
@@ -752,7 +752,7 @@ func (h *Handler) batchRefreshTokens(c *gin.Context) {
 	}
 	succeeded, failed, skipped, err := h.service.BatchRefreshTokens(c.Request.Context(), ids)
 	if err != nil {
-		h.writeServiceError(c, "tokenRefreshFailed", err, http.StatusBadGateway, "批量刷新账号凭据失败")
+		h.writeServiceError(c, "tokenRefreshFailed", err, http.StatusBadGateway, "Gagal menyegarkan kredensial akaun secara pukal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"succeeded": succeeded, "failed": failed, "skipped": skipped})
@@ -765,7 +765,7 @@ func (h *Handler) get(c *gin.Context) {
 	}
 	value, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
-		h.writeServiceError(c, "accountGetFailed", err, http.StatusInternalServerError, "读取账号失败")
+		h.writeServiceError(c, "accountGetFailed", err, http.StatusInternalServerError, "Gagal membaca akaun")
 		return
 	}
 	response.Success(c, http.StatusOK, newAccountResponse(value))
@@ -774,7 +774,7 @@ func (h *Handler) get(c *gin.Context) {
 func (h *Handler) startDevice(c *gin.Context) {
 	value, err := h.service.StartDeviceLogin(c.Request.Context())
 	if err != nil {
-		response.Error(c, http.StatusBadGateway, "deviceLoginStartFailed", "启动 Device OAuth 失败")
+		response.Error(c, http.StatusBadGateway, "deviceLoginStartFailed", "Gagal memulakan Device OAuth")
 		return
 	}
 	response.Success(c, http.StatusCreated, gin.H{"sessionId": value.SessionID, "userCode": value.UserCode, "verificationUri": value.VerificationURI, "verificationUriComplete": value.VerificationURIComplete, "intervalSeconds": int(value.Interval.Seconds()), "expiresAt": value.ExpiresAt})
@@ -787,15 +787,15 @@ func (h *Handler) pollDevice(c *gin.Context) {
 		return
 	}
 	if errors.Is(err, accountapp.ErrDeviceSlowDown) {
-		response.Error(c, http.StatusTooManyRequests, "devicePollTooFast", "轮询过快，请稍后重试")
+		response.Error(c, http.StatusTooManyRequests, "devicePollTooFast", "Pengundian terlalu cepat, sila cuba sebentar lagi")
 		return
 	}
 	if errors.Is(err, accountapp.ErrDeviceDenied) {
-		response.Error(c, http.StatusGone, "deviceLoginExpired", "Device OAuth 已拒绝或过期")
+		response.Error(c, http.StatusGone, "deviceLoginExpired", "Device OAuth telah ditolak atau tamat tempoh")
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusBadGateway, "deviceLoginFailed", "Device OAuth 登录失败")
+		response.Error(c, http.StatusBadGateway, "deviceLoginFailed", "Log masuk Device OAuth gagal")
 		return
 	}
 	syncResult := h.syncInitial(c.Request.Context(), value.Credential.ID)
@@ -824,18 +824,18 @@ func (h *Handler) importConsoleAuth(c *gin.Context) {
 func (h *Handler) convertWebToBuild(c *gin.Context) {
 	var request buildConversionRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "转换请求无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Permintaan penukaran tidak sah")
 		return
 	}
 	if request.All && len(request.IDs) > 0 {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "全部转换与指定账号不能同时提交")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Penukaran semua dan akaun tertentu tidak boleh dihantar serentak")
 		return
 	}
 	if request.Strategy == "" {
 		request.Strategy = accountapp.BuildConversionMissing
 	}
 	if request.Strategy != accountapp.BuildConversionAll && request.Strategy != accountapp.BuildConversionMissing {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "转换策略无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Strategi penukaran tidak sah")
 		return
 	}
 	var ids []uint64
@@ -856,18 +856,18 @@ func (h *Handler) convertWebToBuild(c *gin.Context) {
 func (h *Handler) syncWebToConsole(c *gin.Context) {
 	var request webConsoleSyncRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "同步请求无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Permintaan penyegerakan tidak sah")
 		return
 	}
 	if request.All && len(request.IDs) > 0 {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "全部同步与指定账号不能同时提交")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Penyegerakan semua dan akaun tertentu tidak boleh dihantar serentak")
 		return
 	}
 	if request.Strategy == "" {
 		request.Strategy = accountapp.WebConsoleSyncAll
 	}
 	if request.Strategy != accountapp.WebConsoleSyncAll && request.Strategy != accountapp.WebConsoleSyncMissing {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "同步策略无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Strategi penyegerakan tidak sah")
 		return
 	}
 	var ids []uint64
@@ -906,7 +906,7 @@ func (h *Handler) streamWebToConsoleSync(c *gin.Context, all bool, ids []uint64,
 	var total atomic.Int64
 	result, syncResult, err := h.runWebToConsoleSync(c.Request.Context(), all, ids, strategy, stream.PhaseProgressObserver("importing", &total), stream.SyncProgressObserver())
 	if err != nil {
-		stream.WriteError("accountConsoleSyncFailed", "Grok Web 账号同步到 Console 失败")
+		stream.WriteError("accountConsoleSyncFailed", "Gagal menyegerakkan akaun Grok Web ke Console")
 		return
 	}
 	_ = stream.Write("complete", accountImportResponse{Created: result.Created, Updated: result.Updated, Skipped: result.Skipped, Synced: syncResult.Succeeded, SyncFailed: syncResult.Failed})
@@ -933,7 +933,7 @@ func (h *Handler) streamWebToBuildConversion(c *gin.Context, all bool, ids []uin
 	var total atomic.Int64
 	result, syncResult, err := h.runWebToBuildConversion(c.Request.Context(), all, ids, strategy, stream.PhaseProgressObserver("converting", &total), stream.SyncProgressObserver())
 	if err != nil {
-		stream.WriteError("accountConversionFailed", "Grok Web 账号转换失败")
+		stream.WriteError("accountConversionFailed", "Gagal menukar akaun Grok Web")
 		return
 	}
 	_ = stream.Write("complete", newBuildConversionResponse(result, syncResult))
@@ -1058,11 +1058,11 @@ func writeAccountEvent(c *gin.Context, event string, value any) error {
 }
 
 func (h *Handler) importFile(c *gin.Context, providerValue accountdomain.Provider) {
-	fileDescription := "账号凭据 JSON、逐行 JSON 或 refresh token 文本"
+	fileDescription := "JSON kredensial akaun, JSON baris demi baris atau teks refresh token"
 	if providerValue == accountdomain.ProviderWeb {
-		fileDescription = "Grok Web JSON、逐行 JSON 或 SSO 文本"
+		fileDescription = "JSON Grok Web, JSON baris demi baris atau teks SSO"
 	} else if providerValue == accountdomain.ProviderConsole {
-		fileDescription = "Grok Console JSON、逐行 JSON 或 SSO 文本"
+		fileDescription = "JSON Grok Console, JSON baris demi baris atau teks SSO"
 	}
 	documents, ok := readAccountImportDocuments(c, fileDescription)
 	if !ok {
@@ -1083,7 +1083,7 @@ func (h *Handler) importFile(c *gin.Context, providerValue accountdomain.Provide
 	}
 	syncResult := pipeline.Finish(err != nil)
 	if err != nil {
-		stream.WriteError("authImportFailed", "导入账号失败")
+		stream.WriteError("authImportFailed", "Gagal mengimport akaun")
 		return
 	}
 	_ = stream.Write("complete", accountImportResponse{Created: result.Created, Updated: result.Updated, Skipped: result.Skipped, Failed: result.Failed, Synced: syncResult.Succeeded, SyncFailed: syncResult.Failed})
@@ -1094,43 +1094,43 @@ func readAccountImportDocuments(c *gin.Context, fileDescription string) ([][]byt
 	if err != nil {
 		var sizeError *http.MaxBytesError
 		if errors.As(err, &sizeError) {
-			response.Error(c, http.StatusRequestEntityTooLarge, "accountImportFileTooLarge", "账号凭据文件总大小不能超过 30 MiB")
+			response.Error(c, http.StatusRequestEntityTooLarge, "accountImportFileTooLarge", "Saiz jumlah fail kredensial akaun tidak boleh melebihi 30 MiB")
 			return nil, false
 		}
-		response.Error(c, http.StatusBadRequest, "invalidAuthFile", "请选择有效的"+fileDescription)
+		response.Error(c, http.StatusBadRequest, "invalidAuthFile", "Sila pilih fail yang sah bagi "+fileDescription)
 		return nil, false
 	}
 	defer form.RemoveAll()
 	files := append(form.File["files"], form.File["file"]...)
 	if len(files) == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidAuthFile", "请选择有效的"+fileDescription)
+		response.Error(c, http.StatusBadRequest, "invalidAuthFile", "Sila pilih fail yang sah bagi "+fileDescription)
 		return nil, false
 	}
 	if len(files) > maxAccountImportFiles {
-		response.Error(c, http.StatusBadRequest, "invalidAuthFile", "单次最多选择 1000 个账号文件")
+		response.Error(c, http.StatusBadRequest, "invalidAuthFile", "Maksimum 1000 fail akaun bagi setiap sesi")
 		return nil, false
 	}
 	documents := make([][]byte, 0, len(files))
 	totalBytes := int64(0)
 	for _, file := range files {
 		if file.Size < 0 || totalBytes+file.Size > maxAccountImportBytes {
-			response.Error(c, http.StatusRequestEntityTooLarge, "accountImportFileTooLarge", "账号凭据文件总大小不能超过 30 MiB")
+			response.Error(c, http.StatusRequestEntityTooLarge, "accountImportFileTooLarge", "Saiz jumlah fail kredensial akaun tidak boleh melebihi 30 MiB")
 			return nil, false
 		}
 		opened, openErr := file.Open()
 		if openErr != nil {
-			response.Error(c, http.StatusBadRequest, "invalidAuthFile", "无法读取"+fileDescription)
+			response.Error(c, http.StatusBadRequest, "invalidAuthFile", "Gagal membaca "+fileDescription)
 			return nil, false
 		}
 		data, readErr := io.ReadAll(io.LimitReader(opened, maxAccountImportBytes-totalBytes+1))
 		_ = opened.Close()
 		if readErr != nil {
-			response.Error(c, http.StatusBadRequest, "invalidAuthFile", "无法读取"+fileDescription)
+			response.Error(c, http.StatusBadRequest, "invalidAuthFile", "Gagal membaca "+fileDescription)
 			return nil, false
 		}
 		totalBytes += int64(len(data))
 		if totalBytes > maxAccountImportBytes {
-			response.Error(c, http.StatusRequestEntityTooLarge, "accountImportFileTooLarge", "账号凭据文件总大小不能超过 30 MiB")
+			response.Error(c, http.StatusRequestEntityTooLarge, "accountImportFileTooLarge", "Saiz jumlah fail kredensial akaun tidak boleh melebihi 30 MiB")
 			return nil, false
 		}
 		documents = append(documents, data)
@@ -1144,12 +1144,12 @@ func (h *Handler) refreshWebQuota(c *gin.Context) {
 		return
 	}
 	if _, err := h.service.RefreshQuota(c.Request.Context(), id); err != nil {
-		h.writeServiceError(c, "quotaRefreshFailed", err, http.StatusBadGateway, "同步 Provider 额度失败")
+		h.writeServiceError(c, "quotaRefreshFailed", err, http.StatusBadGateway, "Gagal menyegerakkan kuota Provider")
 		return
 	}
 	value, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
-		h.writeServiceError(c, "accountGetFailed", err, http.StatusInternalServerError, "读取账号失败")
+		h.writeServiceError(c, "accountGetFailed", err, http.StatusInternalServerError, "Gagal membaca akaun")
 		return
 	}
 	response.Success(c, http.StatusOK, newAccountResponse(value))
@@ -1159,27 +1159,27 @@ func (h *Handler) exportCredentials(c *gin.Context) {
 	providerValue := accountdomain.Provider(c.DefaultQuery("provider", string(accountdomain.ProviderBuild)))
 	if limitText, pagedExport := c.GetQuery("limit"); pagedExport {
 		if _, usesOffset := c.GetQuery("offset"); usesOffset {
-			response.Error(c, http.StatusBadRequest, "accountExportFailed", "分批导出不支持 offset，请使用服务端返回的 afterId")
+			response.Error(c, http.StatusBadRequest, "accountExportFailed", "Eksport berkelompok tidak menyokong offset, sila gunakan afterId yang dikembalikan oleh pelayan")
 			return
 		}
 		limit, err := strconv.Atoi(strings.TrimSpace(limitText))
 		if err != nil {
-			response.Error(c, http.StatusBadRequest, "accountExportFailed", "导出数量必须为整数")
+			response.Error(c, http.StatusBadRequest, "accountExportFailed", "Kuantiti eksport mesti integer")
 			return
 		}
 		afterID, err := strconv.ParseUint(strings.TrimSpace(c.DefaultQuery("afterId", "0")), 10, 64)
 		if err != nil {
-			response.Error(c, http.StatusBadRequest, "accountExportFailed", "导出游标必须为非负整数")
+			response.Error(c, http.StatusBadRequest, "accountExportFailed", "Kursor eksport mesti integer bukan negatif")
 			return
 		}
 		snapshotMaxID, err := strconv.ParseUint(strings.TrimSpace(c.DefaultQuery("snapshotMaxId", "0")), 10, 64)
 		if err != nil {
-			response.Error(c, http.StatusBadRequest, "accountExportFailed", "导出快照上界必须为非负整数")
+			response.Error(c, http.StatusBadRequest, "accountExportFailed", "Had atas snapshot eksport mesti integer bukan negatif")
 			return
 		}
 		result, exportErr := h.service.ExportProviderCredentialsCursor(c.Request.Context(), providerValue, afterID, snapshotMaxID, limit)
 		if exportErr != nil {
-			h.writeServiceError(c, "accountExportFailed", exportErr, http.StatusInternalServerError, "导出账号失败")
+			h.writeServiceError(c, "accountExportFailed", exportErr, http.StatusInternalServerError, "Gagal mengeksport akaun")
 			return
 		}
 		c.Header("X-Export-Next-ID", strconv.FormatUint(result.NextID, 10))
@@ -1190,7 +1190,7 @@ func (h *Handler) exportCredentials(c *gin.Context) {
 	}
 	result, err := h.service.ExportProviderCredentials(c.Request.Context(), providerValue)
 	if err != nil {
-		h.writeServiceError(c, "accountExportFailed", err, http.StatusInternalServerError, "导出账号失败")
+		h.writeServiceError(c, "accountExportFailed", err, http.StatusInternalServerError, "Gagal mengeksport akaun")
 		return
 	}
 	h.writeCredentialExport(c, providerValue, result)
@@ -1199,7 +1199,7 @@ func (h *Handler) exportCredentials(c *gin.Context) {
 func (h *Handler) exportSelectedCredentials(c *gin.Context) {
 	var request credentialExportRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	ids, err := parseIDs(request.IDs)
@@ -1210,7 +1210,7 @@ func (h *Handler) exportSelectedCredentials(c *gin.Context) {
 	providerValue := accountdomain.Provider(request.Provider)
 	result, err := h.service.ExportProviderCredentialsByIDs(c.Request.Context(), providerValue, ids)
 	if err != nil {
-		h.writeServiceError(c, "accountExportFailed", err, http.StatusInternalServerError, "导出账号失败")
+		h.writeServiceError(c, "accountExportFailed", err, http.StatusInternalServerError, "Gagal mengeksport akaun")
 		return
 	}
 	h.writeCredentialExport(c, providerValue, result)
@@ -1241,7 +1241,7 @@ func (h *Handler) update(c *gin.Context) {
 	}
 	var request updateRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, err := h.service.Update(c.Request.Context(), id, accountapp.UpdateInput{
@@ -1251,7 +1251,7 @@ func (h *Handler) update(c *gin.Context) {
 		BuildSuperEntitled: request.BuildSuperEntitled, BuildRouteMode: request.BuildRouteMode,
 	})
 	if err != nil {
-		h.writeServiceError(c, "accountUpdateFailed", err, http.StatusInternalServerError, "更新账号失败")
+		h.writeServiceError(c, "accountUpdateFailed", err, http.StatusInternalServerError, "Gagal mengemas kini akaun")
 		return
 	}
 	result := newAccountResponse(value)
@@ -1276,12 +1276,12 @@ func (h *Handler) delete(c *gin.Context) {
 	// so a truncated/malformed linked-delete request cannot silently drop targets.
 	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	if len(bytes.TrimSpace(raw)) > 0 {
 		if err := json.Unmarshal(raw, &request); err != nil {
-			response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+			response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 			return
 		}
 	}
@@ -1292,19 +1292,19 @@ func (h *Handler) delete(c *gin.Context) {
 	}
 	if len(targets) > 0 {
 		if request.Provider == "" {
-			response.Error(c, http.StatusBadRequest, "invalidProvider", "删除关联账号时必须指定 provider")
+			response.Error(c, http.StatusBadRequest, "invalidProvider", "provider mesti dinyatakan apabila memadam akaun berkaitan")
 			return
 		}
 		result, err := h.service.DeleteWithLinked(c.Request.Context(), accountdomain.Provider(request.Provider), id, targets)
 		if err != nil {
-			h.writeServiceError(c, "accountDeleteFailed", err, http.StatusInternalServerError, "删除账号失败")
+			h.writeServiceError(c, "accountDeleteFailed", err, http.StatusInternalServerError, "Gagal memadam akaun")
 			return
 		}
 		response.Success(c, http.StatusOK, newAccountDeleteResponse(result))
 		return
 	}
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		h.writeServiceError(c, "accountDeleteFailed", err, http.StatusInternalServerError, "删除账号失败")
+		h.writeServiceError(c, "accountDeleteFailed", err, http.StatusInternalServerError, "Gagal memadam akaun")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"deleted": true})
@@ -1319,7 +1319,7 @@ func parseLinkedDeleteTargets(values []string) ([]accountdomain.Provider, error)
 	for _, value := range values {
 		provider := accountdomain.Provider(strings.TrimSpace(value))
 		if !provider.IsValid() {
-			return nil, fmt.Errorf("关联删除目标无效")
+			return nil, fmt.Errorf("Sasaran pemadaman berkaitan tidak sah")
 		}
 		if _, ok := seen[provider]; ok {
 			continue
@@ -1377,7 +1377,7 @@ func (h *Handler) refreshToken(c *gin.Context) {
 	}
 	value, err := h.service.RefreshToken(c.Request.Context(), id)
 	if err != nil {
-		h.writeServiceError(c, "tokenRefreshFailed", err, http.StatusBadGateway, "刷新账号凭据失败")
+		h.writeServiceError(c, "tokenRefreshFailed", err, http.StatusBadGateway, "Gagal menyegarkan kredensial akaun")
 		return
 	}
 	response.Success(c, http.StatusOK, newAccountResponse(value))
@@ -1389,7 +1389,7 @@ func (h *Handler) acceptWebTerms(c *gin.Context) {
 		return
 	}
 	if err := h.service.AcceptWebTerms(c.Request.Context(), id); err != nil {
-		h.writeServiceError(c, "webTermsAcceptanceFailed", err, http.StatusBadGateway, "接受 Grok Web 服务协议失败")
+		h.writeServiceError(c, "webTermsAcceptanceFailed", err, http.StatusBadGateway, "Gagal menerima perjanjian perkhidmatan Grok Web")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"completed": true})
@@ -1401,7 +1401,7 @@ func (h *Handler) setWebBirthDate(c *gin.Context) {
 		return
 	}
 	if err := h.service.SetWebBirthDate(c.Request.Context(), id); err != nil {
-		h.writeServiceError(c, "webBirthDateUpdateFailed", err, http.StatusBadGateway, "设置 Grok Web 账号生日失败")
+		h.writeServiceError(c, "webBirthDateUpdateFailed", err, http.StatusBadGateway, "Gagal menetapkan tarikh lahir akaun Grok Web")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"completed": true})
@@ -1413,7 +1413,7 @@ func (h *Handler) enableWebNSFW(c *gin.Context) {
 		return
 	}
 	if err := h.service.EnableWebNSFW(c.Request.Context(), id); err != nil {
-		h.writeServiceError(c, "webNSFWEnableFailed", err, http.StatusBadGateway, "开启 Grok Web NSFW 失败")
+		h.writeServiceError(c, "webNSFWEnableFailed", err, http.StatusBadGateway, "Gagal mengaktifkan NSFW Grok Web")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"completed": true})
@@ -1426,7 +1426,7 @@ func (h *Handler) refreshBilling(c *gin.Context) {
 	}
 	value, err := h.service.RefreshBilling(c.Request.Context(), id)
 	if err != nil {
-		h.writeServiceError(c, "billingRefreshFailed", err, http.StatusBadGateway, "刷新账号额度失败")
+		h.writeServiceError(c, "billingRefreshFailed", err, http.StatusBadGateway, "Gagal menyegarkan kuota akaun")
 		return
 	}
 	response.Success(c, http.StatusOK, newBillingResponse(value))
@@ -1437,7 +1437,7 @@ func (h *Handler) refreshAllBilling(c *gin.Context) {
 	defer stream.Close()
 	succeeded, failed, err := h.service.SyncAllBillingWithProgress(c.Request.Context(), stream.ProgressObserver())
 	if err != nil {
-		stream.WriteError("billingRefreshFailed", "刷新账号额度失败")
+		stream.WriteError("billingRefreshFailed", "Gagal menyegarkan kuota akaun")
 		return
 	}
 	_ = stream.Write("complete", accountBatchResponse{Succeeded: succeeded, Failed: failed})
@@ -1448,7 +1448,7 @@ func (h *Handler) refreshAllTokens(c *gin.Context) {
 	defer stream.Close()
 	succeeded, failed, skipped, err := h.service.RefreshAllTokensWithProgress(c.Request.Context(), stream.ProgressObserver())
 	if err != nil {
-		stream.WriteError("tokenRefreshFailed", "续期账号凭据失败")
+		stream.WriteError("tokenRefreshFailed", "Gagal memperbaharui kredensial akaun")
 		return
 	}
 	_ = stream.Write("complete", accountTokenRefreshResponse{Succeeded: succeeded, Failed: failed, Skipped: skipped})
@@ -1459,7 +1459,7 @@ func (h *Handler) refreshAllWebQuotas(c *gin.Context) {
 	defer stream.Close()
 	succeeded, failed, err := h.service.SyncAllWebQuotasWithProgress(c.Request.Context(), stream.ProgressObserver())
 	if err != nil {
-		stream.WriteError("quotaRefreshFailed", "同步 Grok Web 账号额度失败")
+		stream.WriteError("quotaRefreshFailed", "Gagal menyegerakkan kuota akaun Grok Web")
 		return
 	}
 	_ = stream.Write("complete", accountBatchResponse{Succeeded: succeeded, Failed: failed})
@@ -1470,7 +1470,7 @@ func (h *Handler) refreshAllConsoleQuotas(c *gin.Context) {
 	defer stream.Close()
 	succeeded, failed, err := h.service.SyncAllConsoleQuotasWithProgress(c.Request.Context(), stream.ProgressObserver())
 	if err != nil {
-		stream.WriteError("quotaRefreshFailed", "同步 Grok Console 账号额度失败")
+		stream.WriteError("quotaRefreshFailed", "Gagal menyegerakkan kuota akaun Grok Console")
 		return
 	}
 	_ = stream.Write("complete", accountBatchResponse{Succeeded: succeeded, Failed: failed})
@@ -1562,7 +1562,7 @@ func pagination(c *gin.Context) (int, int) {
 func pathID(c *gin.Context) (uint64, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidId", "ID 无效")
+		response.Error(c, http.StatusBadRequest, "invalidId", "ID tidak sah")
 		return 0, false
 	}
 	return id, true
@@ -1573,7 +1573,7 @@ func parseIDs(values []string) ([]uint64, error) {
 	for _, value := range values {
 		id, err := strconv.ParseUint(value, 10, 64)
 		if err != nil || id == 0 {
-			return nil, errors.New("ID 无效")
+			return nil, errors.New("ID tidak sah")
 		}
 		ids = append(ids, id)
 	}
@@ -1583,16 +1583,16 @@ func parseIDs(values []string) ([]uint64, error) {
 func (h *Handler) validateProviderIDs(c *gin.Context, ids []uint64, providerValue string) bool {
 	provider := accountdomain.Provider(providerValue)
 	if !provider.IsValid() {
-		response.Error(c, http.StatusBadRequest, "invalidProvider", "账号来源无效")
+		response.Error(c, http.StatusBadRequest, "invalidProvider", "Sumber akaun tidak sah")
 		return false
 	}
 	valid, err := h.service.AccountsBelongToProvider(c.Request.Context(), ids, provider)
 	if err != nil {
-		h.writeServiceError(c, "accountPoolValidationFailed", err, http.StatusInternalServerError, "校验账号号池失败")
+		h.writeServiceError(c, "accountPoolValidationFailed", err, http.StatusInternalServerError, "Gagal mengesahkan kolam akaun")
 		return false
 	}
 	if !valid {
-		response.Error(c, http.StatusConflict, "accountPoolMismatch", "批量操作包含不属于当前号池的账号")
+		response.Error(c, http.StatusConflict, "accountPoolMismatch", "Operasi pukal mengandungi akaun yang tidak tergolong dalam kolam akaun semasa")
 		return false
 	}
 	return true

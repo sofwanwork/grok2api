@@ -34,7 +34,7 @@ func parseImportedCredentials(data []byte) ([]provider.CredentialSeed, error) {
 	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" {
-		return nil, fmt.Errorf("账号文件中没有 Grok Console 账号")
+		return nil, fmt.Errorf("Tiada akaun Grok Console dalam fail akaun")
 	}
 	// 「[」为 JSON 保留前缀：顶层裸数组走 JSON 解析，避免被当成纯文本 token 静默导入。
 	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
@@ -42,20 +42,20 @@ func parseImportedCredentials(data []byte) ([]provider.CredentialSeed, error) {
 	}
 	entries, err := provider.DecodeCredentialJSONEntries[importEntry](data, string(account.ProviderConsole), maxImportAccounts)
 	if err != nil {
-		return nil, fmt.Errorf("解析 Grok Console 账号 JSON: %w", err)
+		return nil, fmt.Errorf("Huraian JSON akaun Grok Console: %w", err)
 	}
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("账号文件中没有 Grok Console 账号")
+		return nil, fmt.Errorf("Tiada akaun Grok Console dalam fail akaun")
 	}
 	seen := make(map[string]struct{}, len(entries))
 	result := make([]provider.CredentialSeed, 0, len(entries))
 	for index, entry := range entries {
 		token := sanitizeSSOToken(firstNonEmpty(entry.SSOToken, entry.Token))
 		if token == "" {
-			return nil, fmt.Errorf("第 %d 个账号缺少 sso_token", index+1)
+			return nil, fmt.Errorf("Akaun ke-%d tiada sso_token", index+1)
 		}
 		if len(token) > maxSSOTokenBytes {
-			return nil, fmt.Errorf("第 %d 个账号的 sso_token 超过 16 KiB", index+1)
+			return nil, fmt.Errorf("sso_token akaun ke-%d melebihi 16 KiB", index+1)
 		}
 		if _, exists := seen[token]; exists {
 			continue
@@ -84,7 +84,7 @@ func parsePlainTextCredentials(value string) ([]provider.CredentialSeed, error) 
 			continue
 		}
 		if len(token) > maxSSOTokenBytes {
-			return nil, fmt.Errorf("第 %d 行的 sso token 超过 16 KiB", index+1)
+			return nil, fmt.Errorf("sso token pada baris ke-%d melebihi 16 KiB", index+1)
 		}
 		if _, exists := seen[token]; exists {
 			continue
@@ -96,7 +96,7 @@ func parsePlainTextCredentials(value string) ([]provider.CredentialSeed, error) 
 		}
 	}
 	if len(result) == 0 {
-		return nil, fmt.Errorf("文本中没有有效的 sso token")
+		return nil, fmt.Errorf("Tiada sso token yang sah dalam teks")
 	}
 	return result, nil
 }

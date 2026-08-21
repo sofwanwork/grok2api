@@ -52,10 +52,10 @@ const (
 )
 
 var (
-	errResponseTransferLimit    = errors.New("响应超过代理安全上限")
-	errUpstreamStreamIncomplete = errors.New("上游流在终止事件前结束")
-	errUpstreamStreamFailed     = errors.New("上游流返回失败终止事件")
-	errUpstreamStreamRead       = errors.New("读取上游流失败")
+	errResponseTransferLimit    = errors.New("Respons melebihi had keselamatan proksi")
+	errUpstreamStreamIncomplete = errors.New("Strim upstream berakhir sebelum event penamatan")
+	errUpstreamStreamFailed     = errors.New("Strim upstream memulangkan event penamatan yang gagal")
+	errUpstreamStreamRead       = errors.New("Gagal membaca strim upstream")
 )
 
 type streamProtocol uint8
@@ -229,7 +229,7 @@ func (h *Handler) listModels(c *gin.Context) {
 		values, err = h.models.ListEnabled(c.Request.Context())
 	}
 	if err != nil {
-		writeOpenAIError(c, http.StatusInternalServerError, "model_list_failed", "读取模型列表失败")
+		writeOpenAIError(c, http.StatusInternalServerError, "model_list_failed", "Gagal membaca senarai model")
 		return
 	}
 	if hasClientKey {
@@ -437,22 +437,22 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 	}
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		writeOpenAIError(c, http.StatusRequestEntityTooLarge, "request_too_large", "请求体超过限制")
+		writeOpenAIError(c, http.StatusRequestEntityTooLarge, "request_too_large", "Badan permintaan melebihi had")
 		return
 	}
 	var request chatCompletionRequest
 	if json.Unmarshal(body, &request) != nil || strings.TrimSpace(request.Model) == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Chat Completions 请求缺少有效 model")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan Chat Completions tiada model yang sah")
 		return
 	}
 	if request.MaxTokens != nil && *request.MaxTokens <= 0 {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "max_tokens 必须是正整数")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "max_tokens mesti integer positif")
 		return
 	}
 	clientValue, exists := c.Get(middleware.ClientKey)
 	clientKey, ok := clientValue.(clientkeydomain.Key)
 	if !exists || !ok {
-		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "客户端 API Key 无效")
+		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "API Key pelanggan tidak sah")
 		return
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
@@ -516,22 +516,22 @@ func (h *Handler) createMessage(c *gin.Context) {
 func (h *Handler) generateImage(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.maxBodyBytes)
 	if !isJSONRequest(c) {
-		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "图片生成仅支持 application/json")
+		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "Penjanaan imej hanya menyokong application/json")
 		return
 	}
 	var request imageGenerationRequest
 	if decodeSingleJSON(c.Request.Body, &request, false) != nil || strings.TrimSpace(request.Model) == "" || strings.TrimSpace(request.Prompt) == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "图片请求缺少有效 model 或 prompt")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan imej tiada model atau prompt yang sah")
 		return
 	}
 	if value := bytes.TrimSpace(request.StorageOptions); len(value) > 0 && !bytes.Equal(value, []byte("null")) {
-		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "当前兼容层暂不支持 storage_options")
+		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "Lapisan keserasian semasa belum menyokong storage_options")
 		return
 	}
 	count := 1
 	if request.Count != nil {
 		if *request.Count < 1 || *request.Count > 10 {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "n 必须在 1 到 10 之间")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "n mesti antara 1 hingga 10")
 			return
 		}
 		count = *request.Count
@@ -543,18 +543,18 @@ func (h *Handler) generateImage(c *gin.Context) {
 	partialImages := 0
 	if request.PartialImages != nil {
 		if *request.PartialImages < 0 || *request.PartialImages > 3 {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images 必须在 0 到 3 之间")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images mesti antara 0 hingga 3")
 			return
 		}
 		partialImages = *request.PartialImages
 		if partialImages > 0 && !request.Stream {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images 仅可在 stream=true 时使用")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images hanya boleh digunakan apabila stream=true")
 			return
 		}
 	}
 	quality := strings.ToLower(strings.TrimSpace(request.Quality))
 	if quality != "" && quality != "low" && quality != "medium" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "quality 必须是 low 或 medium")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "quality mesti low atau medium")
 		return
 	}
 	clientKey, requestID, ok := requestIdentity(c)
@@ -586,19 +586,19 @@ func (h *Handler) writeMediaResult(c *gin.Context, result *gateway.Result) {
 	}
 	if result.StatusCode < http.StatusOK || (result.StatusCode >= http.StatusMultipleChoices && result.StatusCode < http.StatusBadRequest) {
 		errorCode = "invalid_upstream_status"
-		writeOpenAIError(c, http.StatusBadGateway, "invalid_upstream_response", "上游媒体服务返回了不安全的重定向响应")
+		writeOpenAIError(c, http.StatusBadGateway, "invalid_upstream_response", "Perkhidmatan media upstream memulangkan respons pengalihan yang tidak selamat")
 		return
 	}
 	contentType, safeContentType := normalizeMediaResponseContentType(result.Header.Get("Content-Type"))
 	if !safeContentType {
 		errorCode = "unsafe_media_content_type"
-		writeOpenAIError(c, http.StatusBadGateway, "invalid_media_type", "上游媒体服务返回了不受支持的内容类型")
+		writeOpenAIError(c, http.StatusBadGateway, "invalid_media_type", "Perkhidmatan media upstream memulangkan jenis kandungan yang tidak disokong")
 		return
 	}
 	contentLength, contentLengthErr := strconv.ParseInt(result.Header.Get("Content-Length"), 10, 64)
 	if contentLengthErr == nil && contentLength > maxMediaResponseTransferBytes {
 		errorCode = "response_too_large"
-		writeOpenAIError(c, http.StatusBadGateway, "media_too_large", "上游媒体超过 2 GiB 安全上限")
+		writeOpenAIError(c, http.StatusBadGateway, "media_too_large", "Media upstream melebihi had keselamatan 2 GiB")
 		return
 	}
 	setSafeMediaResponseHeaders(c, result.Header)
@@ -707,16 +707,16 @@ func writeMediaBody(c *gin.Context, source io.Reader, contentType string, status
 func (h *Handler) editImage(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.maxBodyBytes)
 	if !isJSONRequest(c) {
-		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "图片编辑仅支持 application/json")
+		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", "Penyuntingan imej hanya menyokong application/json")
 		return
 	}
 	var request imageEditJSONRequest
 	if err := decodeSingleJSON(c.Request.Body, &request, false); err != nil {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "图片编辑 JSON 请求无效")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan JSON penyuntingan imej tidak sah")
 		return
 	}
 	if value := bytes.TrimSpace(request.StorageOptions); len(value) > 0 && !bytes.Equal(value, []byte("null")) {
-		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "当前兼容层暂不支持 storage_options")
+		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "Lapisan keserasian semasa belum menyokong storage_options")
 		return
 	}
 	model := strings.TrimSpace(request.Model)
@@ -730,13 +730,13 @@ func (h *Handler) editImage(c *gin.Context) {
 		inputs = append([]imageEditJSONImage{*request.Image}, inputs...)
 	}
 	if len(inputs) == 0 || len(inputs) > 8 {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "image 或 images 数量必须在 1 到 8 之间")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Bilangan image atau images mesti antara 1 hingga 8")
 		return
 	}
 	imageURLs := make([]string, 0, len(inputs))
 	for _, input := range inputs {
 		if strings.TrimSpace(input.FileID) != "" {
-			writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "当前暂不支持 image.file_id，请使用 image.url")
+			writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "Semasa belum menyokong image.file_id, sila gunakan image.url")
 			return
 		}
 		if value := strings.TrimSpace(input.URL); value != "" {
@@ -744,37 +744,37 @@ func (h *Handler) editImage(c *gin.Context) {
 		}
 	}
 	if len(imageURLs) != len(inputs) {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "每个 image 都必须提供有效 url")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Setiap image mesti menyediakan url yang sah")
 		return
 	}
 	if model == "" || prompt == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "图片编辑缺少有效 model 或 prompt")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Penyuntingan imej tiada model atau prompt yang sah")
 		return
 	}
 	if count < 1 || count > 10 {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "n 必须在 1 到 10 之间")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "n mesti antara 1 hingga 10")
 		return
 	}
 	partialImages := 0
 	if request.PartialImages != nil {
 		if *request.PartialImages < 0 || *request.PartialImages > 3 {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images 必须在 0 到 3 之间")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images mesti antara 0 hingga 3")
 			return
 		}
 		partialImages = *request.PartialImages
 		if partialImages > 0 && !request.Stream {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images 仅可在 stream=true 时使用")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "partial_images hanya boleh digunakan apabila stream=true")
 			return
 		}
 	}
 	aspectRatio := strings.ToLower(strings.TrimSpace(request.AspectRatio))
 	size := strings.ToLower(strings.TrimSpace(request.Size))
 	if aspectRatio != "" && !validImageAspectRatio(aspectRatio) {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "aspect_ratio 不受支持")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "aspect_ratio tidak disokong")
 		return
 	}
 	if size != "" && !validImageEditSize(size) {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "size 必须是 auto、1024x1024、1024x1536 或 1536x1024")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "size mesti auto, 1024x1024, 1024x1536 atau 1536x1024")
 		return
 	}
 	resolution := strings.ToLower(strings.TrimSpace(request.Resolution))
@@ -782,12 +782,12 @@ func (h *Handler) editImage(c *gin.Context) {
 		resolution = "1k"
 	}
 	if resolution != "1k" && resolution != "2k" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "resolution 必须是 1k 或 2k")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "resolution mesti 1k atau 2k")
 		return
 	}
 	quality := strings.ToLower(strings.TrimSpace(request.Quality))
 	if quality != "" && quality != "low" && quality != "medium" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "quality 必须是 low 或 medium")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_parameter", "quality mesti low atau medium")
 		return
 	}
 	clientKey, requestID, ok := requestIdentity(c)
@@ -811,7 +811,7 @@ func requestIdentity(c *gin.Context) (clientkeydomain.Key, string, bool) {
 	clientValue, exists := c.Get(middleware.ClientKey)
 	clientKey, ok := clientValue.(clientkeydomain.Key)
 	if !exists || !ok {
-		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "客户端 API Key 无效")
+		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "API Key pelanggan tidak sah")
 		return clientkeydomain.Key{}, "", false
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
@@ -820,15 +820,15 @@ func requestIdentity(c *gin.Context) (clientkeydomain.Key, string, bool) {
 }
 
 func (h *Handler) generateVideo(c *gin.Context) {
-	h.handleVideoCreate(c, gatewayVideoOperationGenerate, "视频生成")
+	h.handleVideoCreate(c, gatewayVideoOperationGenerate, "Penjanaan video")
 }
 
 func (h *Handler) editVideo(c *gin.Context) {
-	h.handleVideoCreate(c, gatewayVideoOperationEdit, "视频编辑")
+	h.handleVideoCreate(c, gatewayVideoOperationEdit, "Penyuntingan video")
 }
 
 func (h *Handler) extendVideo(c *gin.Context) {
-	h.handleVideoCreate(c, gatewayVideoOperationExtend, "视频延长")
+	h.handleVideoCreate(c, gatewayVideoOperationExtend, "Pemanjangan video")
 }
 
 const (
@@ -840,38 +840,38 @@ const (
 func (h *Handler) handleVideoCreate(c *gin.Context, operation, label string) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.maxBodyBytes)
 	if !isJSONRequest(c) {
-		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", label+"仅支持 application/json")
+		writeOpenAIError(c, http.StatusUnsupportedMediaType, "invalid_request", label+" hanya menyokong application/json")
 		return
 	}
 	var request videoGenerationRequest
 	if err := decodeSingleJSON(c.Request.Body, &request, true); err != nil {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" JSON 请求无效: "+err.Error())
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" permintaan JSON tidak sah: "+err.Error())
 		return
 	}
 	if hasJSONValue(request.Output) {
-		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "当前兼容层暂不支持 output.upload_url")
+		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "Lapisan keserasian semasa belum menyokong output.upload_url")
 		return
 	}
 	if hasJSONValue(request.StorageOptions) {
-		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "当前兼容层暂不支持 storage_options")
+		writeOpenAIError(c, http.StatusBadRequest, "unsupported_parameter", "Lapisan keserasian semasa belum menyokong storage_options")
 		return
 	}
 	model := strings.TrimSpace(request.Model)
 	prompt := strings.TrimSpace(request.Prompt)
 	if model == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+"缺少有效 model")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" tiada model yang sah")
 		return
 	}
 	parseVideoImage := func(input videoGenerationImage, field string) (string, bool) {
 		urlValue := strings.TrimSpace(input.URL)
 		fileID := strings.TrimSpace(input.FileID)
 		if (urlValue == "") == (fileID == "") {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", field+" 必须且只能提供 url 或 file_id")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", field+" mesti menyediakan url atau file_id sahaja, bukan kedua-duanya")
 			return "", false
 		}
 		if fileID != "" {
 			if !mediadomain.IsInputAssetID(fileID) {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", field+".file_id 无效")
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", field+".file_id tidak sah")
 				return "", false
 			}
 			return gateway.VideoInputFileReference(fileID), true
@@ -899,7 +899,7 @@ func (h *Handler) handleVideoCreate(c *gin.Context, operation, label string) {
 			aspectRatio = "16:9"
 		}
 		if !validVideoAspectRatio(aspectRatio) {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "aspect_ratio 必须是 1:1、16:9、9:16、4:3、3:4、3:2 或 2:3")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "aspect_ratio mesti 1:1, 16:9, 9:16, 4:3, 3:4, 3:2 atau 2:3")
 			return
 		}
 		resolution = strings.ToLower(strings.TrimSpace(request.Resolution))
@@ -907,7 +907,7 @@ func (h *Handler) handleVideoCreate(c *gin.Context, operation, label string) {
 			resolution = "720p"
 		}
 		if resolution != "480p" && resolution != "720p" && resolution != "1080p" {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "resolution 必须是 480p、720p 或 1080p")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "resolution mesti 480p, 720p atau 1080p")
 			return
 		}
 		if request.Image != nil {
@@ -929,49 +929,49 @@ func (h *Handler) handleVideoCreate(c *gin.Context, operation, label string) {
 		for i, input := range request.ReferenceAudios {
 			voiceID := strings.TrimSpace(input.VoiceID)
 			if voiceID == "" {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", fmt.Sprintf("reference_audios[%d].voice_id 不能为空", i))
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", fmt.Sprintf("reference_audios[%d].voice_id tak boleh kosong", i))
 				return
 			}
 			referenceAudios = append(referenceAudios, voiceID)
 		}
 		if len(referenceAudios) > 3 {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "reference_audios 最多 3 个")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "reference_audios maksimum 3")
 			return
 		}
 		if imageURL != "" && (len(referenceURLs) > 0 || len(referenceAudios) > 0) {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "image 不能与 reference_images/reference_audios 同时使用")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "image tidak boleh digunakan bersama reference_images/reference_audios")
 			return
 		}
 		if len(referenceURLs) > mediadomain.MaxInputImages {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", fmt.Sprintf("reference_images 不能超过 %d 张", mediadomain.MaxInputImages))
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", fmt.Sprintf("reference_images tidak boleh melebihi %d keping", mediadomain.MaxInputImages))
 			return
 		}
 		hasReferenceMode := len(referenceURLs) > 0 || len(referenceAudios) > 0
 		if hasReferenceMode {
 			if prompt == "" {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "参考图/参考音频视频必须提供 prompt")
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Video imej rujukan/audio rujukan mesti menyediakan prompt")
 				return
 			}
 			if resolution == "1080p" {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "参考图视频 resolution 最高 720p")
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Video imej rujukan resolution maksimum 720p")
 				return
 			}
 		}
 		if prompt == "" && imageURL == "" && !hasReferenceMode {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "文本生视频必须提供 prompt；图片生视频可以省略 prompt")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Teks-ke-video mesti menyediakan prompt; imej-ke-video boleh mengabaikan prompt")
 			return
 		}
 		if request.Video != nil {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "视频生成不支持 video 输入")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Penjanaan video tidak menyokong input video")
 			return
 		}
 	} else {
 		if prompt == "" {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+"必须提供 prompt")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" mesti menyediakan prompt")
 			return
 		}
 		if request.Video == nil {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+"必须提供 video")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" mesti menyediakan video")
 			return
 		}
 		value, ok := parseVideoImage(*request.Video, "video")
@@ -980,16 +980,16 @@ func (h *Handler) handleVideoCreate(c *gin.Context, operation, label string) {
 		}
 		videoURL = value
 		if request.Image != nil || len(request.ReferenceImages) > 0 || len(request.ReferenceAudios) > 0 {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+"不支持 image、reference_images 或 reference_audios")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" tidak menyokong image, reference_images atau reference_audios")
 			return
 		}
 		if strings.TrimSpace(request.AspectRatio) != "" || strings.TrimSpace(request.Resolution) != "" {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+"不支持 aspect_ratio 或 resolution")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", label+" tidak menyokong aspect_ratio atau resolution")
 			return
 		}
 		if operation == gatewayVideoOperationEdit {
 			if hasJSONValue(request.Duration) {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "视频编辑不支持 duration")
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Penyuntingan video tidak menyokong duration")
 				return
 			}
 		} else {
@@ -1005,7 +1005,7 @@ func (h *Handler) handleVideoCreate(c *gin.Context, operation, label string) {
 				duration = 6
 			}
 			if duration < 2 || duration > 10 {
-				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "视频延长 duration 必须在 2 到 10 秒之间")
+				writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Pemanjangan video duration mesti antara 2 hingga 10 saat")
 				return
 			}
 		}
@@ -1093,12 +1093,12 @@ func (h *Handler) getVideoContent(c *gin.Context) {
 
 func writeVideoContent(c *gin.Context, body io.Reader, contentType string, size int64, downloadName string) {
 	if size > maxMediaResponseTransferBytes {
-		writeOpenAIError(c, http.StatusBadGateway, "media_too_large", "上游媒体超过 2 GiB 安全上限")
+		writeOpenAIError(c, http.StatusBadGateway, "media_too_large", "Media upstream melebihi had keselamatan 2 GiB")
 		return
 	}
 	contentType, ok := normalizeVideoResponseContentType(contentType)
 	if !ok {
-		writeOpenAIError(c, http.StatusBadGateway, "invalid_media_type", "上游视频服务返回了不受支持的内容类型")
+		writeOpenAIError(c, http.StatusBadGateway, "invalid_media_type", "Perkhidmatan video upstream memulangkan jenis kandungan yang tidak disokong")
 		return
 	}
 	// Clients that save the response need an extension to get a playable file.
@@ -1137,14 +1137,14 @@ func normalizeVideoResponseContentType(value string) (string, bool) {
 func parseVideoDuration(durationRaw json.RawMessage) (int, error) {
 	duration, hasDuration, err := parseOptionalVideoInteger(durationRaw)
 	if err != nil {
-		return 0, fmt.Errorf("duration 必须是整数或整数字符串")
+		return 0, fmt.Errorf("duration mesti integer atau rentetan integer")
 	}
 	value := 8
 	if hasDuration {
 		value = duration
 	}
 	if value < 1 || value > 15 {
-		return 0, fmt.Errorf("duration 必须在 1 到 15 秒之间")
+		return 0, fmt.Errorf("duration mesti antara 1 hingga 15 saat")
 	}
 	return value, nil
 }
@@ -1157,11 +1157,11 @@ func parseOptionalVideoInteger(raw json.RawMessage) (int, bool, error) {
 	if json.Unmarshal(raw, &number) != nil {
 		var text string
 		if json.Unmarshal(raw, &text) != nil {
-			return 0, true, errors.New("必须是整数或整数字符串")
+			return 0, true, errors.New("mesti integer atau rentetan integer")
 		}
 		parsed, err := strconv.Atoi(strings.TrimSpace(text))
 		if err != nil {
-			return 0, true, errors.New("必须是整数或整数字符串")
+			return 0, true, errors.New("mesti integer atau rentetan integer")
 		}
 		number = parsed
 	}
@@ -1248,18 +1248,18 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 	}
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		writeOpenAIError(c, http.StatusRequestEntityTooLarge, "request_too_large", "请求体超过限制")
+		writeOpenAIError(c, http.StatusRequestEntityTooLarge, "request_too_large", "Badan permintaan melebihi had")
 		return
 	}
 	var request responsesRequest
 	if err := json.Unmarshal(body, &request); err != nil || strings.TrimSpace(request.Model) == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Responses 请求缺少有效 model")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Permintaan Responses tiada model yang sah")
 		return
 	}
 	if compact {
 		body, err = forceJSONBoolean(body, "stream", false)
 		if err != nil {
-			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Compact 请求格式无效")
+			writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "Format permintaan Compact tidak sah")
 			return
 		}
 		request.Stream = false
@@ -1267,7 +1267,7 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 	clientValue, exists := c.Get(middleware.ClientKey)
 	clientKey, ok := clientValue.(clientkeydomain.Key)
 	if !exists || !ok {
-		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "客户端 API Key 无效")
+		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "API Key pelanggan tidak sah")
 		return
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
@@ -1307,7 +1307,7 @@ func decodeSingleJSON(reader io.Reader, target any, disallowUnknown bool) error 
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return errors.New("请求体只能包含一个 JSON 对象")
+			return errors.New("Badan permintaan hanya boleh mengandungi satu objek JSON")
 		}
 		return err
 	}
@@ -1326,12 +1326,12 @@ func (h *Handler) handleOwnedResource(c *gin.Context, deleteResource bool) {
 	clientValue, exists := c.Get(middleware.ClientKey)
 	clientKey, ok := clientValue.(clientkeydomain.Key)
 	if !exists || !ok {
-		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "客户端 API Key 无效")
+		writeOpenAIError(c, http.StatusUnauthorized, "invalid_api_key", "API Key pelanggan tidak sah")
 		return
 	}
 	input := gateway.ResourceInput{ClientKey: clientKey, ResponseID: strings.TrimSpace(c.Param("responseId")), RawQuery: c.Request.URL.RawQuery}
 	if input.ResponseID == "" {
-		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "response_id 不能为空")
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "response_id tak boleh kosong")
 		return
 	}
 	var result *gateway.Result
@@ -1378,7 +1378,7 @@ func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, st
 	}
 	if contentLength, parseErr := strconv.ParseInt(result.Header.Get("Content-Length"), 10, 64); parseErr == nil && contentLength > transferLimit {
 		errorCode = "response_too_large"
-		writeOpenAIError(c, http.StatusBadGateway, "response_too_large", "上游响应超过代理安全上限")
+		writeOpenAIError(c, http.StatusBadGateway, "response_too_large", "Respons upstream melebihi had keselamatan proksi")
 		return
 	}
 	copyHeaders(c.Writer.Header(), result.Header)
@@ -1435,7 +1435,7 @@ func copyStream(writer gin.ResponseWriter, source io.Reader, protocol streamProt
 		n, readErr := source.Read(buffer)
 		if n > 0 {
 			if received+n > maxStreamResponseTransferBytes {
-				return inspector.Metadata(), fmt.Errorf("%w: 流式响应超过 %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
+				return inspector.Metadata(), fmt.Errorf("%w: Respons berstrim melebihi %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
 			}
 			received += n
 			chunk := buffer[:n]
@@ -1455,7 +1455,7 @@ func copyStream(writer gin.ResponseWriter, source io.Reader, protocol streamProt
 				inspector.Inspect(chunk)
 			}
 			if transferred+len(chunk) > maxStreamResponseTransferBytes {
-				return inspector.Metadata(), fmt.Errorf("%w: 流式响应超过 %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
+				return inspector.Metadata(), fmt.Errorf("%w: Respons berstrim melebihi %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
 			}
 			if len(chunk) > 0 {
 				if err := setResponseWriteDeadline(writer); err != nil {
@@ -1472,7 +1472,7 @@ func copyStream(writer gin.ResponseWriter, source io.Reader, protocol streamProt
 		if readErr != nil {
 			if tail := markerFilter.Filter(nil, true); len(tail) > 0 {
 				if transferred+len(tail) > maxStreamResponseTransferBytes {
-					return inspector.Metadata(), fmt.Errorf("%w: 流式响应超过 %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
+					return inspector.Metadata(), fmt.Errorf("%w: Respons berstrim melebihi %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
 				}
 				if err := setResponseWriteDeadline(writer); err != nil {
 					return inspector.Metadata(), err
@@ -1487,7 +1487,7 @@ func copyStream(writer gin.ResponseWriter, source io.Reader, protocol streamProt
 				if tail := flushResponsesStreamTail(&compat); len(tail) > 0 {
 					inspector.Inspect(tail)
 					if transferred+len(tail) > maxStreamResponseTransferBytes {
-						return inspector.Metadata(), fmt.Errorf("%w: 流式响应超过 %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
+						return inspector.Metadata(), fmt.Errorf("%w: Respons berstrim melebihi %d MiB", errResponseTransferLimit, maxStreamResponseTransferBytes>>20)
 					}
 					if err := setResponseWriteDeadline(writer); err != nil {
 						return inspector.Metadata(), err
@@ -1529,12 +1529,12 @@ func writeStreamAbortTrailer(writer gin.ResponseWriter, protocol streamProtocol,
 }
 
 func streamAbortTrailer(protocol streamProtocol, cause error, meta responseMetadata, compat *responsesCompatState) []byte {
-	code, message := "upstream_stream_interrupted", "上游流式响应中断"
+	code, message := "upstream_stream_interrupted", "Respons berstrim upstream terganggu"
 	switch {
 	case errors.Is(cause, neterror.ErrUpstreamStreamIdleTimeout):
-		code, message = "upstream_stream_idle_timeout", "上游流式响应长时间无数据"
+		code, message = "upstream_stream_idle_timeout", "Respons berstrim upstream tiada data terlalu lama"
 	case errors.Is(cause, errUpstreamStreamIncomplete):
-		code, message = "upstream_stream_incomplete", "上游流式响应未完整结束"
+		code, message = "upstream_stream_incomplete", "Respons berstrim upstream tidak berakhir dengan lengkap"
 	}
 	switch protocol {
 	case streamProtocolChat:
@@ -1641,7 +1641,7 @@ func copyJSON(writer gin.ResponseWriter, source io.Reader, protocol streamProtoc
 		n, readErr := source.Read(buffer)
 		if n > 0 {
 			if transferred+n > maxJSONResponseTransferBytes {
-				return responseMetadata{}, fmt.Errorf("%w: 非流式响应超过 %d MiB", errResponseTransferLimit, maxJSONResponseTransferBytes>>20)
+				return responseMetadata{}, fmt.Errorf("%w: Respons tanpa strim melebihi %d MiB", errResponseTransferLimit, maxJSONResponseTransferBytes>>20)
 			}
 			chunk := buffer[:n]
 			if err := setResponseWriteDeadline(writer); err != nil {
@@ -2269,7 +2269,7 @@ func writeImageGenerationUserError(c *gin.Context, code, param, message string) 
 
 func writeGatewayError(c *gin.Context, err error) {
 	status, code := http.StatusBadGateway, "upstream_unavailable"
-	message := "上游服务暂不可用"
+	message := "Perkhidmatan upstream tidak tersedia buat sementara waktu"
 	var upstreamFailure *gateway.UpstreamFailure
 	var selectionFailure *gateway.SelectionUnavailableError
 	switch {
@@ -2284,10 +2284,10 @@ func writeGatewayError(c *gin.Context, err error) {
 		message = clientkeyapp.ErrModelNotAllowed.Error()
 	case errors.Is(err, gateway.ErrModelNotFound):
 		status, code = http.StatusNotFound, "model_not_found"
-		message = "模型不存在"
+		message = "Model tidak wujud"
 	case errors.Is(err, gateway.ErrResponseNotFound):
 		status, code = http.StatusNotFound, "response_not_found"
-		message = "Response 不存在或已过期"
+		message = "Response tidak wujud atau telah tamat tempoh"
 	case errors.Is(err, gateway.ErrResponseStateUnsupported), errors.Is(err, gateway.ErrConversationUnsupported):
 		status, code = http.StatusBadRequest, "unsupported_parameter"
 		message = err.Error()
@@ -2326,14 +2326,14 @@ func writeGatewayError(c *gin.Context, err error) {
 		}
 	case errors.Is(err, gateway.ErrResponseAccountUnavailable), errors.Is(err, gateway.ErrNoAvailableAccount):
 		status, code = http.StatusServiceUnavailable, "upstream_unavailable"
-		message = "当前没有可用的上游账号"
+		message = "Tiada akaun upstream yang tersedia buat masa ini"
 	}
 	writeOpenAIError(c, status, code, message)
 }
 
 func writeGatewayAnthropicError(c *gin.Context, err error) {
 	status, errorType := http.StatusBadGateway, "api_error"
-	message := "上游服务暂不可用"
+	message := "Perkhidmatan upstream tidak tersedia buat sementara waktu"
 	clientCode := ""
 	var upstreamFailure *gateway.UpstreamFailure
 	var selectionFailure *gateway.SelectionUnavailableError
@@ -2349,7 +2349,7 @@ func writeGatewayAnthropicError(c *gin.Context, err error) {
 		message = clientkeyapp.ErrModelNotAllowed.Error()
 	case errors.Is(err, gateway.ErrModelNotFound):
 		status, errorType = http.StatusNotFound, "not_found_error"
-		message = "模型不存在"
+		message = "Model tidak wujud"
 	case errors.Is(err, gateway.ErrResponseStateUnsupported), errors.Is(err, gateway.ErrConversationUnsupported):
 		status, errorType = http.StatusBadRequest, "invalid_request_error"
 		message = err.Error()
@@ -2381,7 +2381,7 @@ func writeGatewayAnthropicError(c *gin.Context, err error) {
 		}
 	case errors.Is(err, gateway.ErrResponseAccountUnavailable), errors.Is(err, gateway.ErrNoAvailableAccount):
 		status, errorType = http.StatusServiceUnavailable, "overloaded_error"
-		message = "当前没有可用的上游账号"
+		message = "Tiada akaun upstream yang tersedia buat masa ini"
 	}
 	writeAnthropicError(c, status, errorType, message, clientCode)
 }
@@ -2396,7 +2396,7 @@ func isSanitizedUpstreamAvailabilityFailure(failure *gateway.UpstreamFailure) bo
 }
 
 func selectionErrorResponse(c *gin.Context, failure *gateway.SelectionUnavailableError) (int, string, string) {
-	status, code, message := http.StatusServiceUnavailable, "upstream_unavailable", "当前没有可用的上游账号"
+	status, code, message := http.StatusServiceUnavailable, "upstream_unavailable", "Tiada akaun upstream yang tersedia buat masa ini"
 	if failure == nil {
 		return status, code, message
 	}
@@ -2406,15 +2406,15 @@ func selectionErrorResponse(c *gin.Context, failure *gateway.SelectionUnavailabl
 	} else {
 		switch failure.Reason {
 		case gateway.SelectionCooling:
-			message = "上游账号正在冷却"
+			message = "Akaun upstream sedang dalam tempoh penyejukan"
 		case gateway.SelectionModelCooling:
-			message = "上游账号的目标模型正在冷却"
+			message = "Model sasaran akaun upstream sedang dalam tempoh penyejukan"
 		case gateway.SelectionQuotaExhausted:
-			message = "上游账号额度等待恢复"
+			message = "Kuota akaun upstream menunggu pemulihan"
 		case gateway.SelectionSaturated:
-			message = "上游账号当前均达到并发上限"
+			message = "Akaun upstream semuanya telah mencapai had serentak"
 		case gateway.SelectionUnsupportedModel:
-			message = "当前账号池不支持该模型"
+			message = "Kolam akaun semasa tidak menyokong model ini"
 		}
 	}
 	if failure.RetryAfter > 0 {
@@ -2442,9 +2442,9 @@ func readCredentialErrorCode(status int, source io.Reader) string {
 
 func credentialErrorMessage(code string) string {
 	if code == "permission-denied" {
-		return "上游服务暂不可用，聊天端点访问被拒绝"
+		return "Perkhidmatan upstream tidak tersedia buat sementara waktu, akses ke titik akhir sembang ditolak"
 	}
-	return "上游服务暂不可用"
+	return "Perkhidmatan upstream tidak tersedia buat sementara waktu"
 }
 
 func forceJSONBoolean(body []byte, key string, value bool) ([]byte, error) {

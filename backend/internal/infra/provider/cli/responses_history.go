@@ -61,7 +61,7 @@ func (c *responsesToolCompatibility) normalizeInputItems(items []any) ([]any, []
 		case "tool_search_call":
 			callID := strings.TrimSpace(stringField(item, "call_id"))
 			if callID == "" {
-				return nil, nil, nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+				return nil, nil, nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 			}
 			execution := strings.ToLower(strings.TrimSpace(stringField(item, "execution")))
 			if execution == "" || execution == "server" {
@@ -71,13 +71,13 @@ func (c *responsesToolCompatibility) normalizeInputItems(items []any) ([]any, []
 				rewritten = append(rewritten, compatibilityBoundaryMessage("A server-side tool search occurred here; selected tools are made available directly."))
 				continue
 			}
-			if execution != "client" {
-				return nil, nil, nil, &responsesRequestError{Message: "tool_search_call.execution 只支持 client 或 server", Param: param + ".execution", Code: "invalid_parameter"}
-			}
-			arguments, err := encodeFunctionArguments(item["arguments"])
-			if err != nil {
-				return nil, nil, nil, &responsesRequestError{Message: param + ".arguments 无法编码", Param: param + ".arguments", Code: "invalid_parameter"}
-			}
+		if execution != "client" {
+			return nil, nil, nil, &responsesRequestError{Message: "tool_search_call.execution hanya menyokong client atau server", Param: param + ".execution", Code: "invalid_parameter"}
+		}
+		arguments, err := encodeFunctionArguments(item["arguments"])
+		if err != nil {
+			return nil, nil, nil, &responsesRequestError{Message: param + ".arguments tak boleh dikodkan", Param: param + ".arguments", Code: "invalid_parameter"}
+		}
 			rewritten = append(rewritten, map[string]any{
 				"type": "function_call", "call_id": callID,
 				"name": c.alias(responsesToolIdentity{Kind: responsesToolSearch, Name: "tool_search"}), "arguments": arguments,
@@ -85,17 +85,17 @@ func (c *responsesToolCompatibility) normalizeInputItems(items []any) ([]any, []
 			c.changed = true
 		case "tool_search_output":
 			execution := strings.ToLower(strings.TrimSpace(stringField(item, "execution")))
-			if execution != "" && execution != "client" && execution != "server" {
-				return nil, nil, nil, &responsesRequestError{Message: "tool_search_output.execution 只支持 client 或 server", Param: param + ".execution", Code: "invalid_parameter"}
-			}
+		if execution != "" && execution != "client" && execution != "server" {
+			return nil, nil, nil, &responsesRequestError{Message: "tool_search_output.execution hanya menyokong client atau server", Param: param + ".execution", Code: "invalid_parameter"}
+		}
 			callID := strings.TrimSpace(stringField(item, "call_id"))
 			if callID == "" {
-				return nil, nil, nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+				return nil, nil, nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 			}
-			tools, ok := item["tools"].([]any)
-			if !ok {
-				return nil, nil, nil, &responsesRequestError{Message: param + ".tools 必须是数组", Param: param + ".tools", Code: "invalid_parameter"}
-			}
+		tools, ok := item["tools"].([]any)
+		if !ok {
+			return nil, nil, nil, &responsesRequestError{Message: param + ".tools mesti array", Param: param + ".tools", Code: "invalid_parameter"}
+		}
 			for toolIndex, rawTool := range tools {
 				converted, err := c.normalizeTool(rawTool, "", false, true, fmt.Sprintf("%s.tools[%d]", param, toolIndex))
 				if err != nil {
@@ -180,12 +180,12 @@ func (c *responsesToolCompatibility) normalizeInputItems(items []any) ([]any, []
 			c.changed = true
 			rewritten = append(rewritten, converted)
 		case "compaction_trigger":
-			if c.compactionRequested {
-				return nil, nil, nil, &responsesRequestError{Message: "compaction_trigger 只能出现一次", Param: param, Code: "invalid_parameter"}
-			}
-			if index != len(items)-1 {
-				return nil, nil, nil, &responsesRequestError{Message: "compaction_trigger 必须是 input 的最后一项", Param: param, Code: "invalid_parameter"}
-			}
+		if c.compactionRequested {
+			return nil, nil, nil, &responsesRequestError{Message: "compaction_trigger hanya boleh muncul sekali", Param: param, Code: "invalid_parameter"}
+		}
+		if index != len(items)-1 {
+			return nil, nil, nil, &responsesRequestError{Message: "compaction_trigger mesti item terakhir dalam input", Param: param, Code: "invalid_parameter"}
+		}
 			c.compactionRequested = true
 			c.changed = true
 			c.addWarning("remote_compaction_v2_emulated")
@@ -214,15 +214,15 @@ func (c *responsesToolCompatibility) normalizeInputItems(items []any) ([]any, []
 func (c *responsesToolCompatibility) normalizeFunctionCallInput(item map[string]any, param string) (map[string]any, error) {
 	name := strings.TrimSpace(stringField(item, "name"))
 	if name == "" {
-		return nil, &responsesRequestError{Message: param + ".name 不能为空", Param: param + ".name", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".name tak boleh kosong", Param: param + ".name", Code: "invalid_parameter"}
 	}
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	arguments, err := encodeFunctionArguments(item["arguments"])
 	if err != nil {
-		return nil, &responsesRequestError{Message: param + ".arguments 无法编码", Param: param + ".arguments", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".arguments tak boleh dikodkan", Param: param + ".arguments", Code: "invalid_parameter"}
 	}
 	namespace := strings.TrimSpace(stringField(item, "namespace"))
 	if namespace != "" {
@@ -236,11 +236,11 @@ func (c *responsesToolCompatibility) normalizeFunctionCallInput(item map[string]
 func (c *responsesToolCompatibility) normalizeCustomToolCallInput(item map[string]any, param string) (map[string]any, error) {
 	name := strings.TrimSpace(stringField(item, "name"))
 	if name == "" {
-		return nil, &responsesRequestError{Message: param + ".name 不能为空", Param: param + ".name", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".name tak boleh kosong", Param: param + ".name", Code: "invalid_parameter"}
 	}
 	input, ok := item["input"].(string)
 	if !ok {
-		return nil, &responsesRequestError{Message: param + ".input 必须是字符串", Param: param + ".input", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".input mesti string", Param: param + ".input", Code: "invalid_parameter"}
 	}
 	arguments, err := encodeCustomToolArguments(input)
 	if err != nil {
@@ -248,7 +248,7 @@ func (c *responsesToolCompatibility) normalizeCustomToolCallInput(item map[strin
 	}
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
-		return nil, &responsesRequestError{Message: param + ".call_id 不能为空", Param: param + ".call_id", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".call_id tak boleh kosong", Param: param + ".call_id", Code: "invalid_parameter"}
 	}
 	namespace := strings.TrimSpace(stringField(item, "namespace"))
 	return map[string]any{

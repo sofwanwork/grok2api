@@ -28,23 +28,23 @@ import (
 )
 
 var (
-	ErrDevicePending       = errors.New("Device OAuth 等待用户授权")
-	ErrDeviceSlowDown      = errors.New("Device OAuth 轮询过快")
-	ErrDeviceDenied        = errors.New("Device OAuth 已拒绝或过期")
-	ErrInvalidFilter       = errors.New("账号筛选条件无效")
-	ErrInvalidInput        = errors.New("账号参数无效")
-	ErrInvalidImport       = errors.New("账号凭据格式无效")
-	ErrImportLimit         = errors.New("导入账号数量超过限制")
-	ErrExportLimit         = errors.New("导出账号数量超过限制")
-	ErrNotFound            = errors.New("账号不存在")
-	ErrUnsupported         = errors.New("账号来源不支持该操作")
-	ErrConversionBusy      = errors.New("账号正在转换为 Grok Build")
-	ErrConflict            = errors.New("账号操作存在冲突")
-	ErrAccountPoolMismatch = errors.New("批量操作包含不属于当前号池的账号")
+	ErrDevicePending       = errors.New("Device OAuth menunggu kebenaran pengguna")
+	ErrDeviceSlowDown      = errors.New("Pengundian Device OAuth terlalu cepat")
+	ErrDeviceDenied        = errors.New("Device OAuth telah ditolak atau tamat tempoh")
+	ErrInvalidFilter       = errors.New("Syarat tapisan akaun tidak sah")
+	ErrInvalidInput        = errors.New("Parameter akaun tidak sah")
+	ErrInvalidImport       = errors.New("Format kredensial akaun tidak sah")
+	ErrImportLimit         = errors.New("Bilangan akaun import melebihi had")
+	ErrExportLimit         = errors.New("Bilangan akaun eksport melebihi had")
+	ErrNotFound            = errors.New("Akaun tidak wujud")
+	ErrUnsupported         = errors.New("Sumber akaun tidak menyokong operasi ini")
+	ErrConversionBusy      = errors.New("Akaun sedang ditukar kepada Grok Build")
+	ErrConflict            = errors.New("Operasi akaun berkonflik")
+	ErrAccountPoolMismatch = errors.New("Operasi pukal mengandungi akaun yang tidak tergolong dalam kolam akaun semasa")
 )
 
-var ErrCredentialRefreshPermanent = errors.New("OAuth refresh token 已永久失效")
-var errQuotaRefreshBusy = errors.New("额度同步已由其他实例执行")
+var ErrCredentialRefreshPermanent = errors.New("OAuth refresh token telah luput secara kekal")
+var errQuotaRefreshBusy = errors.New("Penyegerakan kuota sedang dilaksanakan oleh instance lain")
 
 const (
 	// estimatedFreeTokenLimit is only a fallback until an upstream exhaustion
@@ -95,7 +95,7 @@ const (
 	buildDetectPrompt = "hello,test"
 )
 
-const permanentRefreshExpiredReason = "OAuth refresh token 已永久失效且 access token 已过期"
+const permanentRefreshExpiredReason = "OAuth refresh token telah luput secara kekal dan access token telah tamat tempoh"
 const buildBotFlagCacheKey = "build-bot-flagged-account-ids"
 
 type buildBotFlagIndexRepository interface {
@@ -784,17 +784,17 @@ func (s *Service) BatchUpdate(ctx context.Context, providerValue accountdomain.P
 		return 0, err
 	}
 	if !providerValue.IsValid() {
-		return 0, invalidInput("账号来源无效")
+		return 0, invalidInput("Sumber akaun tidak sah")
 	}
 	slices.Sort(ids)
 	if input.MaxConcurrent != nil && (*input.MaxConcurrent < 1 || *input.MaxConcurrent > accountdomain.MaxConcurrent) {
-		return 0, invalidInput("maxConcurrent 必须在 1 到 256 之间")
+		return 0, invalidInput("maxConcurrent mesti antara 1 hingga 256")
 	}
 	if input.MinimumRemaining != nil && *input.MinimumRemaining < 0 {
-		return 0, invalidInput("minimumRemaining 不能小于零")
+		return 0, invalidInput("minimumRemaining tidak boleh kurang daripada sifar")
 	}
 	if input.Name != nil {
-		return 0, invalidInput("批量更新不支持修改账号名称")
+		return 0, invalidInput("Kemas kini pukal tidak menyokong pengubahan nama akaun")
 	}
 	updated, err := s.accounts.UpdateMany(ctx, providerValue, ids, repository.AccountUpdates{Enabled: input.Enabled, Priority: input.Priority, MaxConcurrent: input.MaxConcurrent, MinimumRemaining: input.MinimumRemaining})
 	if err != nil {
@@ -898,7 +898,7 @@ func (s *Service) batchDeleteWithLinkedMode(ctx context.Context, providerValue a
 		return out, nil
 	}
 	if len(targets) > 0 && !providerValue.IsValid() {
-		return out, invalidInput("账号来源无效")
+		return out, invalidInput("Sumber akaun tidak sah")
 	}
 	// Atomic path: lock roots → expand links → lock final → media handling → delete.
 	outcome, err := s.accounts.DeleteManyWithLinked(ctx, providerValue, ids, targets, skipMedia)
@@ -916,7 +916,7 @@ func (s *Service) batchDeleteWithLinkedMode(ctx context.Context, providerValue a
 // 该校验只读取账号主表，避免详情页的额度、审计或关联查询影响批量操作。
 func (s *Service) AccountsBelongToProvider(ctx context.Context, ids []uint64, providerValue accountdomain.Provider) (bool, error) {
 	if !providerValue.IsValid() {
-		return false, invalidInput("账号来源无效")
+		return false, invalidInput("Sumber akaun tidak sah")
 	}
 	values, err := normalizeBatchIDs(ids)
 	if err != nil {
@@ -941,7 +941,7 @@ type CleanupResult struct {
 // validateCleanupSelection validates cleanup states and linked target providers.
 func validateCleanupSelection(providerValue accountdomain.Provider, statuses []CleanupStatus, targets []accountdomain.Provider) (map[CleanupStatus]struct{}, error) {
 	if !providerValue.IsValid() {
-		return nil, invalidInput("账号来源无效")
+		return nil, invalidInput("Sumber akaun tidak sah")
 	}
 	selected := make(map[CleanupStatus]struct{}, len(statuses))
 	for _, status := range statuses {
@@ -949,18 +949,18 @@ func validateCleanupSelection(providerValue accountdomain.Provider, statuses []C
 		case CleanupStatusCooldown, CleanupStatusDisabled, CleanupStatusReauthRequired:
 			selected[status] = struct{}{}
 		default:
-			return nil, invalidInput("账号清理状态无效")
+			return nil, invalidInput("Status pembersihan akaun tidak sah")
 		}
 	}
 	if len(selected) == 0 {
-		return nil, invalidInput("至少选择一种账号状态")
+		return nil, invalidInput("Pilih sekurang-kurangnya satu status akaun")
 	}
 	for _, target := range targets {
 		if !target.IsValid() {
-			return nil, invalidInput("关联删除目标无效")
+			return nil, invalidInput("Sasaran pemadaman berkaitan tidak sah")
 		}
 		if target == providerValue {
-			return nil, invalidInput("关联删除目标不能包含当前号池")
+			return nil, invalidInput("Sasaran pemadaman berkaitan tidak boleh merangkumi kolam akaun semasa")
 		}
 	}
 	return selected, nil
@@ -1275,7 +1275,7 @@ func isEstimatedFreeBillingProfile(billing *accountdomain.Billing) bool {
 func (s *Service) StartDeviceLogin(ctx context.Context) (DeviceStartResult, error) {
 	adapter, ok := s.providers.DeviceOAuth(accountdomain.ProviderBuild)
 	if !ok {
-		return DeviceStartResult{}, fmt.Errorf("CLI Provider 未注册")
+		return DeviceStartResult{}, fmt.Errorf("CLI Provider tidak berdaftar")
 	}
 	authorization, err := adapter.StartDeviceAuthorization(ctx)
 	if err != nil {
@@ -1305,7 +1305,7 @@ func (s *Service) PollDeviceLogin(ctx context.Context, sessionID string) (View, 
 	}
 	adapter, ok := s.providers.DeviceOAuth(accountdomain.ProviderBuild)
 	if !ok {
-		return View{}, fmt.Errorf("CLI Provider 未注册")
+		return View{}, fmt.Errorf("CLI Provider tidak berdaftar")
 	}
 	seed, err := adapter.PollDeviceAuthorization(ctx, session.DeviceCode)
 	session.NextPollAt = now.Add(session.Interval)
@@ -1353,7 +1353,7 @@ func (s *Service) ImportCredentialsWithProgress(ctx context.Context, data []byte
 func (s *Service) ImportCredentialDocumentsWithProgress(ctx context.Context, documents [][]byte, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	adapter, ok := s.providers.CredentialCodec(accountdomain.ProviderBuild)
 	if !ok {
-		return ImportResult{}, fmt.Errorf("CLI Provider 未注册")
+		return ImportResult{}, fmt.Errorf("CLI Provider tidak berdaftar")
 	}
 	return s.importCredentialDocumentsWithProgress(ctx, adapter, documents, observer, progress)
 }
@@ -1376,7 +1376,7 @@ func (s *Service) ImportWebCredentialsWithProgress(ctx context.Context, data []b
 func (s *Service) ImportWebCredentialDocumentsWithProgress(ctx context.Context, documents [][]byte, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	adapter, ok := s.providers.CredentialCodec(accountdomain.ProviderWeb)
 	if !ok {
-		return ImportResult{}, fmt.Errorf("Grok Web Provider 未注册")
+		return ImportResult{}, fmt.Errorf("Grok Web Provider tidak berdaftar")
 	}
 	return s.importCredentialDocumentsWithProgress(ctx, adapter, documents, observer, progress)
 }
@@ -1396,14 +1396,14 @@ func (s *Service) ImportConsoleCredentialsWithProgress(ctx context.Context, data
 func (s *Service) ImportConsoleCredentialDocumentsWithProgress(ctx context.Context, documents [][]byte, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	adapter, ok := s.providers.CredentialCodec(accountdomain.ProviderConsole)
 	if !ok {
-		return ImportResult{}, fmt.Errorf("Grok Console Provider 未注册")
+		return ImportResult{}, fmt.Errorf("Grok Console Provider tidak berdaftar")
 	}
 	return s.importCredentialDocumentsWithProgress(ctx, adapter, documents, observer, progress)
 }
 
 func (s *Service) importCredentialDocumentsWithProgress(ctx context.Context, adapter provider.CredentialCodecAdapter, documents [][]byte, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	if len(documents) == 0 {
-		return ImportResult{}, fmt.Errorf("%w: 没有可导入的账号文件", ErrInvalidImport)
+		return ImportResult{}, fmt.Errorf("%w: tiada fail akaun untuk diimport", ErrInvalidImport)
 	}
 	seeds := make([]provider.CredentialSeed, 0)
 	seen := make(map[string]struct{})
@@ -1413,13 +1413,13 @@ func (s *Service) importCredentialDocumentsWithProgress(ctx context.Context, ada
 		values, err := adapter.ParseImportedCredentials(document)
 		if err != nil {
 			if errors.Is(err, provider.ErrCredentialLimit) {
-				return ImportResult{}, fmt.Errorf("%w: 单次最多导入 %d 个账号", ErrImportLimit, maxCredentialImportAccounts)
+				return ImportResult{}, fmt.Errorf("%w: maksimum import %d akaun setiap kali", ErrImportLimit, maxCredentialImportAccounts)
 			}
-			return ImportResult{}, fmt.Errorf("%w: 第 %d 个文件: %v", ErrInvalidImport, index+1, err)
+			return ImportResult{}, fmt.Errorf("%w: fail ke-%d: %v", ErrInvalidImport, index+1, err)
 		}
 		parsedAccounts += len(values)
 		if parsedAccounts > maxCredentialImportAccounts {
-			return ImportResult{}, fmt.Errorf("%w: 单次最多导入 %d 个账号", ErrImportLimit, maxCredentialImportAccounts)
+			return ImportResult{}, fmt.Errorf("%w: maksimum import %d akaun setiap kali", ErrImportLimit, maxCredentialImportAccounts)
 		}
 		for _, value := range values {
 			if value.SourceKey != "" {
@@ -1551,7 +1551,7 @@ func (s *Service) persistImportedSeed(ctx context.Context, seed provider.Credent
 		return repository.AccountUpsertResult{}, err
 	}
 	if len(stored) != 1 {
-		return repository.AccountUpsertResult{}, fmt.Errorf("导入账号持久化结果数量无效: %d", len(stored))
+		return repository.AccountUpsertResult{}, fmt.Errorf("Bilangan hasil pemersistenan akaun import tidak sah: %d", len(stored))
 	}
 	s.reconcileProviderLinksBestEffort(ctx, stored[0].ID)
 	return stored[0], nil
@@ -1614,7 +1614,7 @@ func (s *Service) SyncWebAccountsToConsoleWithProgress(ctx context.Context, ids 
 
 func (s *Service) SyncWebAccountsToConsoleWithStrategy(ctx context.Context, ids []uint64, strategy WebConsoleSyncStrategy, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	if strategy != WebConsoleSyncAll && strategy != WebConsoleSyncMissing {
-		return ImportResult{}, invalidInput("Grok Web 到 Console 同步策略无效")
+		return ImportResult{}, invalidInput("Strategi penyegerakan Grok Web ke Console tidak sah")
 	}
 	ids, err := normalizeIDs(ids, maxWebConsoleSyncAccounts)
 	if err != nil {
@@ -1647,7 +1647,7 @@ func (s *Service) SyncAllWebAccountsToConsoleWithProgress(ctx context.Context, o
 
 func (s *Service) SyncAllWebAccountsToConsoleWithStrategy(ctx context.Context, strategy WebConsoleSyncStrategy, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	if strategy != WebConsoleSyncAll && strategy != WebConsoleSyncMissing {
-		return ImportResult{}, invalidInput("Grok Web 到 Console 同步策略无效")
+		return ImportResult{}, invalidInput("Strategi penyegerakan Grok Web ke Console tidak sah")
 	}
 	batchSize := accountTaskBatchSize
 	result := ImportResult{AccountIDs: make([]uint64, 0)}
@@ -1701,32 +1701,32 @@ func (s *Service) SyncAllWebAccountsToConsoleWithStrategy(ctx context.Context, s
 func (s *Service) syncWebCredentialsToConsole(ctx context.Context, values []accountdomain.Credential, observer ImportedAccountObserver, progress BatchProgressObserver) (ImportResult, error) {
 	adapter, ok := s.providers.CredentialCodec(accountdomain.ProviderConsole)
 	if !ok {
-		return ImportResult{}, fmt.Errorf("Grok Console Provider 未注册")
+		return ImportResult{}, fmt.Errorf("Grok Console Provider tidak berdaftar")
 	}
 	seeds := make([]provider.CredentialSeed, 0, len(values))
 	for _, value := range values {
 		if value.Provider != accountdomain.ProviderWeb || value.AuthType != accountdomain.AuthTypeSSO {
-			return ImportResult{}, fmt.Errorf("%w: 仅 Grok Web SSO 账号支持同步到 Console", ErrUnsupported)
+			return ImportResult{}, fmt.Errorf("%w: Hanya akaun Grok Web SSO menyokong penyegerakan ke Console", ErrUnsupported)
 		}
 		token, err := s.cipher.Decrypt(value.EncryptedAccessToken)
 		if err != nil {
-			return ImportResult{}, fmt.Errorf("解密 Grok Web SSO: %w", err)
+			return ImportResult{}, fmt.Errorf("Menyahsulitkan Grok Web SSO: %w", err)
 		}
 		// 非法 UTF-8 会被 json.Marshal 静默改写为 U+FFFD，显式拒绝优于静默改动（不应回显 token 内容）。
 		if !utf8.ValidString(token) {
-			return ImportResult{}, fmt.Errorf("解密 Grok Web SSO: 凭据不是合法 UTF-8")
+			return ImportResult{}, fmt.Errorf("Menyahsulitkan Grok Web SSO: kredensial bukan UTF-8 yang sah")
 		}
 		// 内部调用固定走 JSON 对象路径，避免 plain token 被格式嗅探（如「[」JSON 保留前缀）误判。
 		payload, err := json.Marshal(map[string]string{"sso_token": token})
 		if err != nil {
-			return ImportResult{}, fmt.Errorf("生成 Grok Console SSO 凭据: %w", err)
+			return ImportResult{}, fmt.Errorf("Menjana kredensial Grok Console SSO: %w", err)
 		}
 		parsed, err := adapter.ParseImportedCredentials(payload)
 		if err != nil {
-			return ImportResult{}, fmt.Errorf("生成 Grok Console SSO 凭据: %w", err)
+			return ImportResult{}, fmt.Errorf("Menjana kredensial Grok Console SSO: %w", err)
 		}
 		if len(parsed) != 1 {
-			return ImportResult{}, fmt.Errorf("生成 Grok Console SSO 凭据: 预期 1 个账号，实际 %d 个", len(parsed))
+			return ImportResult{}, fmt.Errorf("Menjana kredensial Grok Console SSO: dijangka 1 akaun, sebenarnya %d akaun", len(parsed))
 		}
 		seed := parsed[0]
 		seed.Provider = accountdomain.ProviderConsole
@@ -1735,7 +1735,7 @@ func (s *Service) syncWebCredentialsToConsole(ctx context.Context, values []acco
 		if strings.TrimSpace(value.EncryptedCloudflareCookie) != "" {
 			cookies, decryptErr := s.cipher.Decrypt(value.EncryptedCloudflareCookie)
 			if decryptErr != nil {
-				return ImportResult{}, fmt.Errorf("解密 Grok Web Cloudflare Cookie: %w", decryptErr)
+				return ImportResult{}, fmt.Errorf("Menyahsulitkan Grok Web Cloudflare Cookie: %w", decryptErr)
 			}
 			seed.CloudflareCookies = cookies
 		}
@@ -1771,7 +1771,7 @@ func (s *Service) ConvertWebAccountsToBuildWithProgress(ctx context.Context, ids
 
 func (s *Service) ConvertWebAccountsToBuildWithStrategy(ctx context.Context, ids []uint64, strategy BuildConversionStrategy, observer ImportedAccountObserver, progress BatchProgressObserver) (BuildConversionResult, error) {
 	if strategy != BuildConversionAll && strategy != BuildConversionMissing {
-		return BuildConversionResult{}, invalidInput("Grok Web 到 Build 转换策略无效")
+		return BuildConversionResult{}, invalidInput("Strategi penukaran Grok Web ke Build tidak sah")
 	}
 	ids, err := normalizeIDs(ids, maxBuildConversionAccounts)
 	if err != nil {
@@ -1807,7 +1807,7 @@ func (s *Service) ConvertAllWebAccountsToBuildWithProgress(ctx context.Context, 
 
 func (s *Service) ConvertAllWebAccountsToBuildWithStrategy(ctx context.Context, strategy BuildConversionStrategy, observer ImportedAccountObserver, progress BatchProgressObserver) (BuildConversionResult, error) {
 	if strategy != BuildConversionAll && strategy != BuildConversionMissing {
-		return BuildConversionResult{}, invalidInput("Grok Web 到 Build 转换策略无效")
+		return BuildConversionResult{}, invalidInput("Strategi penukaran Grok Web ke Build tidak sah")
 	}
 	batchSize := accountTaskBatchSize
 	result := BuildConversionResult{BuildAccountIDs: make([]uint64, 0)}
@@ -2010,13 +2010,13 @@ func (s *Service) convertWebAccountToBuild(ctx context.Context, id uint64, strat
 			return 0, false, false, mapRepositoryError(getErr)
 		}
 		if linkedBuild.Provider != accountdomain.ProviderBuild || strings.TrimSpace(linkedBuild.SourceKey) == "" {
-			return 0, false, false, fmt.Errorf("已关联 Grok Build 账号身份无效")
+			return 0, false, false, fmt.Errorf("Identiti akaun Grok Build berkaitan tidak sah")
 		}
 		linkedBuildSourceKey = linkedBuild.SourceKey
 	}
 	converter, ok := s.providers.BuildConverter(accountdomain.ProviderWeb)
 	if !ok {
-		return 0, false, false, fmt.Errorf("Grok Web SSO 转换能力未注册")
+		return 0, false, false, fmt.Errorf("Kemampuan penukaran Grok Web SSO tidak berdaftar")
 	}
 	seed, err := converter.ConvertToBuild(ctx, value)
 	if err != nil {
@@ -2035,7 +2035,7 @@ func (s *Service) convertWebAccountToBuild(ctx context.Context, id uint64, strat
 		return 0, false, false, err
 	}
 	if value.LinkedAccountID != 0 && buildAccount.ID != value.LinkedAccountID {
-		return 0, false, false, fmt.Errorf("重新转换后的 Grok Build 账号身份不一致")
+		return 0, false, false, fmt.Errorf("Identiti akaun Grok Build selepas penukaran semula tidak sepadan")
 	}
 	if err := s.accounts.LinkWebToBuild(ctx, id, buildAccount.ID); err != nil {
 		return 0, false, false, mapRepositoryError(err)
@@ -2060,16 +2060,16 @@ func (s *Service) ExportProviderCredentials(ctx context.Context, providerValue a
 // the maximum account ID captured by the first request.
 func (s *Service) ExportProviderCredentialsCursor(ctx context.Context, providerValue accountdomain.Provider, afterID, snapshotMaxID uint64, limit int) (ExportPageResult, error) {
 	if limit < 1 || limit > maxCredentialExportAccounts {
-		return ExportPageResult{}, invalidInput("单批导出数量必须在 1 到 10000 之间")
+		return ExportPageResult{}, invalidInput("Bilangan eksport setiap kelompok mesti antara 1 hingga 10000")
 	}
 	if afterID > 0 && snapshotMaxID == 0 {
-		return ExportPageResult{}, invalidInput("继续导出时必须提供快照上界")
+		return ExportPageResult{}, invalidInput("Had atas snapshot mesti disertakan semasa meneruskan eksport")
 	}
 	if snapshotMaxID > 0 && afterID > snapshotMaxID {
-		return ExportPageResult{}, invalidInput("导出游标不能超过快照上界")
+		return ExportPageResult{}, invalidInput("Kursor eksport tidak boleh melebihi had atas snapshot")
 	}
 	if !providerValue.IsValid() {
-		return ExportPageResult{}, invalidInput("账号来源无效")
+		return ExportPageResult{}, invalidInput("Sumber akaun tidak sah")
 	}
 	if snapshotMaxID == 0 {
 		values, _, err := s.accounts.List(ctx, repository.AccountListQuery{
@@ -2123,14 +2123,14 @@ func (s *Service) ExportProviderCredentialsByIDs(ctx context.Context, providerVa
 
 func (s *Service) exportProviderCredentials(ctx context.Context, providerValue accountdomain.Provider, query repository.AccountListQuery, enforceTotalLimit bool, expectedCount int) (ExportResult, error) {
 	if !providerValue.IsValid() {
-		return ExportResult{}, invalidInput("账号来源无效")
+		return ExportResult{}, invalidInput("Sumber akaun tidak sah")
 	}
 	values, total, err := s.accounts.List(ctx, query)
 	if err != nil {
 		return ExportResult{}, err
 	}
 	if enforceTotalLimit && total > maxCredentialExportAccounts {
-		return ExportResult{}, fmt.Errorf("%w: 单次最多导出 10000 个账号", ErrExportLimit)
+		return ExportResult{}, fmt.Errorf("%w: maksimum eksport 10000 akaun setiap kali", ErrExportLimit)
 	}
 	if err := validateCredentialExportCount(expectedCount, total, len(values)); err != nil {
 		return ExportResult{}, err
@@ -2140,21 +2140,21 @@ func (s *Service) exportProviderCredentials(ctx context.Context, providerValue a
 
 func validateCredentialExportCount(expected int, total int64, actual int) error {
 	if expected > 0 && (total != int64(expected) || actual != expected) {
-		return invalidInput("所选账号包含不存在或不属于当前号池的账号")
+		return invalidInput("Akaun terpilih mengandungi akaun yang tidak wujud atau tidak tergolong dalam kolam akaun semasa")
 	}
 	return nil
 }
 
 func (s *Service) marshalProviderCredentials(providerValue accountdomain.Provider, values []accountdomain.Credential) (ExportResult, error) {
 	if !providerValue.IsValid() {
-		return ExportResult{}, invalidInput("账号来源无效")
+		return ExportResult{}, invalidInput("Sumber akaun tidak sah")
 	}
 	if s.providers == nil {
-		return ExportResult{}, fmt.Errorf("Provider 注册表未初始化")
+		return ExportResult{}, fmt.Errorf("Registry Provider belum diinisialisasi")
 	}
 	adapter, ok := s.providers.CredentialCodec(providerValue)
 	if !ok {
-		return ExportResult{}, fmt.Errorf("Provider %s 不支持凭据导出", providerValue)
+		return ExportResult{}, fmt.Errorf("Provider %s tidak menyokong eksport kredensial", providerValue)
 	}
 	var err error
 	seeds := make([]provider.CredentialSeed, 0, len(values))
@@ -2166,25 +2166,25 @@ func (s *Service) marshalProviderCredentials(providerValue accountdomain.Provide
 		if value.EncryptedAccessToken != "" {
 			accessToken, err = s.cipher.Decrypt(value.EncryptedAccessToken)
 			if err != nil {
-				return ExportResult{}, fmt.Errorf("解密账号 %d access token: %w", value.ID, err)
+				return ExportResult{}, fmt.Errorf("Menyahsulitkan access token akaun %d: %w", value.ID, err)
 			}
 		}
 		refreshToken := ""
 		if value.EncryptedRefreshToken != "" {
 			refreshToken, err = s.cipher.Decrypt(value.EncryptedRefreshToken)
 			if err != nil {
-				return ExportResult{}, fmt.Errorf("解密账号 %d refresh token: %w", value.ID, err)
+				return ExportResult{}, fmt.Errorf("Menyahsulitkan refresh token akaun %d: %w", value.ID, err)
 			}
 		}
 		cloudflareCookies := ""
 		if value.EncryptedCloudflareCookie != "" {
 			cloudflareCookies, err = s.cipher.Decrypt(value.EncryptedCloudflareCookie)
 			if err != nil {
-				return ExportResult{}, fmt.Errorf("解密账号 %d Cloudflare Cookie: %w", value.ID, err)
+				return ExportResult{}, fmt.Errorf("Menyahsulitkan Cloudflare Cookie akaun %d: %w", value.ID, err)
 			}
 		}
 		if accessToken == "" && refreshToken == "" {
-			return ExportResult{}, fmt.Errorf("账号 %d 没有可导出的凭据", value.ID)
+			return ExportResult{}, fmt.Errorf("Akaun %d tiada kredensial untuk dieksport", value.ID)
 		}
 		seeds = append(seeds, provider.CredentialSeed{
 			Provider: value.Provider, AuthType: value.AuthType, WebTier: value.WebTier,
@@ -2210,7 +2210,7 @@ func (s *Service) Update(ctx context.Context, id uint64, input UpdateInput) (Vie
 	if input.Name != nil {
 		value.Name = strings.TrimSpace(*input.Name)
 		if value.Name == "" {
-			return View{}, invalidInput("账号名称不能为空")
+			return View{}, invalidInput("Nama akaun tak boleh kosong")
 		}
 	}
 	if input.Enabled != nil {
@@ -2221,13 +2221,13 @@ func (s *Service) Update(ctx context.Context, id uint64, input UpdateInput) (Vie
 	}
 	if input.MaxConcurrent != nil {
 		if *input.MaxConcurrent < 1 || *input.MaxConcurrent > accountdomain.MaxConcurrent {
-			return View{}, invalidInput("maxConcurrent 必须在 1 到 256 之间")
+			return View{}, invalidInput("maxConcurrent mesti antara 1 hingga 256")
 		}
 		value.MaxConcurrent = *input.MaxConcurrent
 	}
 	if input.MinimumRemaining != nil {
 		if *input.MinimumRemaining < 0 {
-			return View{}, invalidInput("minimumRemaining 不能小于零")
+			return View{}, invalidInput("minimumRemaining tidak boleh kurang daripada sifar")
 		}
 		value.MinimumRemaining = *input.MinimumRemaining
 	}
@@ -2235,15 +2235,15 @@ func (s *Service) Update(ctx context.Context, id uint64, input UpdateInput) (Vie
 		value.EncryptedCloudflareCookie = ""
 	} else if input.CloudflareCookies != nil {
 		if value.Provider == accountdomain.ProviderBuild {
-			return View{}, invalidInput("Grok Build 账号不使用 Cloudflare Cookie")
+			return View{}, invalidInput("Akaun Grok Build tidak menggunakan Cloudflare Cookie")
 		}
 		if len(*input.CloudflareCookies) > 16<<10 {
-			return View{}, invalidInput("Cloudflare Cookie 不能超过 16 KiB")
+			return View{}, invalidInput("Cloudflare Cookie tidak boleh melebihi 16 KiB")
 		}
 		if strings.TrimSpace(*input.CloudflareCookies) != "" {
 			cookies := egressapp.SanitizeCloudflareCookies(*input.CloudflareCookies)
 			if cookies == "" {
-				return View{}, invalidInput("Cloudflare Cookie 中没有有效字段")
+				return View{}, invalidInput("Cloudflare Cookie tiada medan yang sah")
 			}
 			encrypted, encryptErr := s.cipher.Encrypt(cookies)
 			if encryptErr != nil {
@@ -2254,16 +2254,16 @@ func (s *Service) Update(ctx context.Context, id uint64, input UpdateInput) (Vie
 	}
 	if input.BuildSuperEntitled != nil {
 		if value.Provider != accountdomain.ProviderBuild {
-			return View{}, invalidInput("仅 Grok Build 账号支持设置 Build Super entitlement")
+			return View{}, invalidInput("Hanya akaun Grok Build menyokong penetapan Build Super entitlement")
 		}
 		value.BuildSuperEntitled = *input.BuildSuperEntitled
 	}
 	if input.BuildRouteMode != nil {
 		if value.Provider != accountdomain.ProviderBuild {
-			return View{}, invalidInput("仅 Grok Build 账号支持设置上游地址")
+			return View{}, invalidInput("Hanya akaun Grok Build menyokong penetapan alamat upstream")
 		}
 		if !input.BuildRouteMode.IsValid() {
-			return View{}, invalidInput("Build 上游地址必须是 auto、build 或 xai")
+			return View{}, invalidInput("Alamat upstream Build mesti auto, build atau xai")
 		}
 		value.BuildRouteMode = *input.BuildRouteMode
 	}
@@ -2301,7 +2301,7 @@ func (s *Service) Delete(ctx context.Context, id uint64) error {
 // A single delete is rejected if any account in the final group has an active video job.
 func (s *Service) DeleteWithLinked(ctx context.Context, providerValue accountdomain.Provider, id uint64, targets []accountdomain.Provider) (AccountDeleteResult, error) {
 	if id == 0 {
-		return AccountDeleteResult{}, invalidInput("账号 ID 无效")
+		return AccountDeleteResult{}, invalidInput("ID akaun tidak sah")
 	}
 	result, err := s.batchDeleteWithLinkedMode(ctx, providerValue, []uint64{id}, targets, false)
 	if err != nil {
@@ -2321,7 +2321,7 @@ func (s *Service) PreviewLinkedDelete(ctx context.Context, providerValue account
 		return repository.LinkedDeleteResolution{}, err
 	}
 	if !providerValue.IsValid() {
-		return repository.LinkedDeleteResolution{}, invalidInput("账号来源无效")
+		return repository.LinkedDeleteResolution{}, invalidInput("Sumber akaun tidak sah")
 	}
 	resolution, err := s.accounts.ResolveLinkedDeleteIDs(ctx, providerValue, ids, targets)
 	if err != nil {
@@ -2456,7 +2456,7 @@ func (s *Service) ensureCredential(ctx context.Context, value accountdomain.Cred
 		}
 		adapter, ok := s.providers.CredentialRefresh(latest.Provider)
 		if !ok {
-			return nil, fmt.Errorf("Provider %s 未注册", latest.Provider)
+			return nil, fmt.Errorf("Provider %s tidak berdaftar", latest.Provider)
 		}
 		refreshed, err := adapter.RefreshCredential(ctx, latest)
 		if err != nil {
@@ -2496,7 +2496,7 @@ func (s *Service) ensureCredential(ctx context.Context, value accountdomain.Cred
 	}
 	credential, ok := result.(accountdomain.Credential)
 	if !ok {
-		return accountdomain.Credential{}, fmt.Errorf("账号凭据刷新返回类型无效")
+		return accountdomain.Credential{}, fmt.Errorf("Jenis pulangan penyegaran kredensial akaun tidak sah")
 	}
 	return credential, nil
 }
@@ -2766,7 +2766,7 @@ func (s *Service) RefreshBilling(ctx context.Context, id uint64) (accountdomain.
 	}
 	billing, ok := result.(accountdomain.Billing)
 	if !ok {
-		return accountdomain.Billing{}, fmt.Errorf("额度同步返回类型无效")
+		return accountdomain.Billing{}, fmt.Errorf("Jenis pulangan penyegerakan kuota tidak sah")
 	}
 	return billing, nil
 }
@@ -2793,7 +2793,7 @@ func (s *Service) fetchAndSaveBilling(ctx context.Context, id uint64) (accountdo
 	}
 	adapter, ok := s.providers.Billing(value.Provider)
 	if !ok {
-		return accountdomain.Credential{}, accountdomain.Billing{}, fmt.Errorf("Provider %s 未注册", value.Provider)
+		return accountdomain.Credential{}, accountdomain.Billing{}, fmt.Errorf("Provider %s tidak berdaftar", value.Provider)
 	}
 	billing, err := adapter.GetBilling(ctx, value)
 	if err != nil {
@@ -2923,7 +2923,7 @@ func (s *Service) RefreshQuota(ctx context.Context, id uint64) ([]accountdomain.
 	}
 	refreshed, ok := result.(quotaRefreshResult)
 	if !ok {
-		return nil, fmt.Errorf("Provider 额度同步返回类型无效")
+		return nil, fmt.Errorf("Jenis pulangan penyegerakan kuota Provider tidak sah")
 	}
 	if err := s.reconcileQuotaRecoveryWindows(ctx, refreshed.Credential.Provider, id, refreshed.Windows); err != nil {
 		return refreshed.Windows, err
@@ -2952,7 +2952,7 @@ func (s *Service) refreshQuota(ctx context.Context, id uint64) (quotaRefreshResu
 	}
 	adapter, ok := s.providers.Quota(value.Provider)
 	if !ok {
-		return quotaRefreshResult{}, fmt.Errorf("%s Quota Provider 未注册", value.Provider)
+		return quotaRefreshResult{}, fmt.Errorf("%s Quota Provider tidak berdaftar", value.Provider)
 	}
 	snapshot, err := adapter.SyncQuota(ctx, value)
 	if err != nil {
@@ -3029,7 +3029,7 @@ func (s *Service) RefreshQuotaMode(ctx context.Context, id uint64, mode string) 
 	}
 	refreshed, ok := result.(quotaRefreshResult)
 	if !ok {
-		return accountdomain.QuotaWindow{}, fmt.Errorf("Provider 模式额度同步返回类型无效")
+		return accountdomain.QuotaWindow{}, fmt.Errorf("Jenis pulangan penyegerakan kuota mod Provider tidak sah")
 	}
 	if len(refreshed.Modes) > 0 {
 		if err := s.reconcileQuotaGroupWindows(ctx, refreshed.Credential.Provider, id, refreshed.Modes, refreshed.Windows); err != nil {
@@ -3038,7 +3038,7 @@ func (s *Service) RefreshQuotaMode(ctx context.Context, id uint64, mode string) 
 	}
 	window, ok := quotaWindowByMode(refreshed.Windows, mode)
 	if !ok {
-		return accountdomain.QuotaWindow{}, fmt.Errorf("Provider usage 响应缺少 %s 额度", mode)
+		return accountdomain.QuotaWindow{}, fmt.Errorf("Respons usage Provider tiada kuota %s", mode)
 	}
 	if len(refreshed.Modes) == 0 && refreshed.Credential.Provider == accountdomain.ProviderConsole {
 		// One Console request refreshes all three authoritative windows. Reconcile
@@ -3072,11 +3072,11 @@ func (s *Service) ProbeQuotaMode(ctx context.Context, id uint64, mode string) (a
 	}
 	refreshed, ok := result.(quotaRefreshResult)
 	if !ok {
-		return accountdomain.QuotaWindow{}, fmt.Errorf("Provider 模式额度探测返回类型无效")
+		return accountdomain.QuotaWindow{}, fmt.Errorf("Jenis pulangan pengesanan kuota mod Provider tidak sah")
 	}
 	window, ok := quotaWindowByMode(refreshed.Windows, mode)
 	if !ok {
-		return accountdomain.QuotaWindow{}, fmt.Errorf("Provider usage 响应缺少 %s 额度", mode)
+		return accountdomain.QuotaWindow{}, fmt.Errorf("Respons usage Provider tiada kuota %s", mode)
 	}
 	return window, nil
 }
@@ -3088,7 +3088,7 @@ func (s *Service) refreshQuotaGroup(ctx context.Context, id uint64, group string
 	}
 	adapter, ok := s.providers.QuotaGroup(value.Provider)
 	if !ok {
-		return quotaRefreshResult{}, fmt.Errorf("%s quota group Provider 未注册", value.Provider)
+		return quotaRefreshResult{}, fmt.Errorf("%s quota group Provider tidak berdaftar", value.Provider)
 	}
 	snapshot, err := adapter.SyncQuotaGroup(ctx, value, group)
 	if err != nil {
@@ -3098,7 +3098,7 @@ func (s *Service) refreshQuotaGroup(ctx context.Context, id uint64, group string
 		return quotaRefreshResult{}, err
 	}
 	if snapshot.Group != group || len(snapshot.Modes) == 0 {
-		return quotaRefreshResult{}, fmt.Errorf("Provider quota group %s 返回无效快照", group)
+		return quotaRefreshResult{}, fmt.Errorf("Provider quota group %s memulangkan snapshot yang tidak sah", group)
 	}
 	if snapshot.SyncedAt.IsZero() {
 		snapshot.SyncedAt = s.now()
@@ -3116,7 +3116,7 @@ func (s *Service) refreshQuotaMode(ctx context.Context, id uint64, mode string) 
 	}
 	adapter, ok := s.providers.Quota(value.Provider)
 	if !ok {
-		return quotaRefreshResult{}, fmt.Errorf("%s Quota Provider 未注册", value.Provider)
+		return quotaRefreshResult{}, fmt.Errorf("%s Quota Provider tidak berdaftar", value.Provider)
 	}
 	var window accountdomain.QuotaWindow
 	var windows []accountdomain.QuotaWindow
@@ -3138,7 +3138,7 @@ func (s *Service) refreshQuotaMode(ctx context.Context, id uint64, mode string) 
 				}
 			}
 			if window.Mode == "" {
-				err = fmt.Errorf("Console usage 响应缺少 %s 额度", mode)
+				err = fmt.Errorf("Respons usage Console tiada kuota %s", mode)
 			}
 		}
 	} else {
@@ -3214,7 +3214,7 @@ func (s *Service) reconcileQuotaGroupWindows(ctx context.Context, providerValue 
 		}
 		if s.quotaQueue != nil {
 			if err := s.quotaQueue.CancelQuotaRecovery(ctx, accountID, mode); err != nil {
-				return fmt.Errorf("取消额度恢复事件: %w", err)
+				return fmt.Errorf("Membatalkan acara pemulihan kuota: %w", err)
 			}
 		}
 	}
@@ -3227,12 +3227,12 @@ func (s *Service) reconcileQuotaRecoveryWindow(ctx context.Context, providerValu
 	}
 	if dueAt := quotaRecoveryDueAt(window, s.now(), window.Remaining == 0); dueAt != nil {
 		if err := s.quotaQueue.ScheduleQuotaRecovery(ctx, accountdomain.QuotaRecoveryEvent{AccountID: accountID, Mode: window.Mode, DueAt: *dueAt}); err != nil {
-			return fmt.Errorf("安排额度恢复事件: %w", err)
+			return fmt.Errorf("Menjadualkan acara pemulihan kuota: %w", err)
 		}
 		return nil
 	}
 	if err := s.quotaQueue.CancelQuotaRecovery(ctx, accountID, window.Mode); err != nil {
-		return fmt.Errorf("取消额度恢复事件: %w", err)
+		return fmt.Errorf("Membatalkan acara pemulihan kuota: %w", err)
 	}
 	return nil
 }
@@ -3738,7 +3738,7 @@ func (s *Service) SyncAllBilling(ctx context.Context) (int, int, error) {
 
 func (s *Service) SyncAllBillingWithProgress(ctx context.Context, progress BatchProgressObserver) (int, int, error) {
 	if s.providers == nil {
-		return 0, 0, fmt.Errorf("Provider 注册表未初始化")
+		return 0, 0, fmt.Errorf("Registry Provider belum diinisialisasi")
 	}
 	ids := make([]uint64, 0)
 	for _, providerValue := range s.providers.Providers() {
@@ -3880,7 +3880,7 @@ func (s *Service) RefreshAllTokens(ctx context.Context) (int, int, int, error) {
 
 func (s *Service) RefreshAllTokensWithProgress(ctx context.Context, progress BatchProgressObserver) (int, int, int, error) {
 	if s.providers == nil {
-		return 0, 0, 0, fmt.Errorf("Provider 注册表未初始化")
+		return 0, 0, 0, fmt.Errorf("Registry Provider belum diinisialisasi")
 	}
 	allIDs := make([]uint64, 0)
 	ids := make([]uint64, 0)
@@ -3922,7 +3922,7 @@ func (s *Service) BatchRefreshTokens(ctx context.Context, ids []uint64) (int, in
 		return 0, 0, 0, err
 	}
 	if s.providers == nil {
-		return 0, 0, 0, fmt.Errorf("Provider 注册表未初始化")
+		return 0, 0, 0, fmt.Errorf("Registry Provider belum diinisialisasi")
 	}
 	refreshableIDs := make([]uint64, 0, len(values))
 	for _, id := range values {
@@ -3954,10 +3954,10 @@ func (s *Service) BatchRefreshBilling(ctx context.Context, ids []uint64) (int, i
 // itemObserver 在每个账号完成后串行调用：选中检测会推送全部结果，全量检测仅推送已确认失效账号。
 func (s *Service) DetectBuildAccountsWithProgress(ctx context.Context, ids []uint64, all bool, progress BatchProgressObserver, itemObserver BuildDetectItemObserver) (int, int, error) {
 	if all == (len(ids) > 0) {
-		return 0, 0, invalidInput("必须明确选择全部账号或提供非空账号 ID")
+		return 0, 0, invalidInput("Mesti memilih semua akaun secara jelas atau menyediakan ID akaun yang tidak kosong")
 	}
 	if s.providers == nil {
-		return 0, 0, fmt.Errorf("Provider 注册表未初始化")
+		return 0, 0, fmt.Errorf("Registry Provider belum diinisialisasi")
 	}
 	selectedMode := !all
 	var err error
@@ -4007,7 +4007,7 @@ func (s *Service) DetectBuildAccountsWithProgress(ctx context.Context, ids []uin
 		if item.Reason != "" {
 			return item, fmt.Errorf("%s", item.Reason)
 		}
-		return item, fmt.Errorf("账号检测失败")
+		return item, fmt.Errorf("Pengesanan akaun gagal")
 	}, func(index int, result batch.Result[BuildDetectItemResult]) {
 		var panicErr *batch.PanicError
 		if errors.As(result.Err, &panicErr) {
@@ -4040,7 +4040,7 @@ func (s *Service) detectBuildAccount(ctx context.Context, id uint64) BuildDetect
 	item.Name = value.Name
 	item.Email = value.Email
 	if value.Provider != accountdomain.ProviderBuild {
-		item.Reason = "仅 Grok Build 账号支持可用性检测"
+		item.Reason = "Hanya akaun Grok Build menyokong pengesanan ketersediaan"
 		return item
 	}
 	value, err = s.EnsureCredential(ctx, value, false)
@@ -4157,7 +4157,7 @@ func (s *Service) loadDetectBilling(ctx context.Context, id uint64) (*accountdom
 func (s *Service) forwardBuildDetect(ctx context.Context, value accountdomain.Credential, billing *accountdomain.Billing) (*provider.Response, error) {
 	adapter, ok := s.providers.Responses(accountdomain.ProviderBuild)
 	if !ok {
-		return nil, fmt.Errorf("Provider %s 未注册 Responses 能力", accountdomain.ProviderBuild)
+		return nil, fmt.Errorf("Provider %s tidak berdaftar kemampuan Responses", accountdomain.ProviderBuild)
 	}
 	body := []byte(fmt.Sprintf(`{"model":%q,"input":%q}`, buildDetectModel, buildDetectPrompt))
 	return adapter.ForwardResponse(ctx, provider.ResponseResourceRequest{
@@ -4243,7 +4243,7 @@ func (s *Service) finishBuildDetectResponse(ctx context.Context, response *provi
 		return item
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		item.Reason = fmt.Sprintf("上游检测失败: HTTP %d", response.StatusCode)
+		item.Reason = fmt.Sprintf("Pengesanan upstream gagal: HTTP %d", response.StatusCode)
 		return item
 	}
 	item.Outcome = BuildDetectOutcomeOK
@@ -4335,7 +4335,7 @@ func (s *Service) BatchResetQuotaState(ctx context.Context, ids []uint64) (int, 
 			return 0, countErr
 		}
 		if count != int64(end-start) {
-			return 0, invalidInput("仅 Grok Build 账号支持手动重置额度状态")
+			return 0, invalidInput("Hanya akaun Grok Build menyokong penetapan semula status kuota secara manual")
 		}
 	}
 	reset := 0
@@ -4442,7 +4442,7 @@ func (s *Service) credentialFromSeed(seed provider.CredentialSeed) (accountdomai
 	if strings.TrimSpace(seed.CloudflareCookies) != "" {
 		cookies := egressapp.SanitizeCloudflareCookies(seed.CloudflareCookies)
 		if cookies == "" {
-			return accountdomain.Credential{}, invalidInput("Cloudflare Cookie 中没有有效字段")
+			return accountdomain.Credential{}, invalidInput("Cloudflare Cookie tiada medan yang sah")
 		}
 		cloudflareEncrypted, err = s.cipher.Encrypt(cookies)
 		if err != nil {
@@ -4460,11 +4460,11 @@ func (s *Service) credentialFromSeed(seed provider.CredentialSeed) (accountdomai
 	authType := seed.AuthType
 	if authType == "" {
 		if s.providers == nil {
-			return accountdomain.Credential{}, fmt.Errorf("Provider 注册表未初始化")
+			return accountdomain.Credential{}, fmt.Errorf("Registry Provider belum diinisialisasi")
 		}
 		definition, ok := s.providers.Definition(providerValue)
 		if !ok {
-			return accountdomain.Credential{}, fmt.Errorf("Provider %s 未注册", providerValue)
+			return accountdomain.Credential{}, fmt.Errorf("Provider %s tidak berdaftar", providerValue)
 		}
 		authType = definition.Credential.AuthType
 	}
@@ -4486,16 +4486,16 @@ func normalizeBatchIDs(ids []uint64) ([]uint64, error) {
 
 func normalizeIDs(ids []uint64, limit int) ([]uint64, error) {
 	if len(ids) == 0 {
-		return nil, invalidInput("至少选择一个账号")
+		return nil, invalidInput("Pilih sekurang-kurangnya satu akaun")
 	}
 	if len(ids) > limit {
-		return nil, invalidInput(fmt.Sprintf("单次最多处理 %d 个账号", limit))
+		return nil, invalidInput(fmt.Sprintf("Maksimum memproses %d akaun setiap kali", limit))
 	}
 	seen := make(map[uint64]struct{}, len(ids))
 	result := make([]uint64, 0, len(ids))
 	for _, id := range ids {
 		if id == 0 {
-			return nil, invalidInput("账号 ID 无效")
+			return nil, invalidInput("ID akaun tidak sah")
 		}
 		if _, ok := seen[id]; ok {
 			continue
@@ -4517,7 +4517,8 @@ func mapLinkedDeleteError(err error) error {
 		return nil
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "关联删除目标") || strings.Contains(msg, "账号来源无效") || strings.Contains(msg, "不支持清理账号状态") {
+	// 注：下列匹配串与 infra/persistence/relational/account_links.go 产生的错误文案保持一致，勿单独翻译。
+	if strings.Contains(msg, "Sasaran pemadaman berkaitan") || strings.Contains(msg, "Sumber akaun tidak sah") || strings.Contains(msg, "Status pembersihan akaun tidak disokong") {
 		return invalidInput(msg)
 	}
 	return mapRepositoryError(err)

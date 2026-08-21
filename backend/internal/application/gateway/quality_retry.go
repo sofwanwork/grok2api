@@ -32,8 +32,8 @@ const (
 )
 
 var (
-	errQualityDegraded    = errors.New("上游响应缺少推理")
-	errQualityEmptyStream = errors.New("上游流式响应为空")
+	errQualityDegraded    = errors.New("Respons upstream tiada penaakulan")
+	errQualityEmptyStream = errors.New("Respons berstrim upstream kosong")
 )
 
 // QualityRetryRuntime is the isolated request-path withhold/retry policy.

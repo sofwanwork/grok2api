@@ -45,20 +45,20 @@ type subscriptionEntry struct {
 func normalizeSubscriptionURL(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > maxProxyURLBytes {
-		return "", errors.New("订阅地址为空或过长")
+		return "", errors.New("Alamat langganan kosong atau terlalu panjang")
 	}
 	if strings.IndexFunc(value, func(character rune) bool { return character < 0x20 || character == 0x7f }) >= 0 {
-		return "", errors.New("订阅地址包含控制字符")
+		return "", errors.New("Alamat langganan mengandungi aksara kawalan")
 	}
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Hostname() == "" {
-		return "", errors.New("订阅地址格式无效")
+		return "", errors.New("Format alamat langganan tidak sah")
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", errors.New("订阅地址必须使用 HTTP 或 HTTPS")
+		return "", errors.New("Alamat langganan mesti menggunakan HTTP atau HTTPS")
 	}
 	if parsed.Fragment != "" {
-		return "", errors.New("订阅地址不能包含片段")
+		return "", errors.New("Alamat langganan tidak boleh mengandungi fragmen")
 	}
 	return parsed.String(), nil
 }
@@ -78,15 +78,15 @@ func fetchProxySubscription(ctx context.Context, value string, viaProxy string) 
 		Transport: transport,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
 			if len(via) >= maxSubscriptionHops {
-				return errors.New("订阅重定向次数过多")
+				return errors.New("Terlalu banyak lencongan langganan")
 			}
 			redirectURL, err := normalizeSubscriptionURL(request.URL.String())
 			if err != nil {
-				return errors.New("订阅重定向地址无效")
+				return errors.New("Alamat lencongan langganan tidak sah")
 			}
 			if proxied {
 				if err := validatePublicSubscriptionTarget(request.Context(), redirectURL); err != nil {
-					return errors.New("订阅重定向地址不能指向内网")
+					return errors.New("Alamat lencongan langganan tidak boleh merujuk rangkaian dalaman")
 				}
 			}
 			return nil
@@ -111,14 +111,14 @@ func fetchProxySubscription(ctx context.Context, value string, viaProxy string) 
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("订阅服务返回 HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("Perkhidmatan langganan memulangkan HTTP %d", response.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxSubscriptionBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	if len(body) > maxSubscriptionBytes {
-		return nil, errors.New("订阅内容超过大小限制")
+		return nil, errors.New("Kandungan langganan melebihi had saiz")
 	}
 	return body, nil
 }
@@ -147,7 +147,7 @@ func subscriptionTransport(viaProxy string) (*http.Transport, error) {
 	}
 	parsed, err := url.Parse(viaProxy)
 	if err != nil || parsed.Host == "" {
-		return nil, errors.New("订阅拉取代理地址无效")
+		return nil, errors.New("Alamat proksi tarikan langganan tidak sah")
 	}
 	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https":
@@ -161,17 +161,17 @@ func subscriptionTransport(viaProxy string) (*http.Transport, error) {
 		forward := &subscriptionProxyForwardDialer{dialer: direct, timeout: proxyHandshakeTimeout}
 		dialer, err := xproxy.FromURL(parsed, forward)
 		if err != nil {
-			return nil, fmt.Errorf("创建订阅拉取 SOCKS 代理: %w", err)
+			return nil, fmt.Errorf("Mencipta proksi SOCKS tarikan langganan: %w", err)
 		}
 		transport.DialContext = subscriptionProxyDialContext(dialer)
 	case "trojan", "vless", "ss", "vmess":
 		dialer, err := tunnelproxy.NewDialer(viaProxy)
 		if err != nil {
-			return nil, fmt.Errorf("创建订阅拉取隧道代理: %w", err)
+			return nil, fmt.Errorf("Mencipta proksi terowong tarikan langganan: %w", err)
 		}
 		transport.DialContext = dialer.DialContext
 	default:
-		return nil, errors.New("订阅拉取代理协议不受支持")
+		return nil, errors.New("Protokol proksi tarikan langganan tidak disokong")
 	}
 	return transport, nil
 }
@@ -252,25 +252,25 @@ func subscriptionProxyDialContext(dialer xproxy.Dialer) func(context.Context, st
 func validatePublicSubscriptionTarget(ctx context.Context, value string) error {
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Hostname() == "" {
-		return errors.New("订阅地址格式无效")
+		return errors.New("Format alamat langganan tidak sah")
 	}
 	host := strings.Trim(strings.TrimSpace(parsed.Hostname()), "[]")
 	if address, parseErr := netip.ParseAddr(host); parseErr == nil {
 		if !isPublicAddress(address) {
-			return errors.New("订阅地址不能指向内网")
+			return errors.New("Alamat langganan tidak boleh merujuk rangkaian dalaman")
 		}
 		return nil
 	}
 	addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	if err != nil {
-		return fmt.Errorf("解析订阅地址: %w", err)
+		return fmt.Errorf("Menghurai alamat langganan: %w", err)
 	}
 	if len(addresses) == 0 {
-		return errors.New("订阅地址没有可用的公网 IP")
+		return errors.New("Alamat langganan tiada IP awam yang tersedia")
 	}
 	for _, address := range addresses {
 		if !isPublicAddress(address) {
-			return errors.New("订阅地址不能指向内网")
+			return errors.New("Alamat langganan tidak boleh merujuk rangkaian dalaman")
 		}
 	}
 	return nil
@@ -304,7 +304,7 @@ func publicDialContext(resolver *net.Resolver) func(context.Context, string, str
 		if lastErr != nil {
 			return nil, lastErr
 		}
-		return nil, errors.New("订阅地址没有可用的公网 IP")
+		return nil, errors.New("Alamat langganan tiada IP awam yang tersedia")
 	}
 }
 
@@ -312,7 +312,7 @@ func resolvePublicAddresses(ctx context.Context, resolver *net.Resolver, host st
 	host = strings.Trim(strings.TrimSpace(host), "[]")
 	if parsed, err := netip.ParseAddr(host); err == nil {
 		if !isPublicAddress(parsed) {
-			return nil, errors.New("订阅地址不能指向内网")
+			return nil, errors.New("Alamat langganan tidak boleh merujuk rangkaian dalaman")
 		}
 		return []netip.Addr{parsed.Unmap()}, nil
 	}
@@ -327,7 +327,7 @@ func resolvePublicAddresses(ctx context.Context, resolver *net.Resolver, host st
 		}
 	}
 	if len(public) == 0 {
-		return nil, errors.New("订阅地址不能指向内网")
+		return nil, errors.New("Alamat langganan tidak boleh merujuk rangkaian dalaman")
 	}
 	return public, nil
 }
@@ -371,7 +371,7 @@ func parseProxySubscription(value string) ([]subscriptionEntry, int, error) {
 	if entries, clashSkipped, matched := parseClashSubscription(value); matched && len(entries) > 0 {
 		return entries, clashSkipped, nil
 	}
-	return nil, skipped, errors.New("订阅中没有可用的代理节点")
+	return nil, skipped, errors.New("Tiada node proksi yang tersedia dalam langganan")
 }
 
 func parseProxyLines(value string) ([]subscriptionEntry, int) {

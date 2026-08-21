@@ -59,7 +59,7 @@ func Prepare(path string, value config.QualityGuardConfig, jwtSecret string) (st
 	path = strings.TrimSpace(path)
 	if path == "" {
 		if value.Enabled {
-			return "", errors.New("qualityGuard 已启用，但未配置内部 bootstrap 文件路径")
+			return "", errors.New("qualityGuard telah diaktifkan, tetapi laluan fail bootstrap dalaman tidak dikonfigurasi")
 		}
 		return "", nil
 	}
@@ -83,7 +83,7 @@ func Prepare(path string, value config.QualityGuardConfig, jwtSecret string) (st
 		},
 	}
 	if err := writeAtomic(path, payload); err != nil {
-		return "", fmt.Errorf("写入质量守护 bootstrap: %w", err)
+		return "", fmt.Errorf("Menulis bootstrap quality guard: %w", err)
 	}
 	return token, nil
 }

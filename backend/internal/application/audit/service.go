@@ -22,11 +22,11 @@ import (
 )
 
 var (
-	ErrQueueFull         = errors.New("审计写入队列已满")
+	ErrQueueFull         = errors.New("Baris gilir tulis audit telah penuh")
 	ErrWriterUnavailable = errors.New("audit writer is not running")
-	ErrInvalidCursor     = errors.New("审计游标无效")
-	ErrInvalidFilter     = errors.New("审计筛选条件无效")
-	ErrInvalidPeriod     = errors.New("审计时间范围无效")
+	ErrInvalidCursor     = errors.New("Kursor audit tidak sah")
+	ErrInvalidFilter     = errors.New("Syarat tapisan audit tidak sah")
+	ErrInvalidPeriod     = errors.New("Julat masa audit tidak sah")
 	ErrLedgerUnavailable = errors.New("billing ledger is not ready")
 )
 

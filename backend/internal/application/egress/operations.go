@@ -20,7 +20,7 @@ const (
 	maxConcurrentProbes              = 8
 )
 
-var ErrOperationsUnavailable = errors.New("代理运营功能不可用")
+var ErrOperationsUnavailable = errors.New("Fungsi operasi proksi tidak tersedia")
 
 // OperationsRepository is deliberately optional. Existing egress consumers
 // still only need the narrow routing repository while relational persistence
@@ -304,7 +304,7 @@ func (s *Service) TestNode(ctx context.Context, id uint64) (domain.ProbeResult, 
 	if probeErr != nil {
 		result.Status = domain.ProbeStatusUnhealthy
 		if strings.TrimSpace(result.Error) == "" {
-			result.Error = "代理探测失败"
+			result.Error = "Pengesanan proksi gagal"
 		}
 	}
 	if updateErr := operations.UpdateEgressNodeProbe(ctx, id, node.EncryptedProxyURL, result); updateErr != nil {
@@ -337,7 +337,7 @@ func (s *Service) TestNodes(ctx context.Context, ids []uint64) (ProbeBatchResult
 	}
 	ids = uniqueIDs(ids)
 	if len(ids) > maxManualProbeNodes {
-		return ProbeBatchResult{}, fmt.Errorf("%w: 单次最多测试 %d 个代理", ErrInvalidInput, maxManualProbeNodes)
+		return ProbeBatchResult{}, fmt.Errorf("%w: Maksimum menguji %d proksi setiap kali", ErrInvalidInput, maxManualProbeNodes)
 	}
 	result := ProbeBatchResult{Requested: len(ids)}
 	if len(ids) == 0 {
@@ -390,7 +390,7 @@ func (s *Service) UpdateOperationsConfig(ctx context.Context, input OperationsCo
 		return domain.OperationsConfig{}, err
 	}
 	if input.ProbeIntervalSeconds < 60 || input.ProbeIntervalSeconds > 86400 || input.AssignmentIntervalSeconds < 60 || input.AssignmentIntervalSeconds > 86400 {
-		return domain.OperationsConfig{}, fmt.Errorf("%w: 自动任务间隔必须在 60 到 86400 秒之间", ErrInvalidInput)
+		return domain.OperationsConfig{}, fmt.Errorf("%w: Selang tugasan automatik mesti antara 60 hingga 86400 saat", ErrInvalidInput)
 	}
 	current, err := operations.GetEgressOperationsConfig(ctx)
 	if err != nil {
@@ -401,7 +401,7 @@ func (s *Service) UpdateOperationsConfig(ctx context.Context, input OperationsCo
 		probeProvider = current.ProbeProvider.Normalized()
 	}
 	if !probeProvider.IsValid() {
-		return domain.OperationsConfig{}, fmt.Errorf("%w: 不支持的代理探测服务", ErrInvalidInput)
+		return domain.OperationsConfig{}, fmt.Errorf("%w: Perkhidmatan pengesanan proksi tidak disokong", ErrInvalidInput)
 	}
 	fallbacks := current.Fallbacks
 	if input.Fallbacks != nil {
@@ -416,7 +416,7 @@ func (s *Service) UpdateOperationsConfig(ctx context.Context, input OperationsCo
 		Fallbacks: fallbacks, UpdatedAt: time.Now().UTC(),
 	})
 	if errors.Is(err, repository.ErrEgressFallbackInUse) {
-		return domain.OperationsConfig{}, fmt.Errorf("%w: 固定回退节点必须保持启用且可用", ErrInvalidInput)
+		return domain.OperationsConfig{}, fmt.Errorf("%w: Node fallback tetap mesti kekal diaktifkan dan tersedia", ErrInvalidInput)
 	}
 	if err == nil {
 		s.invalidateOperationsConfig()
@@ -431,24 +431,24 @@ func (s *Service) validateFallbacks(ctx context.Context, current domain.Operatio
 	}
 	for scope, fallback := range input {
 		if !validScope(scope) {
-			return nil, fmt.Errorf("%w: 回退作用域无效", ErrInvalidInput)
+			return nil, fmt.Errorf("%w: Skop fallback tidak sah", ErrInvalidInput)
 		}
 		mode := fallback.Mode.Normalized()
 		if !mode.IsValid() {
-			return nil, fmt.Errorf("%w: 回退模式无效", ErrInvalidInput)
+			return nil, fmt.Errorf("%w: Mod fallback tidak sah", ErrInvalidInput)
 		}
 		switch mode {
 		case domain.FallbackModeNone, domain.FallbackModeDirect:
 			if fallback.NodeID != 0 {
-				return nil, fmt.Errorf("%w: 仅固定代理回退可以指定节点", ErrInvalidInput)
+				return nil, fmt.Errorf("%w: Hanya fallback proksi tetap boleh menentukan node", ErrInvalidInput)
 			}
 		case domain.FallbackModeFixed:
 			if fallback.NodeID == 0 {
-				return nil, fmt.Errorf("%w: 固定代理回退必须指定节点", ErrInvalidInput)
+				return nil, fmt.Errorf("%w: Fallback proksi tetap mesti menentukan node", ErrInvalidInput)
 			}
 			node, err := s.repository.GetEgressNode(ctx, fallback.NodeID)
 			if errors.Is(err, repository.ErrNotFound) {
-				return nil, fmt.Errorf("%w: 固定回退节点不存在", ErrInvalidInput)
+				return nil, fmt.Errorf("%w: Node fallback tetap tidak wujud", ErrInvalidInput)
 			}
 			if err != nil {
 				return nil, err
@@ -464,27 +464,27 @@ func (s *Service) validateFallbacks(ctx context.Context, current domain.Operatio
 
 func (s *Service) validateFixedFallbackNode(scope domain.Scope, node domain.Node, rejectCooldown bool) error {
 	if !domain.SupportsScope(node.Scope, scope) {
-		return fmt.Errorf("%w: 固定回退节点与 %s 作用域不兼容", ErrInvalidInput, scope)
+		return fmt.Errorf("%w: Node fallback tetap tidak serasi dengan skop %s", ErrInvalidInput, scope)
 	}
 	if !node.Enabled || strings.TrimSpace(node.EncryptedProxyURL) == "" {
-		return fmt.Errorf("%w: 固定回退节点必须启用且配置代理地址", ErrInvalidInput)
+		return fmt.Errorf("%w: Node fallback tetap mesti diaktifkan dan dikonfigurasi dengan alamat proksi", ErrInvalidInput)
 	}
 	if node.ProxyPool {
-		return fmt.Errorf("%w: 固定回退节点不能使用代理池模式", ErrInvalidInput)
+		return fmt.Errorf("%w: Node fallback tetap tidak boleh menggunakan mod kolam proksi", ErrInvalidInput)
 	}
 	if rejectCooldown && node.CooldownUntil != nil && time.Now().UTC().Before(*node.CooldownUntil) {
-		return fmt.Errorf("%w: 固定回退节点正在冷却", ErrInvalidInput)
+		return fmt.Errorf("%w: Node fallback tetap sedang menyejuk", ErrInvalidInput)
 	}
 	proxyURL, err := s.cipher.Decrypt(node.EncryptedProxyURL)
 	if err != nil {
-		return fmt.Errorf("%w: 固定回退节点代理配置无效", ErrInvalidInput)
+		return fmt.Errorf("%w: Konfigurasi proksi node fallback tetap tidak sah", ErrInvalidInput)
 	}
 	proxyURL, err = NormalizeProxyURL(proxyURL)
 	if err != nil || proxyURL == "" {
-		return fmt.Errorf("%w: 固定回退节点代理地址无效", ErrInvalidInput)
+		return fmt.Errorf("%w: Alamat proksi node fallback tetap tidak sah", ErrInvalidInput)
 	}
 	if strings.Contains(proxyURL, ProxyAccountPlaceholder) {
-		return fmt.Errorf("%w: 固定回退节点不能使用账号代理模板", ErrInvalidInput)
+		return fmt.Errorf("%w: Node fallback tetap tidak boleh menggunakan templat proksi akaun", ErrInvalidInput)
 	}
 	return nil
 }
@@ -492,15 +492,15 @@ func (s *Service) validateFixedFallbackNode(scope domain.Scope, node domain.Node
 func (s *Service) applySourceInput(value domain.SubscriptionSource, input SubscriptionSourceInput, create bool) (domain.SubscriptionSource, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" || len(name) > 160 {
-		return domain.SubscriptionSource{}, fmt.Errorf("%w: 订阅名称必须在 1 到 160 个字符之间", ErrInvalidInput)
+		return domain.SubscriptionSource{}, fmt.Errorf("%w: Nama langganan mesti antara 1 hingga 160 aksara", ErrInvalidInput)
 	}
 	if !validScope(input.Scope) {
-		return domain.SubscriptionSource{}, fmt.Errorf("%w: 订阅作用域无效", ErrInvalidInput)
+		return domain.SubscriptionSource{}, fmt.Errorf("%w: Skop langganan tidak sah", ErrInvalidInput)
 	}
 	value.Name, value.Scope, value.Enabled = name, input.Scope, input.Enabled
 	if input.RefreshIntervalSeconds != nil {
 		if *input.RefreshIntervalSeconds < 60 || *input.RefreshIntervalSeconds > 86400 {
-			return domain.SubscriptionSource{}, fmt.Errorf("%w: 订阅刷新间隔必须在 60 到 86400 秒之间", ErrInvalidInput)
+			return domain.SubscriptionSource{}, fmt.Errorf("%w: Selang penyegaran langganan mesti antara 60 hingga 86400 saat", ErrInvalidInput)
 		}
 		value.RefreshIntervalSeconds = *input.RefreshIntervalSeconds
 	}
@@ -509,7 +509,7 @@ func (s *Service) applySourceInput(value domain.SubscriptionSource, input Subscr
 	}
 	if input.DefaultAccountCapacity != nil {
 		if *input.DefaultAccountCapacity < 0 || *input.DefaultAccountCapacity > maxEgressAccountCapacity {
-			return domain.SubscriptionSource{}, fmt.Errorf("%w: 每个代理的账号容量必须在 0 到 %d 之间", ErrInvalidInput, maxEgressAccountCapacity)
+			return domain.SubscriptionSource{}, fmt.Errorf("%w: Kapasiti akaun setiap proksi mesti antara 0 hingga %d", ErrInvalidInput, maxEgressAccountCapacity)
 		}
 		value.DefaultAccountCapacity = *input.DefaultAccountCapacity
 	}
@@ -527,7 +527,7 @@ func (s *Service) applySourceInput(value domain.SubscriptionSource, input Subscr
 		value.EncryptedURL = encryptedURL
 	}
 	if create && value.EncryptedURL == "" {
-		return domain.SubscriptionSource{}, fmt.Errorf("%w: 必须提供订阅地址", ErrInvalidInput)
+		return domain.SubscriptionSource{}, fmt.Errorf("%w: Alamat langganan mesti disertakan", ErrInvalidInput)
 	}
 	if input.ClearProxyURL {
 		value.EncryptedProxyURL = ""
@@ -537,10 +537,10 @@ func (s *Service) applySourceInput(value domain.SubscriptionSource, input Subscr
 			return domain.SubscriptionSource{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 		}
 		if proxyURL == "" {
-			return domain.SubscriptionSource{}, fmt.Errorf("%w: 订阅代理地址不能为空", ErrInvalidInput)
+			return domain.SubscriptionSource{}, fmt.Errorf("%w: Alamat proksi langganan tak boleh kosong", ErrInvalidInput)
 		}
 		if strings.Contains(proxyURL, ProxyAccountPlaceholder) {
-			return domain.SubscriptionSource{}, fmt.Errorf("%w: 订阅代理地址不能包含账号占位符", ErrInvalidInput)
+			return domain.SubscriptionSource{}, fmt.Errorf("%w: Alamat proksi langganan tidak boleh mengandungi pemegang tempat akaun", ErrInvalidInput)
 		}
 		encryptedProxyURL, err := s.cipher.Encrypt(proxyURL)
 		if err != nil {
@@ -575,7 +575,7 @@ func allOperationScopes() []domain.Scope {
 
 func validateImportInput(input ImportInput) error {
 	if strings.TrimSpace(input.Name) == "" || len(strings.TrimSpace(input.Name)) > 150 || !validScope(input.Scope) || input.AccountCapacity < 0 || input.AccountCapacity > maxEgressAccountCapacity || strings.TrimSpace(input.Content) == "" {
-		return fmt.Errorf("%w: 批量导入参数无效", ErrInvalidInput)
+		return fmt.Errorf("%w: Parameter import pukal tidak sah", ErrInvalidInput)
 	}
 	return nil
 }

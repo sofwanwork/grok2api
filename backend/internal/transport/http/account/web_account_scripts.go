@@ -38,23 +38,23 @@ func (r webAccountScriptActionsRequest) empty() bool {
 func (h *Handler) runWebAccountScripts(c *gin.Context) {
 	var request webAccountScriptsRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "账号脚本请求无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Permintaan skrip akaun tidak sah")
 		return
 	}
 	if request.All && len(request.IDs) > 0 {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "全部账号与指定账号不能同时提交")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Semua akaun dan akaun tertentu tidak boleh dihantar serentak")
 		return
 	}
 	if !request.All && len(request.IDs) == 0 {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "至少选择一个账号")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Pilih sekurang-kurangnya satu akaun")
 		return
 	}
 	if len(request.IDs) > maxWebAccountScriptRequestIDs {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "单次最多处理 1000 个账号")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Maksimum 1000 akaun diproses setiap kali")
 		return
 	}
 	if request.Actions.empty() {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "至少选择一个账号脚本")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Pilih sekurang-kurangnya satu skrip akaun")
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *Handler) runWebAccountScripts(c *gin.Context) {
 		succeeded, failed, err = h.service.RunWebAccountScriptsWithProgress(c.Request.Context(), ids, request.Actions.options(), stream.ProgressObserver())
 	}
 	if err != nil {
-		stream.WriteError("webAccountScriptFailed", "执行 Grok Web 账号脚本失败")
+		stream.WriteError("webAccountScriptFailed", "Melaksanakan skrip akaun Grok Web gagal")
 		return
 	}
 	_ = stream.Write("complete", accountBatchResponse{Succeeded: succeeded, Failed: failed})

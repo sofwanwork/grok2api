@@ -52,18 +52,18 @@ func parseOptions(args []string) (runOptions, error) {
 		switch args[index] {
 		case "--config":
 			if index+1 >= len(args) {
-				return runOptions{}, errors.New("--config 缺少路径")
+				return runOptions{}, errors.New("--config tiada laluan")
 			}
 			options.configPath = args[index+1]
 			index++
 		case "--listen":
 			if index+1 >= len(args) {
-				return runOptions{}, errors.New("--listen 缺少地址")
+				return runOptions{}, errors.New("--listen tiada alamat")
 			}
 			options.listen = args[index+1]
 			index++
 		default:
-			return runOptions{}, fmt.Errorf("不支持的启动参数: %s", args[index])
+			return runOptions{}, fmt.Errorf("Parameter pelancaran tidak disokong: %s", args[index])
 		}
 	}
 	return options, nil

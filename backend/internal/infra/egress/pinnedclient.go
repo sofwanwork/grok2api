@@ -21,23 +21,23 @@ import (
 // lookup or a pooled connection from reopening an SSRF validation gap.
 func (l *Lease) DoPinnedHTTPS(request *http.Request, serverName string) (*http.Response, error) {
 	if l == nil {
-		return nil, errors.New("出口租约未初始化")
+		return nil, errors.New("Pajakan egress tidak dimulakan")
 	}
 	if request == nil || request.URL == nil || request.URL.Scheme != "https" || request.URL.Port() != "443" {
-		return nil, errors.New("固定地址请求必须使用 HTTPS 443")
+		return nil, errors.New("Permintaan alamat tetap mesti menggunakan HTTPS 443")
 	}
 	address, err := netip.ParseAddr(request.URL.Hostname())
 	if err != nil {
-		return nil, errors.New("固定地址请求必须使用 IP 主机")
+		return nil, errors.New("Permintaan alamat tetap mesti menggunakan hos IP")
 	}
 	address = address.Unmap()
 	if !address.IsGlobalUnicast() || address.IsPrivate() || address.IsLoopback() || address.IsLinkLocalUnicast() || address.IsMulticast() || address.IsUnspecified() {
-		return nil, errors.New("固定地址请求必须使用公网 IP")
+		return nil, errors.New("Permintaan alamat tetap mesti menggunakan IP awam")
 	}
 	serverName = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(serverName)), ".")
 	hostURL, err := url.Parse("https://" + request.Host)
 	if err != nil || strings.TrimSuffix(strings.ToLower(hostURL.Hostname()), ".") != serverName {
-		return nil, errors.New("固定地址请求的 Host 与 TLS ServerName 不一致")
+		return nil, errors.New("Host permintaan alamat tetap tidak sepadan dengan TLS ServerName")
 	}
 	client, err := newPinnedHTTPSClient(l.ProxyURL, serverName, nil)
 	if err != nil {
@@ -49,7 +49,7 @@ func (l *Lease) DoPinnedHTTPS(request *http.Request, serverName string) (*http.R
 func newPinnedHTTPSClient(proxyURL, serverName string, tlsConfig *tls.Config) (*http.Client, error) {
 	serverName = strings.TrimSuffix(strings.TrimSpace(serverName), ".")
 	if serverName == "" {
-		return nil, errors.New("TLS ServerName 不能为空")
+		return nil, errors.New("TLS ServerName tak boleh kosong")
 	}
 	direct := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	if tlsConfig == nil {
@@ -71,7 +71,7 @@ func newPinnedHTTPSClient(proxyURL, serverName string, tlsConfig *tls.Config) (*
 	if strings.TrimSpace(proxyURL) != "" {
 		parsed, err := url.Parse(proxyURL)
 		if err != nil {
-			return nil, fmt.Errorf("解析固定地址出口代理: %w", err)
+			return nil, fmt.Errorf("Huraian proksi egress alamat tetap: %w", err)
 		}
 		switch strings.ToLower(parsed.Scheme) {
 		case "http", "https":
@@ -79,17 +79,17 @@ func newPinnedHTTPSClient(proxyURL, serverName string, tlsConfig *tls.Config) (*
 		case "socks4", "socks4a", "socks5", "socks5h":
 			dialer, err := xproxy.FromURL(parsed, direct)
 			if err != nil {
-				return nil, fmt.Errorf("创建固定地址 SOCKS 代理: %w", err)
+				return nil, fmt.Errorf("Mencipta proksi SOCKS alamat tetap: %w", err)
 			}
 			transport.DialContext = dialContext(dialer)
 		case "trojan", "vless", "ss", "vmess":
 			dialer, err := tunnelproxy.NewDialer(proxyURL)
 			if err != nil {
-				return nil, fmt.Errorf("创建固定地址隧道代理: %w", err)
+				return nil, fmt.Errorf("Mencipta proksi terowong alamat tetap: %w", err)
 			}
 			transport.DialContext = dialer.DialContext
 		default:
-			return nil, fmt.Errorf("固定地址请求不支持代理协议 %q", parsed.Scheme)
+			return nil, fmt.Errorf("Permintaan alamat tetap tidak menyokong protokol proksi %q", parsed.Scheme)
 		}
 	}
 	return &http.Client{

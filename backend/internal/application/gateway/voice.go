@@ -523,7 +523,7 @@ func voiceErrorResponse(err error) (*provider.Response, error) {
 	if status, ok := provider.ErrorHTTPStatus(err); ok {
 		message, safe := provider.ErrorPublicMessage(err)
 		if !safe {
-			message = "上游语音服务返回错误"
+			message = "Perkhidmatan suara upstream memulangkan ralat"
 		}
 		response := jsonVoiceResponse(status, map[string]any{"error": map[string]any{"type": "upstream_error", "message": message}})
 		if retryAfter := provider.ErrorRetryAfter(err); retryAfter > 0 {

@@ -10,12 +10,12 @@ import (
 func (c *responsesToolCompatibility) normalizeCustomTool(tool map[string]any, namespace, param string) ([]any, error) {
 	name := strings.TrimSpace(stringField(tool, "name"))
 	if name == "" {
-		return nil, &responsesRequestError{Message: param + ".name 不能为空", Param: param + ".name", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".name tak boleh kosong", Param: param + ".name", Code: "invalid_parameter"}
 	}
 	if format, exists := tool["format"]; exists {
 		formatObject, ok := format.(map[string]any)
 		if !ok {
-			return nil, &responsesRequestError{Message: "custom tool format 必须是对象", Param: param + ".format", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: "format custom tool mesti objek", Param: param + ".format", Code: "invalid_parameter"}
 		}
 		if kind := stringField(formatObject, "type"); kind != "" && kind != "text" {
 			c.changed = true
@@ -43,7 +43,7 @@ func (c *responsesToolCompatibility) normalizeCustomTool(tool map[string]any, na
 func encodeCustomToolArguments(value any) (string, error) {
 	input, ok := value.(string)
 	if !ok {
-		return "", &responsesRequestError{Message: "custom_tool_call.input 必须是字符串", Code: "invalid_parameter"}
+		return "", &responsesRequestError{Message: "custom_tool_call.input mesti string", Code: "invalid_parameter"}
 	}
 	encoded, err := json.Marshal(map[string]any{"input": input})
 	if err != nil {

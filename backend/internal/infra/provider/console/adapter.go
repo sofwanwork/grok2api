@@ -105,11 +105,11 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 		*request.NormalizedMetadata = provider.NormalizedRequestMetadata{}
 	}
 	if request.Method != http.MethodPost || request.Path != "/responses" {
-		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"type": "invalid_request_error", "message": "Grok Console 仅支持 POST /responses"}}), nil
+		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"type": "invalid_request_error", "message": "Grok Console hanya menyokong POST /responses"}}), nil
 	}
 	spec, ok := Resolve(request.Model)
 	if !ok {
-		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"type": "invalid_request_error", "message": "Console 模型不存在"}}), nil
+		return jsonProviderResponse(http.StatusBadRequest, map[string]any{"error": map[string]any{"type": "invalid_request_error", "message": "Model Console tidak wujud"}}), nil
 	}
 	token, err := a.cipher.Decrypt(request.Credential.EncryptedAccessToken)
 	if err != nil {
@@ -227,7 +227,7 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 			return nil, readErr
 		}
 		if response.StatusCode >= 200 && response.StatusCode < 300 && len(data) > 64<<20 {
-			return nil, fmt.Errorf("Console 对话响应超过 64 MiB")
+			return nil, fmt.Errorf("Respons perbualan Console melebihi 64 MiB")
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			diagnostic := &provider.DiagnosticResponse{StatusCode: response.StatusCode, Status: response.Status, Header: response.Header.Clone(), Body: data, BodyTruncated: diagnosticTruncated}

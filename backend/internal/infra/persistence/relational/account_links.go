@@ -43,7 +43,7 @@ func lockAccountLinkMutationWithTimeout(tx *gorm.DB, timeout time.Duration) erro
 		return parentCtx.Err()
 	}
 	if err != nil && errors.Is(lockCtx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("%w: 账号关联关系正在变更，请稍后重试", repository.ErrConflict)
+		return fmt.Errorf("%w: Perhubungan akaun sedang diubah, sila cuba lagi nanti", repository.ErrConflict)
 	}
 	return err
 }
@@ -277,7 +277,7 @@ func resolveLinkedDeleteIDs(db *gorm.DB, providerValue account.Provider, rootIDs
 		PeerProviders:    map[uint64]account.Provider{},
 	}
 	if !providerValue.IsValid() {
-		return result, fmt.Errorf("账号来源无效")
+		return result, fmt.Errorf("Sumber akaun tidak sah")
 	}
 	roots := uniqueSortedIDs(rootIDs)
 	result.RootIDs = append([]uint64(nil), roots...)
@@ -288,10 +288,10 @@ func resolveLinkedDeleteIDs(db *gorm.DB, providerValue account.Provider, rootIDs
 	targetSet := make(map[account.Provider]struct{}, len(targets))
 	for _, target := range targets {
 		if !target.IsValid() {
-			return result, fmt.Errorf("关联删除目标无效")
+			return result, fmt.Errorf("Sasaran pemadaman berkaitan tidak sah")
 		}
 		if target == providerValue {
-			return result, fmt.Errorf("关联删除目标不能包含当前号池")
+			return result, fmt.Errorf("Sasaran pemadaman berkaitan tidak boleh merangkumi kolam akaun semasa")
 		}
 		targetSet[target] = struct{}{}
 	}
@@ -368,7 +368,7 @@ func resolveLinkedDeleteIDs(db *gorm.DB, providerValue account.Provider, rootIDs
 			addPairs(account.ProviderBuild, pairs)
 		}
 	default:
-		return result, fmt.Errorf("账号来源无效")
+		return result, fmt.Errorf("Sumber akaun tidak sah")
 	}
 
 	for provider, count := range linkedCounts {
@@ -404,7 +404,7 @@ func deleteLinkedGroupsTx(tx *gorm.DB, providerValue account.Provider, lockedRoo
 		}
 	} else {
 		if !providerValue.IsValid() {
-			return outcome, fmt.Errorf("账号来源无效")
+			return outcome, fmt.Errorf("Sumber akaun tidak sah")
 		}
 		resolution, err = resolveLinkedDeleteIDs(tx, providerValue, lockedRoots, targets)
 		if err != nil {
@@ -532,7 +532,7 @@ func (r *AccountRepository) DeleteManyWithLinked(ctx context.Context, providerVa
 		lockedRoots := make([]uint64, 0, len(lockedRows))
 		for _, row := range lockedRows {
 			if providerValue.IsValid() && account.Provider(row.Provider) != providerValue {
-				return fmt.Errorf("%w: 账号不属于指定号池", repository.ErrConflict)
+				return fmt.Errorf("%w: Akaun tidak tergolong dalam kolam akaun yang ditetapkan", repository.ErrConflict)
 			}
 			lockedRoots = append(lockedRoots, row.ID)
 		}
@@ -563,7 +563,7 @@ func (r *AccountRepository) DeleteAccountStatusBatchWithLinked(ctx context.Conte
 		return outcome, 0, afterID, nil
 	}
 	if status != "disabled" && status != "reauthRequired" && status != "cooldown" {
-		return outcome, 0, afterID, fmt.Errorf("不支持清理账号状态 %q", status)
+		return outcome, 0, afterID, fmt.Errorf("Status pembersihan akaun tidak disokong %q", status)
 	}
 	candidateCount := 0
 	maxCandidateID := afterID
@@ -613,12 +613,12 @@ func (r *AccountRepository) CountCleanupWithLinked(ctx context.Context, provider
 		LinkedByProvider: map[account.Provider]int64{},
 	}
 	if !providerValue.IsValid() {
-		return preview, fmt.Errorf("账号来源无效")
+		return preview, fmt.Errorf("Sumber akaun tidak sah")
 	}
 	db := r.db.db.WithContext(ctx)
 	for _, status := range statuses {
 		if status != "disabled" && status != "reauthRequired" && status != "cooldown" {
-			return preview, fmt.Errorf("不支持清理账号状态 %q", status)
+			return preview, fmt.Errorf("Status pembersihan akaun tidak disokong %q", status)
 		}
 		var rootCount int64
 		if err := applyAccountStatusFilter(
@@ -638,7 +638,7 @@ func (r *AccountRepository) CountCleanupWithLinked(ctx context.Context, provider
 		}
 		for _, target := range targets {
 			if !target.IsValid() || target == providerValue {
-				return preview, fmt.Errorf("关联删除目标无效")
+				return preview, fmt.Errorf("Sasaran pemadaman berkaitan tidak sah")
 			}
 			var linked int64
 			var err error
@@ -664,7 +664,7 @@ func (r *AccountRepository) CountCleanupWithLinked(ctx context.Context, provider
 					Joins("JOIN account_provider_links apl ON apl.web_account_id = wcal.web_account_id").
 					Where("wcal.console_account_id IN (?)", rootsSub()).Count(&linked).Error
 			default:
-				return preview, fmt.Errorf("关联删除目标无效")
+				return preview, fmt.Errorf("Sasaran pemadaman berkaitan tidak sah")
 			}
 			if err != nil {
 				return preview, err

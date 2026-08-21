@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrInvalidInput = errors.New("运行设置参数无效")
-	ErrConflict     = errors.New("运行设置已被其他会话更新")
+	ErrInvalidInput = errors.New("Parameter tetapan runtime tidak sah")
+	ErrConflict     = errors.New("Tetapan runtime telah dikemas kini oleh sesi lain")
 )
 
 // ProviderBuildConfig 是管理接口使用的 Provider 可编辑输入。
@@ -208,7 +208,7 @@ func LoadPersisted(ctx context.Context, base config.Config, repository repositor
 	// 持久化层使用强类型时长，避免数据库格式受 HTTP DTO 字符串影响。
 	loaded := applyDomainConfig(base, value)
 	if err := loaded.Validate(); err != nil {
-		return config.Config{}, time.Time{}, 0, fmt.Errorf("校验运行设置: %w", err)
+		return config.Config{}, time.Time{}, 0, fmt.Errorf("Mengesahkan tetapan runtime: %w", err)
 	}
 	return loaded, updatedAt, revision, nil
 }
@@ -285,7 +285,7 @@ func (s *Service) ReloadPersisted(ctx context.Context) error {
 	}
 	next := applyDomainConfig(current, value)
 	if err := next.Validate(); err != nil {
-		return fmt.Errorf("校验重载运行设置: %w", err)
+		return fmt.Errorf("Mengesahkan tetapan runtime yang dimuat semula: %w", err)
 	}
 	s.mu.Lock()
 	s.cfg = next
@@ -518,7 +518,7 @@ func (s *Service) snapshotLocked() Snapshot {
 
 func mergeEditable(current config.Config, input EditableConfig) (config.Config, error) {
 	if input.Audit.CommitDelayMS < 0 {
-		return config.Config{}, errors.New("audit.commitDelayMS 不能为负数")
+		return config.Config{}, errors.New("audit.commitDelayMS tidak boleh negatif")
 	}
 	next := current
 	next.Server.MaxConcurrentRequests = input.Server.MaxConcurrentRequests
@@ -638,7 +638,7 @@ func mergeEditable(current config.Config, input EditableConfig) (config.Config, 
 	for _, item := range durations {
 		value, err := time.ParseDuration(strings.TrimSpace(item.value))
 		if err != nil {
-			return config.Config{}, fmt.Errorf("%s 必须是有效时长", item.path)
+			return config.Config{}, fmt.Errorf("%s mesti tempoh yang sah", item.path)
 		}
 		item.set(config.Duration(value))
 	}
@@ -646,10 +646,10 @@ func mergeEditable(current config.Config, input EditableConfig) (config.Config, 
 	// older version remain loadable during rolling upgrades, while an admin can
 	// no longer save an idle deadline shadowed by a shorter absolute timeout.
 	if next.Provider.Web.StreamIdleTimeout.Value() > next.Provider.Web.ChatTimeout.Value() {
-		return config.Config{}, errors.New("providerWeb.streamIdleTimeout 不能超过 providerWeb.chatTimeout")
+		return config.Config{}, errors.New("providerWeb.streamIdleTimeout tidak boleh melebihi providerWeb.chatTimeout")
 	}
 	if next.Provider.Console.StreamIdleTimeout.Value() > next.Provider.Console.ChatTimeout.Value() {
-		return config.Config{}, errors.New("providerConsole.streamIdleTimeout 不能超过 providerConsole.chatTimeout")
+		return config.Config{}, errors.New("providerConsole.streamIdleTimeout tidak boleh melebihi providerConsole.chatTimeout")
 	}
 	if err := next.Validate(); err != nil {
 		return config.Config{}, err

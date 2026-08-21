@@ -37,9 +37,9 @@ const (
 
 var (
 	// errImageTooLarge 表示下载/上传的图片超过读取上限。
-	errImageTooLarge = errors.New("图片超过大小上限")
+	errImageTooLarge = errors.New("Imej melebihi had saiz")
 	// errFetchBlocked 表示目标地址被 SSRF 防护拒绝（内网/环回/链路本地/元数据等）。
-	errFetchBlocked = errors.New("目标地址不允许访问")
+	errFetchBlocked = errors.New("Alamat sasaran tidak dibenarkan diakses")
 )
 
 type importURLResolver interface {
@@ -58,18 +58,18 @@ type importTarget struct {
 // 返回的错误包裹 errFetchBlocked，便于上层用 errors.Is 识别为"地址被拒绝"。
 func ssrfSafeControl(network, address string, _ syscall.RawConn) error {
 	if network != "tcp4" && network != "tcp6" && network != "tcp" {
-		return fmt.Errorf("不支持的网络类型 %q: %w", network, errFetchBlocked)
+		return fmt.Errorf("Jenis rangkaian tidak disokong %q: %w", network, errFetchBlocked)
 	}
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
-		return fmt.Errorf("解析目标地址失败 %q: %w", address, errFetchBlocked)
+		return fmt.Errorf("Gagal menghuraikan alamat sasaran %q: %w", address, errFetchBlocked)
 	}
 	ip, err := netip.ParseAddr(host)
 	if err != nil {
-		return fmt.Errorf("目标地址不是有效 IP %q: %w", host, errFetchBlocked)
+		return fmt.Errorf("Alamat sasaran bukan IP yang sah %q: %w", host, errFetchBlocked)
 	}
 	if !isPublicIP(ip.Unmap()) {
-		return fmt.Errorf("拒绝访问非公网地址 %s: %w", host, errFetchBlocked)
+		return fmt.Errorf("Menolak akses ke alamat bukan awam %s: %w", host, errFetchBlocked)
 	}
 	return nil
 }
@@ -111,10 +111,10 @@ func resolveImportTarget(ctx context.Context, parsed *url.URL, resolver importUR
 		defer cancel()
 		resolved, err := resolver.LookupNetIP(resolveCtx, "ip", host)
 		if err != nil {
-			return nil, fmt.Errorf("解析图片主机失败: %w", err)
+			return nil, fmt.Errorf("Gagal menghuraikan hos imej: %w", err)
 		}
 		if len(resolved) == 0 {
-			return nil, errors.New("解析图片主机失败: DNS 未返回地址")
+			return nil, errors.New("Gagal menghuraikan hos imej: DNS tidak memulangkan alamat")
 		}
 		addresses = make([]netip.Addr, 0, len(resolved))
 		for _, address := range resolved {
@@ -123,7 +123,7 @@ func resolveImportTarget(ctx context.Context, parsed *url.URL, resolver importUR
 	}
 	for _, address := range addresses {
 		if !isPublicIP(address) {
-			return nil, fmt.Errorf("图片主机解析到非公网地址 %s: %w", address, errFetchBlocked)
+			return nil, fmt.Errorf("Hos imej dihuraikan ke alamat bukan awam %s: %w", address, errFetchBlocked)
 		}
 	}
 
@@ -214,11 +214,11 @@ func fetchRemoteImage(ctx context.Context, rawURL string) ([]byte, error) {
 			resp.Body.Close()
 			transport.CloseIdleConnections()
 			if redirects >= ingestMaxRedirects {
-				return nil, errors.New("重定向次数过多")
+				return nil, errors.New("Terlalu banyak pengalihan")
 			}
 			next, err := parsed.Parse(resp.Header.Get("Location"))
 			if err != nil || !isValidRedirectURL(next) {
-				return nil, fmt.Errorf("重定向地址无效: %w", errFetchBlocked)
+				return nil, fmt.Errorf("Alamat pengalihan tidak sah: %w", errFetchBlocked)
 			}
 			parsed = next
 			continue
@@ -233,7 +233,7 @@ func fetchRemoteImage(ctx context.Context, rawURL string) ([]byte, error) {
 func readImportedImage(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("上游返回 HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("Upstream memulangkan HTTP %d", resp.StatusCode)
 	}
 	if resp.ContentLength > ingestMaxImageBytes {
 		return nil, errImageTooLarge
@@ -262,17 +262,17 @@ func (h *Handler) importInputImageFromURL(c *gin.Context) {
 	defer h.releaseIngest()
 	var request importImageRequest
 	if c.ShouldBindJSON(&request) != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	rawURL := strings.TrimSpace(request.URL)
 	if len(rawURL) > 8192 {
-		response.Error(c, http.StatusBadRequest, "invalidImageURL", "图片 URL 过长")
+		response.Error(c, http.StatusBadRequest, "invalidImageURL", "URL imej terlalu panjang")
 		return
 	}
 	parsed, err := url.Parse(rawURL)
 	if err != nil || !isValidRedirectURL(parsed) {
-		response.Error(c, http.StatusBadRequest, "invalidImageURL", "图片 URL 无效，仅支持无凭据的 http/https 80/443 地址")
+		response.Error(c, http.StatusBadRequest, "invalidImageURL", "URL imej tidak sah, hanya alamat http/https 80/443 tanpa kredensial disokong")
 		return
 	}
 
@@ -280,11 +280,11 @@ func (h *Handler) importInputImageFromURL(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, errImageTooLarge):
-			response.Error(c, http.StatusRequestEntityTooLarge, "imageTooLarge", "图片超过大小上限")
+			response.Error(c, http.StatusRequestEntityTooLarge, "imageTooLarge", "Imej melebihi had saiz")
 		case errors.Is(err, errFetchBlocked):
-			response.Error(c, http.StatusBadRequest, "imageURLBlocked", "该地址不允许访问")
+			response.Error(c, http.StatusBadRequest, "imageURLBlocked", "Alamat ini tidak dibenarkan diakses")
 		default:
-			response.Error(c, http.StatusBadGateway, "imageFetchFailed", "下载图片失败")
+			response.Error(c, http.StatusBadGateway, "imageFetchFailed", "Gagal memuat turun imej")
 		}
 		return
 	}
@@ -302,29 +302,29 @@ func (h *Handler) uploadInputAsset(c *gin.Context) {
 	if err != nil {
 		var maxBytesError *http.MaxBytesError
 		if errors.As(err, &maxBytesError) {
-			response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "文件超过请求大小上限")
+			response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "Fail melebihi had saiz permintaan")
 			return
 		}
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "缺少上传文件")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Tiada fail dimuat naik")
 		return
 	}
 	if fileHeader.Size > ingestMaxImageBytes {
-		response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "文件超过大小上限")
+		response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "Fail melebihi had saiz")
 		return
 	}
 	src, err := fileHeader.Open()
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaUploadReadFailed", "读取上传文件失败")
+		response.Error(c, http.StatusInternalServerError, "mediaUploadReadFailed", "Gagal membaca fail yang dimuat naik")
 		return
 	}
 	defer src.Close()
 	data, err := io.ReadAll(io.LimitReader(src, ingestMaxImageBytes+1))
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "mediaUploadReadFailed", "读取上传文件失败")
+		response.Error(c, http.StatusInternalServerError, "mediaUploadReadFailed", "Gagal membaca fail yang dimuat naik")
 		return
 	}
 	if int64(len(data)) > ingestMaxImageBytes {
-		response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "文件超过大小上限")
+		response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "Fail melebihi had saiz")
 		return
 	}
 	declaredMIME := strings.ToLower(strings.TrimSpace(strings.Split(fileHeader.Header.Get("Content-Type"), ";")[0]))
@@ -342,35 +342,35 @@ func (h *Handler) uploadInputAsset(c *gin.Context) {
 		if saveErr != nil {
 			switch {
 			case errors.Is(saveErr, mediaapp.ErrVideoUploadTooLarge):
-				response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "视频超过大小上限")
+				response.Error(c, http.StatusRequestEntityTooLarge, "mediaTooLarge", "Video melebihi had saiz")
 			case errors.Is(saveErr, mediaapp.ErrInvalidVideoUpload):
-				response.Error(c, http.StatusBadRequest, "invalidVideo", "视频内容无效或格式不支持（mp4/webm/quicktime）")
+				response.Error(c, http.StatusBadRequest, "invalidVideo", "Kandungan video tidak sah atau format tidak disokong (mp4/webm/quicktime)")
 			case errors.Is(saveErr, mediaapp.ErrMediaCapacity):
-				response.Error(c, http.StatusInsufficientStorage, "mediaCapacityExceeded", "媒体临时存储容量不足")
+				response.Error(c, http.StatusInsufficientStorage, "mediaCapacityExceeded", "Kapasiti storan sementara media tidak mencukupi")
 			default:
-				response.Error(c, http.StatusInternalServerError, "mediaSaveVideoFailed", "保存视频失败")
+				response.Error(c, http.StatusInternalServerError, "mediaSaveVideoFailed", "Gagal menyimpan video")
 			}
 			return
 		}
 		h.writeInputAsset(c, asset)
 		return
 	}
-	response.Error(c, http.StatusBadRequest, "invalidMedia", "仅支持图片或视频文件")
+	response.Error(c, http.StatusBadRequest, "invalidMedia", "Hanya fail imej atau video yang disokong")
 }
 
 // saveIngestedImage 收口两种临时输入路径：校验、落盘并登记 TTL，不进入图库。
 func (h *Handler) saveIngestedImage(c *gin.Context, data []byte) {
 	asset, err := h.service.SaveInputImage(c.Request.Context(), data)
 	if errors.Is(err, mediaapp.ErrInvalidImage) {
-		response.Error(c, http.StatusBadRequest, "invalidImage", "图片内容无效或格式不支持（仅 jpeg/png/webp/gif）")
+		response.Error(c, http.StatusBadRequest, "invalidImage", "Kandungan imej tidak sah atau format tidak disokong (hanya jpeg/png/webp/gif)")
 		return
 	}
 	if err != nil {
 		if errors.Is(err, mediaapp.ErrMediaCapacity) {
-			response.Error(c, http.StatusInsufficientStorage, "mediaCapacityExceeded", "媒体临时存储容量不足")
+			response.Error(c, http.StatusInsufficientStorage, "mediaCapacityExceeded", "Kapasiti storan sementara media tidak mencukupi")
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, "mediaSaveImageFailed", "保存图片失败")
+		response.Error(c, http.StatusInternalServerError, "mediaSaveImageFailed", "Gagal menyimpan imej")
 		return
 	}
 	h.writeInputAsset(c, asset)
@@ -391,7 +391,7 @@ func (h *Handler) acquireIngest(c *gin.Context) bool {
 	case h.ingestSlots <- struct{}{}:
 		return true
 	default:
-		response.Error(c, http.StatusServiceUnavailable, "mediaIngestBusy", "媒体暂存并发已满，请稍后重试")
+		response.Error(c, http.StatusServiceUnavailable, "mediaIngestBusy", "Serentak storan sementara media telah penuh, sila cuba sebentar lagi")
 		return false
 	}
 }

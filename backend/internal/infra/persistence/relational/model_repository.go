@@ -480,7 +480,7 @@ func parseModelRouteGroupIDs(value string) ([]uint64, error) {
 	for _, part := range parts {
 		id, err := strconv.ParseUint(strings.TrimSpace(part), 10, 64)
 		if err != nil || id == 0 {
-			return nil, fmt.Errorf("模型能力组包含无效路由 ID %q", part)
+			return nil, fmt.Errorf("Kumpulan keupayaan model mengandungi ID laluan tidak sah %q", part)
 		}
 		ids = append(ids, id)
 	}
@@ -732,7 +732,7 @@ func (r *ModelRepository) UpsertDiscovered(ctx context.Context, provider account
 			localID, capability := discoveredRouteDefaults(provider, upstreamModel)
 			publicID, ok := model.NormalizePublicID(provider, localID)
 			if !ok {
-				return fmt.Errorf("Provider %s 发现了无效模型 ID %q", provider, localID)
+				return fmt.Errorf("Provider %s menemui ID model tidak sah %q", provider, localID)
 			}
 			// Managed routes are idempotent by canonical public_id and capability.
 			// Manual targets with the same name remain independent pool members.
@@ -821,11 +821,11 @@ func (r *ModelRepository) UpsertRoutes(ctx context.Context, values []model.Route
 			value := original
 			publicID, ok := model.NormalizePublicID(value.Provider, value.PublicID)
 			if !ok {
-				return fmt.Errorf("模型路由目录包含无效公开 ID %q", value.PublicID)
+				return fmt.Errorf("Katalog laluan model mengandungi ID awam tidak sah %q", value.PublicID)
 			}
 			value.PublicID = publicID
 			if strings.TrimSpace(value.PublicID) == "" || strings.TrimSpace(value.UpstreamModel) == "" || value.Provider == "" || value.Capability == "" {
-				return fmt.Errorf("模型路由目录包含无效条目")
+				return fmt.Errorf("Katalog laluan model mengandungi entri tidak sah")
 			}
 			var existing modelRouteModel
 			err := tx.Where("public_id = ? AND capability = ? AND origin <> ?", value.PublicID, value.Capability, model.OriginManual).First(&existing).Error
@@ -864,11 +864,11 @@ func (r *ModelRepository) ReplaceProviderRoutes(ctx context.Context, provider ac
 		for index, value := range values {
 			publicID, ok := model.NormalizePublicID(provider, value.PublicID)
 			if !ok {
-				return fmt.Errorf("模型路由目录包含无效公开 ID %q", value.PublicID)
+				return fmt.Errorf("Katalog laluan model mengandungi ID awam tidak sah %q", value.PublicID)
 			}
 			value.PublicID = publicID
 			if strings.TrimSpace(value.PublicID) == "" || strings.TrimSpace(value.UpstreamModel) == "" || value.Provider != provider || value.Capability == "" {
-				return fmt.Errorf("模型路由目录包含无效条目")
+				return fmt.Errorf("Katalog laluan model mengandungi entri tidak sah")
 			}
 			normalizedValues[index] = value
 		}
@@ -959,7 +959,7 @@ func (r *ModelRepository) ReplaceProviderRoutes(ctx context.Context, provider ac
 				return err
 			}
 			if _, owned := routeIDs[alias.ModelRouteID]; !owned && !usedIDs[alias.ModelRouteID] {
-				return fmt.Errorf("%w: 模型公开 ID %q 已被路由 %d 保留为兼容名称", repository.ErrConflict, publicID, alias.ModelRouteID)
+				return fmt.Errorf("%w: ID awam model %q telah diketepikan sebagai nama serasi oleh laluan %d", repository.ErrConflict, publicID, alias.ModelRouteID)
 			}
 			if err := tx.Delete(&modelRouteAliasModel{}, "alias = ?", publicID).Error; err != nil {
 				return err
@@ -1047,7 +1047,7 @@ func renameAccountModelCapability(tx *gorm.DB, provider account.Provider, oldMod
 func (r *ModelRepository) Create(ctx context.Context, value model.Route, accountIDs []uint64) (model.Route, error) {
 	publicID, ok := model.NormalizePublicID(value.Provider, value.PublicID)
 	if !ok {
-		return model.Route{}, fmt.Errorf("模型路由公开 ID 无效")
+		return model.Route{}, fmt.Errorf("ID awam laluan model tidak sah")
 	}
 	value.PublicID = publicID
 	row := modelRouteModel{
@@ -1088,7 +1088,7 @@ func (r *ModelRepository) Update(ctx context.Context, value model.Route, account
 		storedUpstreamModel = existing.UpstreamModel
 		publicID, ok := model.NormalizePublicID(storedProvider, value.PublicID)
 		if !ok {
-			return fmt.Errorf("模型路由公开 ID 无效")
+			return fmt.Errorf("ID awam laluan model tidak sah")
 		}
 		value.PublicID = publicID
 		if err := ensureModelPublicIDNotAlias(tx, value.PublicID, existing.ID); err != nil {

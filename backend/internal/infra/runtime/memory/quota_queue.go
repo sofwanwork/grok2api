@@ -55,7 +55,7 @@ func NewQuotaRecoveryQueue() *QuotaRecoveryQueue {
 
 func (q *QuotaRecoveryQueue) ScheduleQuotaRecovery(_ context.Context, value account.QuotaRecoveryEvent) error {
 	if value.AccountID == 0 || value.Mode == "" || value.DueAt.IsZero() {
-		return fmt.Errorf("额度恢复事件无效")
+		return fmt.Errorf("Peristiwa pemulihan kuota tidak sah")
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -73,7 +73,7 @@ func (q *QuotaRecoveryQueue) ScheduleQuotaRecovery(_ context.Context, value acco
 		return nil
 	}
 	if len(q.items) >= maxQuotaRecoveryEvents {
-		return fmt.Errorf("额度恢复队列已满")
+		return fmt.Errorf("Baris gilir pemulihan kuota sudah penuh")
 	}
 	item := &quotaItem{value: value}
 	heap.Push(&q.heap, item)
@@ -83,7 +83,7 @@ func (q *QuotaRecoveryQueue) ScheduleQuotaRecovery(_ context.Context, value acco
 
 func (q *QuotaRecoveryQueue) EnsureQuotaRecovery(_ context.Context, value account.QuotaRecoveryEvent) error {
 	if value.AccountID == 0 || value.Mode == "" || value.DueAt.IsZero() {
-		return fmt.Errorf("额度恢复事件无效")
+		return fmt.Errorf("Peristiwa pemulihan kuota tidak sah")
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -92,7 +92,7 @@ func (q *QuotaRecoveryQueue) EnsureQuotaRecovery(_ context.Context, value accoun
 		return nil
 	}
 	if len(q.items) >= maxQuotaRecoveryEvents {
-		return fmt.Errorf("额度恢复队列已满")
+		return fmt.Errorf("Baris gilir pemulihan kuota sudah penuh")
 	}
 	item := &quotaItem{value: value}
 	heap.Push(&q.heap, item)
@@ -102,7 +102,7 @@ func (q *QuotaRecoveryQueue) EnsureQuotaRecovery(_ context.Context, value accoun
 
 func (q *QuotaRecoveryQueue) CancelQuotaRecovery(_ context.Context, accountID uint64, mode string) error {
 	if accountID == 0 || mode == "" {
-		return fmt.Errorf("额度恢复事件无效")
+		return fmt.Errorf("Peristiwa pemulihan kuota tidak sah")
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()

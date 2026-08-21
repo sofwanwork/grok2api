@@ -26,9 +26,9 @@ const (
 )
 
 var (
-	errInvalidChatAttachment = errors.New("对话附件无效")
-	errInvalidChatImage      = errors.New("对话图片无效")
-	errInvalidChatFile       = errors.New("对话文件无效")
+	errInvalidChatAttachment = errors.New("Lampiran perbualan tidak sah")
+	errInvalidChatImage      = errors.New("Imej perbualan tidak sah")
+	errInvalidChatFile       = errors.New("Fail perbualan tidak sah")
 )
 
 type uploadedFile struct {
@@ -59,7 +59,7 @@ func (a *Adapter) prepareChatAttachments(ctx context.Context, cfg Config, lease 
 		return nil, nil
 	}
 	if len(inputs) > maxChatAttachments {
-		return nil, fmt.Errorf("%w: 单次对话最多支持 %d 个附件", errInvalidChatAttachment, maxChatAttachments)
+		return nil, fmt.Errorf("%w: satu perbualan menyokong maksimum %d lampiran", errInvalidChatAttachment, maxChatAttachments)
 	}
 	pending := make([]provider.ImageInput, 0, len(inputs))
 	seen := make(map[string]struct{}, len(inputs))
@@ -82,7 +82,7 @@ func (a *Adapter) prepareChatAttachments(ctx context.Context, cfg Config, lease 
 		}
 		size := int64(len(file.Data))
 		if size > maxChatAttachmentTotal || total > maxChatAttachmentTotal-size {
-			return nil, fmt.Errorf("%w: 总大小不能超过 64 MiB", errInvalidChatAttachment)
+			return nil, fmt.Errorf("%w: jumlah saiz tidak boleh melebihi 64 MiB", errInvalidChatAttachment)
 		}
 		total += size
 		seen[key] = struct{}{}
@@ -95,7 +95,7 @@ func (a *Adapter) prepareChatAttachments(ctx context.Context, cfg Config, lease 
 			return nil, err
 		}
 		if uploaded.ID == "" {
-			return nil, fmt.Errorf("上传附件成功但上游未返回可用附件标识")
+			return nil, fmt.Errorf("Muat naik lampiran berjaya tetapi upstream tidak mengembalikan pengepala lampiran yang boleh digunakan")
 		}
 		attachments = append(attachments, uploaded.ID)
 	}
@@ -121,18 +121,18 @@ func (a *Adapter) loadChatImage(ctx context.Context, lease *egress.Lease, input 
 	request.Header = remoteImageHeaders(lease.UserAgent)
 	response, err := lease.DoPinnedHTTPS(request, target.serverName)
 	if err != nil {
-		return provider.ImageInput{}, fmt.Errorf("下载对话图片: %w", err)
+		return provider.ImageInput{}, fmt.Errorf("Muat turun imej perbualan: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return provider.ImageInput{}, fmt.Errorf("%w: 下载地址返回 %d", errInvalidChatImage, response.StatusCode)
+		return provider.ImageInput{}, fmt.Errorf("%w: alamat muat turun mengembalikan %d", errInvalidChatImage, response.StatusCode)
 	}
 	if response.ContentLength > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: 图片超过 %d MiB", errInvalidChatImage, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: imej melebihi %d MiB", errInvalidChatImage, maxBytes>>20)
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
 	if err != nil || int64(len(raw)) > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: 下载失败或图片超过 %d MiB", errInvalidChatImage, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: muat turun gagal atau imej melebihi %d MiB", errInvalidChatImage, maxBytes>>20)
 	}
 	mimeType, err := validatedImageMIME(raw, response.Header.Get("Content-Type"))
 	if err != nil {
@@ -159,18 +159,18 @@ func (a *Adapter) loadChatFile(ctx context.Context, lease *egress.Lease, input, 
 	request.Header = remoteFileHeaders(lease.UserAgent)
 	response, err := lease.DoPinnedHTTPS(request, target.serverName)
 	if err != nil {
-		return provider.ImageInput{}, fmt.Errorf("下载对话文件: %w", err)
+		return provider.ImageInput{}, fmt.Errorf("Muat turun fail perbualan: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return provider.ImageInput{}, fmt.Errorf("%w: 下载地址返回 %d", errInvalidChatFile, response.StatusCode)
+		return provider.ImageInput{}, fmt.Errorf("%w: alamat muat turun mengembalikan %d", errInvalidChatFile, response.StatusCode)
 	}
 	if response.ContentLength > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: 文件超过 %d MiB", errInvalidChatFile, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: fail melebihi %d MiB", errInvalidChatFile, maxBytes>>20)
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
 	if err != nil || int64(len(raw)) > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: 下载失败或文件超过 %d MiB", errInvalidChatFile, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: muat turun gagal atau fail melebihi %d MiB", errInvalidChatFile, maxBytes>>20)
 	}
 	mimeType, err := validatedChatFileMIME(raw, response.Header.Get("Content-Type"), firstNonEmpty(filename, path.Base(target.originalURL.Path)))
 	if err != nil {
@@ -196,18 +196,18 @@ func remoteFileHeaders(userAgent string) http.Header {
 func parseChatImageDataURI(value string, maxBytes int64) (provider.ImageInput, error) {
 	header, encoded, ok := strings.Cut(value, ",")
 	if !ok || !strings.HasPrefix(strings.ToLower(header), "data:image/") || !strings.Contains(strings.ToLower(header), ";base64") {
-		return provider.ImageInput{}, fmt.Errorf("%w: data URI 必须是 Base64 图片", errInvalidChatImage)
+		return provider.ImageInput{}, fmt.Errorf("%w: data URI mesti imej Base64", errInvalidChatImage)
 	}
 	encoded = strings.Join(strings.Fields(encoded), "")
 	if encoded == "" || int64(base64.StdEncoding.DecodedLen(len(encoded))) > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: 图片为空或超过 %d MiB", errInvalidChatImage, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: imej kosong atau melebihi %d MiB", errInvalidChatImage, maxBytes>>20)
 	}
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		raw, err = base64.RawStdEncoding.DecodeString(encoded)
 	}
 	if err != nil || len(raw) == 0 || int64(len(raw)) > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: Base64 无效或图片超过 %d MiB", errInvalidChatImage, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: Base64 tidak sah atau imej melebihi %d MiB", errInvalidChatImage, maxBytes>>20)
 	}
 	declared := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.ToLower(header), "data:"), ";base64"))
 	mimeType, err := validatedImageMIME(raw, declared)
@@ -220,18 +220,18 @@ func parseChatImageDataURI(value string, maxBytes int64) (provider.ImageInput, e
 func parseChatFileDataURI(value, filename string, maxBytes int64) (provider.ImageInput, error) {
 	header, encoded, ok := strings.Cut(value, ",")
 	if !ok || !strings.HasPrefix(strings.ToLower(header), "data:") || !strings.Contains(strings.ToLower(header), ";base64") {
-		return provider.ImageInput{}, fmt.Errorf("%w: file_data 必须是 Base64 data URI", errInvalidChatFile)
+		return provider.ImageInput{}, fmt.Errorf("%w: file_data mesti data URI Base64", errInvalidChatFile)
 	}
 	encoded = strings.Join(strings.Fields(encoded), "")
 	if encoded == "" || int64(base64.StdEncoding.DecodedLen(len(encoded))) > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: 文件为空或超过 %d MiB", errInvalidChatFile, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: fail kosong atau melebihi %d MiB", errInvalidChatFile, maxBytes>>20)
 	}
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		raw, err = base64.RawStdEncoding.DecodeString(encoded)
 	}
 	if err != nil || len(raw) == 0 || int64(len(raw)) > maxBytes {
-		return provider.ImageInput{}, fmt.Errorf("%w: Base64 无效或文件超过 %d MiB", errInvalidChatFile, maxBytes>>20)
+		return provider.ImageInput{}, fmt.Errorf("%w: Base64 tidak sah atau fail melebihi %d MiB", errInvalidChatFile, maxBytes>>20)
 	}
 	declared := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.ToLower(header), "data:"), ";base64"))
 	mimeType, err := validatedChatFileMIME(raw, declared, filename)
@@ -245,10 +245,10 @@ func validatedImageMIME(data []byte, declared string) (string, error) {
 	detected := strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(data), ";")[0]))
 	declared = strings.ToLower(strings.TrimSpace(strings.Split(declared, ";")[0]))
 	if !supportedChatImageMIME(detected) {
-		return "", fmt.Errorf("%w: 不支持该图片格式", errInvalidChatImage)
+		return "", fmt.Errorf("%w: format imej ini tidak disokong", errInvalidChatImage)
 	}
 	if declared != "" && declared != "application/octet-stream" && declared != detected {
-		return "", fmt.Errorf("%w: Content-Type 与实际内容不一致", errInvalidChatImage)
+		return "", fmt.Errorf("%w: Content-Type tidak sepadan dengan kandungan sebenar", errInvalidChatImage)
 	}
 	return detected, nil
 }
@@ -277,7 +277,7 @@ func validatedChatFileMIME(data []byte, declared, filename string) (string, erro
 	if supportedChatFileMIME(detected) {
 		return detected, nil
 	}
-	return "", fmt.Errorf("%w: 不支持该文件格式", errInvalidChatFile)
+	return "", fmt.Errorf("%w: format fail ini tidak disokong", errInvalidChatFile)
 }
 
 func chatFileMIMEFromExtension(extension string) string {
@@ -343,20 +343,20 @@ func validateRemoteAttachmentURL(ctx context.Context, raw string, invalid error)
 
 func validateRemoteAttachmentURLWithResolver(ctx context.Context, raw string, resolver remoteImageResolver, invalid error) (*remoteImageTarget, error) {
 	if len(raw) == 0 || len(raw) > maxRemoteAttachmentURLLen {
-		return nil, fmt.Errorf("%w: URL 为空或过长", invalid)
+		return nil, fmt.Errorf("%w: URL kosong atau terlalu panjang", invalid)
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || (parsed.Port() != "" && parsed.Port() != "443") {
-		return nil, fmt.Errorf("%w: URL 必须是无用户信息的 HTTPS 地址", invalid)
+		return nil, fmt.Errorf("%w: URL mesti alamat HTTPS tanpa maklumat pengguna", invalid)
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
-		return nil, fmt.Errorf("%w: URL 指向受限主机", invalid)
+		return nil, fmt.Errorf("%w: URL menunjuk ke host terhad", invalid)
 	}
 	if address, err := netip.ParseAddr(host); err == nil {
 		address = address.Unmap()
 		if !publicRemoteImageAddress(address) {
-			return nil, fmt.Errorf("%w: URL 指向非公网地址", invalid)
+			return nil, fmt.Errorf("%w: URL menunjuk ke alamat bukan awam", invalid)
 		}
 		return newRemoteImageTarget(parsed, host, address), nil
 	}
@@ -364,11 +364,11 @@ func validateRemoteAttachmentURLWithResolver(ctx context.Context, raw string, re
 	defer cancel()
 	addresses, err := resolver.LookupNetIP(resolveCtx, "ip", host)
 	if err != nil || len(addresses) == 0 {
-		return nil, fmt.Errorf("%w: 无法解析附件主机", invalid)
+		return nil, fmt.Errorf("%w: tidak dapat menyelesaikan host lampiran", invalid)
 	}
 	for _, address := range addresses {
 		if !publicRemoteImageAddress(address.Unmap()) {
-			return nil, fmt.Errorf("%w: URL 解析到非公网地址", invalid)
+			return nil, fmt.Errorf("%w: URL diselesaikan ke alamat bukan awam", invalid)
 		}
 	}
 	return newRemoteImageTarget(parsed, host, addresses[0].Unmap()), nil

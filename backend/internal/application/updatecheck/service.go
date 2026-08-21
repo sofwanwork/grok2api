@@ -97,7 +97,7 @@ func (s *Service) Check(ctx context.Context) Snapshot {
 		s.snapshot.ReleaseURL = release.URL
 		s.snapshot.ReleaseNotes = release.Notes
 		s.snapshot.Status = StatusCheckFailed
-		s.snapshot.Error = "当前版本或最新版本不是有效的语义化版本，无法比较"
+		s.snapshot.Error = "Versi semasa atau versi terkini bukan versi semantik yang sah, tidak boleh dibandingkan"
 		return cloneSnapshot(s.snapshot)
 	}
 	available := compareSemanticVersion(latest, current) > 0
@@ -129,29 +129,29 @@ func (s *Service) fetchLatest(ctx context.Context) (latestRelease, error) {
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	response, err := s.client.Do(request)
 	if err != nil {
-		return latestRelease{}, fmt.Errorf("检查 GitHub Release 失败: %w", err)
+		return latestRelease{}, fmt.Errorf("Semakan GitHub Release gagal: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return latestRelease{}, fmt.Errorf("GitHub Release 检查失败（HTTP %d）", response.StatusCode)
+		return latestRelease{}, fmt.Errorf("Semakan GitHub Release gagal (HTTP %d)", response.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxReleaseBytes+1))
 	if err != nil {
-		return latestRelease{}, fmt.Errorf("读取 GitHub Release 响应: %w", err)
+		return latestRelease{}, fmt.Errorf("Membaca respons GitHub Release: %w", err)
 	}
 	if len(data) > maxReleaseBytes {
-		return latestRelease{}, errors.New("GitHub Release 响应超过安全上限")
+		return latestRelease{}, errors.New("Respons GitHub Release melebihi had keselamatan")
 	}
 	var payload struct {
 		Tag  string `json:"tag_name"`
 		Body string `json:"body"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return latestRelease{}, fmt.Errorf("解析 GitHub Release 响应: %w", err)
+		return latestRelease{}, fmt.Errorf("Menghurai respons GitHub Release: %w", err)
 	}
 	payload.Tag = strings.TrimSpace(payload.Tag)
 	if payload.Tag == "" {
-		return latestRelease{}, errors.New("GitHub Release 未返回版本号")
+		return latestRelease{}, errors.New("GitHub Release tidak memulangkan nombor versi")
 	}
 	return latestRelease{
 		Tag:   payload.Tag,

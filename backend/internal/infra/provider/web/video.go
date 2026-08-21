@@ -161,7 +161,7 @@ func (a *Adapter) logWebMediaUpstreamRejection(stage string, response *http.Resp
 
 func summarizeWebMediaUpstreamError(status int, body []byte, truncated bool) string {
 	code, message, structured := extractWebMediaUpstreamErrorFields(body)
-	parts := []string{fmt.Sprintf("Grok Web 媒体上游返回 %d", status)}
+	parts := []string{fmt.Sprintf("Grok Web media upstream mengembalikan %d", status)}
 	if code != "" {
 		parts = append(parts, code)
 	}
@@ -170,11 +170,11 @@ func summarizeWebMediaUpstreamError(status int, body []byte, truncated bool) str
 	} else if len(strings.TrimSpace(string(body))) == 0 {
 		parts = append(parts, "<empty>")
 	} else if truncated {
-		parts = append(parts, "响应正文过长")
+		parts = append(parts, "Badan respons terlalu panjang")
 	} else if !structured {
-		parts = append(parts, "响应正文不可解析")
+		parts = append(parts, "Badan respons tidak boleh dihuraikan")
 	} else if code == "" {
-		parts = append(parts, "未提供错误详情")
+		parts = append(parts, "Tiada butiran ralat diberikan")
 	}
 	return boundWebMediaDiagnostic(strings.Join(parts, ": "), webMediaDiagnosticSummaryLimit)
 }
@@ -272,7 +272,7 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 	}
 	segments := videoSegments(request.Duration)
 	if len(segments) == 0 {
-		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePrepare, 0, fmt.Errorf("duration 必须在 1 到 15 秒之间"))
+		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePrepare, 0, fmt.Errorf("duration mesti antara 1 hingga 15 saat"))
 	}
 	ratio := resolveAspectRatio(request.AspectRatio)
 	resolution := request.Resolution
@@ -297,7 +297,7 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 		return provider.VideoResult{}, provider.WrapVideoStage(stage, 0, parseErr)
 	}
 	if result.URL == "" {
-		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePoll, 0, fmt.Errorf("视频生成完成但没有返回内容 URL"))
+		return provider.VideoResult{}, provider.WrapVideoStage(provider.VideoStagePoll, 0, fmt.Errorf("Penjanaan video selesai tetapi tiada URL kandungan dikembalikan"))
 	}
 	return result, nil
 }
@@ -305,7 +305,7 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 func (a *Adapter) prepareVideoReference(ctx context.Context, cfg Config, lease *egress.Lease, token, value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "", fmt.Errorf("视频参考图片 URL 不能为空")
+		return "", fmt.Errorf("URL imej rujukan video tak boleh kosong")
 	}
 	image, err := a.loadChatImage(ctx, lease, value, 20<<20)
 	if err != nil {
@@ -316,7 +316,7 @@ func (a *Adapter) prepareVideoReference(ctx context.Context, cfg Config, lease *
 		return "", err
 	}
 	if uploaded.URI == "" {
-		return "", fmt.Errorf("上传视频参考图片后未返回 fileUri")
+		return "", fmt.Errorf("Tiada fileUri dikembalikan selepas muat naik imej rujukan video")
 	}
 	return uploaded.URI, nil
 }
@@ -327,7 +327,7 @@ func (a *Adapter) prepareVideoReference(ctx context.Context, cfg Config, lease *
 func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credential, rawURL string) (io.ReadCloser, string, int64, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || parsed.Scheme != "https" || !trustedImageAssetHost(parsed.Hostname()) || parsed.User != nil {
-		return nil, "", 0, fmt.Errorf("视频内容 URL 不受信任")
+		return nil, "", 0, fmt.Errorf("URL kandungan video tidak dipercayai")
 	}
 	token, err := a.cipher.Decrypt(credential.EncryptedAccessToken)
 	if err != nil {
@@ -356,7 +356,7 @@ func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credenti
 		_ = response.Body.Close()
 		a.egress.FeedbackForScope(context.WithoutCancel(ctx), domainegress.ScopeWebAsset, lease.NodeID, response.StatusCode, nil)
 		lease.Release()
-		return nil, "", 0, fmt.Errorf("下载视频返回 %d", response.StatusCode)
+		return nil, "", 0, fmt.Errorf("Muat turun video mengembalikan %d", response.StatusCode)
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
 	if contentType == "" || contentType == "application/octet-stream" {
@@ -365,7 +365,7 @@ func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credenti
 	if !strings.HasPrefix(contentType, "video/") {
 		_ = response.Body.Close()
 		lease.Release()
-		return nil, "", 0, fmt.Errorf("上游视频 Content-Type 无效")
+		return nil, "", 0, fmt.Errorf("Content-Type video upstream tidak sah")
 	}
 	onFinished := func(readErr error, complete bool) {
 		if readErr != nil {
@@ -443,9 +443,9 @@ func parseVideoStream(response *http.Response, progress func(int)) (provider.Vid
 func webMediaStreamError(value map[string]any) error {
 	message := safeWebMediaDiagnostic(firstString(value, "message", "error", "detail"), webMediaDiagnosticFieldLimit)
 	if message == "" {
-		message = "未提供错误详情"
+		message = "Tiada butiran ralat diberikan"
 	}
-	return fmt.Errorf("视频上游错误: %s", message)
+	return fmt.Errorf("Ralat upstream video: %s", message)
 }
 
 func videoFileAttachments(root map[string]any) []string {
@@ -511,7 +511,7 @@ func consumeVideoJSON(reader io.Reader, handle func(map[string]any) (bool, error
 			if err == io.EOF {
 				return nil
 			}
-			return fmt.Errorf("解析视频上游流: %w", err)
+			return fmt.Errorf("Huraian strim upstream video: %w", err)
 		}
 		complete, err := handle(root)
 		if err != nil {

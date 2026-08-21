@@ -143,7 +143,7 @@ func prepareGatewayCompactionSample(body []byte) ([]byte, error) {
 	}
 	items, ok := payload["input"].([]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: "compaction 请求的 input 必须是数组", Param: "input", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "input permintaan compaction mesti tatasusunan", Param: "input", Code: "invalid_parameter"}
 	}
 	items = append(items, map[string]any{
 		"type": "message", "role": "user", "content": gatewayCompactionPrompt,

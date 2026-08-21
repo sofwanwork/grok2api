@@ -30,7 +30,7 @@ const (
 	statsigResponseLimit    = 4 << 10
 )
 
-var errStatsigMetaMissing = errors.New("Grok index 缺少 grok-site-verification")
+var errStatsigMetaMissing = errors.New("Grok index tiada grok-site-verification")
 
 type statsigCacheEntry struct {
 	value     string
@@ -150,11 +150,11 @@ func (s *statsigSigner) freshSignature(ctx context.Context, baseURL, signerURL, 
 
 	meta, refreshErr := s.fetchMeta(ctx, baseURL, token, lease)
 	if refreshErr != nil {
-		return "", fmt.Errorf("刷新 Statsig metaContent: %w", refreshErr)
+		return "", fmt.Errorf("Memuat semula metaContent Statsig: %w", refreshErr)
 	}
 	signature, retryErr := s.requestSignature(ctx, signerURL, method, path, meta)
 	if retryErr != nil {
-		return "", fmt.Errorf("Statsig 签名失败: %w", retryErr)
+		return "", fmt.Errorf("Tandatangan Statsig gagal: %w", retryErr)
 	}
 	return signature, nil
 }
@@ -216,7 +216,7 @@ func (s *statsigSigner) store(key, value string, expiresAt, now time.Time) {
 func statsigSignatureKey(baseURL, signerURL, method, target string) (string, string, error) {
 	parsed, err := url.Parse(target)
 	if err != nil {
-		return "", "", fmt.Errorf("解析 Statsig 目标地址: %w", err)
+		return "", "", fmt.Errorf("Huraian alamat sasaran Statsig: %w", err)
 	}
 	path := parsed.EscapedPath()
 	if path == "" {
@@ -252,16 +252,16 @@ func (s *statsigSigner) requestSignature(ctx context.Context, endpoint, method, 
 		return "", err
 	}
 	if len(body) > statsigResponseLimit {
-		return "", fmt.Errorf("签名响应超过安全上限")
+		return "", fmt.Errorf("Respons tandatangan melebihi had selamat")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("签名服务返回 %d", response.StatusCode)
+		return "", fmt.Errorf("Perkhidmatan tandatangan mengembalikan %d", response.StatusCode)
 	}
 	var value struct {
 		StatsigID string `json:"x-statsig-id"`
 	}
 	if json.Unmarshal(body, &value) != nil || !validStatsigID(value.StatsigID) {
-		return "", fmt.Errorf("签名服务响应无效")
+		return "", fmt.Errorf("Respons perkhidmatan tandatangan tidak sah")
 	}
 	return value.StatsigID, nil
 }
@@ -273,14 +273,14 @@ func validateStatsigSignerEndpoint(ctx context.Context, endpoint string) error {
 
 func fetchStatsigMetaContent(ctx context.Context, baseURL, token string, lease *infraegress.Lease) (string, error) {
 	if lease == nil {
-		return "", fmt.Errorf("Statsig 获取缺少出口租约")
+		return "", fmt.Errorf("Dapatkan Statsig tiada pajakan egress")
 	}
 	return fetchStatsigMetaContentWithDo(ctx, baseURL, token, lease, lease.Do)
 }
 
 func fetchStatsigMetaContentWithDo(ctx context.Context, baseURL, token string, lease *infraegress.Lease, do func(*http.Request) (*http.Response, error)) (string, error) {
 	if do == nil {
-		return "", fmt.Errorf("Statsig 获取缺少出口租约")
+		return "", fmt.Errorf("Dapatkan Statsig tiada pajakan egress")
 	}
 	index, err := fetchStatsigMetaResponse(ctx, baseURL, token, lease, "/index", do)
 	if err != nil {
@@ -354,16 +354,16 @@ func fetchStatsigMetaResponse(ctx context.Context, baseURL, token string, lease 
 
 func statsigMetaStatusError(path string, statusCode int) error {
 	if path == "/" {
-		return fmt.Errorf("Grok 首页返回 %d", statusCode)
+		return fmt.Errorf("Laman depan Grok mengembalikan %d", statusCode)
 	}
-	return fmt.Errorf("Grok index 返回 %d", statusCode)
+	return fmt.Errorf("Grok index mengembalikan %d", statusCode)
 }
 
 func statsigMetaOversizeError(path string) error {
 	if path == "/" {
-		return fmt.Errorf("Grok 首页超过安全上限")
+		return fmt.Errorf("Laman depan Grok melebihi had selamat")
 	}
-	return fmt.Errorf("Grok index 超过安全上限")
+	return fmt.Errorf("Grok index melebihi had selamat")
 }
 
 func extractStatsigMetaContent(body []byte) (string, error) {
@@ -451,12 +451,12 @@ func (a *Adapter) WarmStatsig(ctx context.Context, credential account.Credential
 	cfg := a.config()
 	if cfg.StatsigMode == "manual" {
 		if !validStatsigID(strings.TrimSpace(cfg.StatsigManualValue)) {
-			return 0, fmt.Errorf("手动 Statsig 配置无效")
+			return 0, fmt.Errorf("Konfigurasi Statsig manual tidak sah")
 		}
 		return 0, nil
 	}
 	if a.statsig == nil {
-		return 0, fmt.Errorf("Statsig 签名器未初始化")
+		return 0, fmt.Errorf("Penandatangan Statsig tidak dimulakan")
 	}
 	token, err := a.cipher.Decrypt(credential.EncryptedAccessToken)
 	if err != nil {

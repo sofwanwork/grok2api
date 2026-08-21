@@ -65,20 +65,20 @@ type adminResponse struct {
 func (h *Handler) login(c *gin.Context) {
 	var request loginRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	adminValue, tokens, err := h.service.Login(c.Request.Context(), request.Username, request.Password, remoteAddress(c.Request))
 	if err != nil {
 		if errors.Is(err, adminapp.ErrLoginRateLimited) {
-			response.Error(c, http.StatusTooManyRequests, "loginRateLimited", "登录尝试过于频繁，请稍后重试")
+			response.Error(c, http.StatusTooManyRequests, "loginRateLimited", "Cubaan log masuk terlalu kerap, sila cuba semula kemudian")
 			return
 		}
 		if errors.Is(err, adminapp.ErrRuntimeUnavailable) {
-			response.Error(c, http.StatusServiceUnavailable, "authRuntimeUnavailable", "管理员认证服务暂不可用")
+			response.Error(c, http.StatusServiceUnavailable, "authRuntimeUnavailable", "Perkhidmatan pengesahan pentadbir buat sementara tidak tersedia")
 			return
 		}
-		response.Error(c, http.StatusUnauthorized, "invalidCredentials", "管理员账号或密码错误")
+		response.Error(c, http.StatusUnauthorized, "invalidCredentials", "Nama akaun atau kata laluan pentadbir salah")
 		return
 	}
 	h.setRefreshCookie(c, tokens)
@@ -97,23 +97,23 @@ func remoteAddress(request *http.Request) string {
 func (h *Handler) refresh(c *gin.Context) {
 	var request refreshRequest
 	if err := c.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	if request.RefreshToken == "" {
 		request.RefreshToken, _ = c.Cookie(refreshCookieName)
 	}
 	if request.RefreshToken == "" {
-		response.Error(c, http.StatusUnauthorized, "invalidRefreshToken", "刷新会话无效")
+		response.Error(c, http.StatusUnauthorized, "invalidRefreshToken", "Sesi pembaruan tidak sah")
 		return
 	}
 	tokens, err := h.service.Refresh(c.Request.Context(), request.RefreshToken)
 	if err != nil {
 		if errors.Is(err, adminapp.ErrRuntimeUnavailable) {
-			response.Error(c, http.StatusServiceUnavailable, "authRuntimeUnavailable", "管理员认证服务暂不可用")
+			response.Error(c, http.StatusServiceUnavailable, "authRuntimeUnavailable", "Perkhidmatan pengesahan pentadbir buat sementara tidak tersedia")
 			return
 		}
-		response.Error(c, http.StatusUnauthorized, "invalidRefreshToken", "刷新会话无效")
+		response.Error(c, http.StatusUnauthorized, "invalidRefreshToken", "Sesi pembaruan tidak sah")
 		return
 	}
 	h.setRefreshCookie(c, tokens)
@@ -123,14 +123,14 @@ func (h *Handler) refresh(c *gin.Context) {
 func (h *Handler) logout(c *gin.Context) {
 	var request refreshRequest
 	if err := c.ShouldBindJSON(&request); err != nil && !errors.Is(err, io.EOF) {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	if request.RefreshToken == "" {
 		request.RefreshToken, _ = c.Cookie(refreshCookieName)
 	}
 	if err := h.service.Logout(c.Request.Context(), request.RefreshToken); err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "authRuntimeUnavailable", "管理员认证服务暂不可用")
+		response.Error(c, http.StatusServiceUnavailable, "authRuntimeUnavailable", "Perkhidmatan pengesahan pentadbir buat sementara tidak tersedia")
 		return
 	}
 	c.SetSameSite(http.SameSiteStrictMode)
@@ -142,7 +142,7 @@ func (h *Handler) me(c *gin.Context) {
 	value, ok := c.Get(middleware.AdminKey)
 	adminValue, valid := value.(admindomain.Admin)
 	if !ok || !valid {
-		response.Error(c, http.StatusUnauthorized, "adminUnauthorized", "管理员登录已失效")
+		response.Error(c, http.StatusUnauthorized, "adminUnauthorized", "Log masuk pentadbir telah tamat tempoh")
 		return
 	}
 	response.Success(c, http.StatusOK, newAdminResponse(adminValue))
@@ -151,13 +151,13 @@ func (h *Handler) me(c *gin.Context) {
 func (h *Handler) changePassword(c *gin.Context) {
 	var request changePasswordRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalidRequest", "请求参数无效")
+		response.Error(c, http.StatusBadRequest, "invalidRequest", "Parameter permintaan tidak sah")
 		return
 	}
 	value, ok := c.Get(middleware.AdminKey)
 	adminValue, valid := value.(admindomain.Admin)
 	if !ok || !valid {
-		response.Error(c, http.StatusUnauthorized, "adminUnauthorized", "管理员登录已失效")
+		response.Error(c, http.StatusUnauthorized, "adminUnauthorized", "Log masuk pentadbir telah tamat tempoh")
 		return
 	}
 	if err := h.service.ChangePassword(c.Request.Context(), adminValue.ID, request.CurrentPassword, request.NewPassword); err != nil {
@@ -165,7 +165,7 @@ func (h *Handler) changePassword(c *gin.Context) {
 			response.Error(c, http.StatusBadRequest, "passwordChangeFailed", err.Error())
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, "passwordChangeFailed", "修改管理员密码失败")
+		response.Error(c, http.StatusInternalServerError, "passwordChangeFailed", "Menukar kata laluan pentadbir gagal")
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"passwordChanged": true})

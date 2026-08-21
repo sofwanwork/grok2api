@@ -225,7 +225,7 @@ func TestWebAccountSettingsRejectsBodyTrailerFailure(t *testing.T) {
 	err = adapter.EnableNSFW(context.Background(), account.Credential{
 		ID: 3, Provider: account.ProviderWeb, AuthType: account.AuthTypeSSO, EncryptedAccessToken: encryptedToken,
 	})
-	if err == nil || !strings.Contains(err.Error(), "gRPC 状态 7") {
+	if err == nil || !strings.Contains(err.Error(), "Status gRPC tetapan akaun Grok Web 7") {
 		t.Fatalf("err = %v", err)
 	}
 }

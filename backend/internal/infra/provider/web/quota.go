@@ -124,7 +124,7 @@ func (a *Adapter) SyncQuotaGroup(ctx context.Context, credential account.Credent
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
-		return provider.QuotaGroupSnapshot{}, fmt.Errorf("Grok Web Imagine 配额接口返回 %d", response.StatusCode)
+		return provider.QuotaGroupSnapshot{}, fmt.Errorf("Antara muka kuota Grok Web Imagine mengembalikan %d", response.StatusCode)
 	}
 	a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
 	now := time.Now().UTC()
@@ -151,7 +151,7 @@ func isImagineQuotaMode(mode string) bool {
 func decodeImagineQuotaSnapshot(body []byte, accountID uint64, now time.Time) ([]account.QuotaWindow, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil {
-		return nil, fmt.Errorf("解析 Grok Web Imagine 配额: %w", err)
+		return nil, fmt.Errorf("Huraian kuota Grok Web Imagine: %w", err)
 	}
 	products := []struct {
 		field string
@@ -167,23 +167,23 @@ func decodeImagineQuotaSnapshot(body []byte, accountID uint64, now time.Time) ([
 	for _, item := range products {
 		raw, ok := fields[item.field]
 		if !ok {
-			return nil, fmt.Errorf("Grok Web Imagine 配额响应缺少字段 %s", item.field)
+			return nil, fmt.Errorf("Respons kuota Grok Web Imagine tiada medan %s", item.field)
 		}
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			continue
 		}
 		var product imagineQuotaProduct
 		if err := json.Unmarshal(raw, &product); err != nil {
-			return nil, fmt.Errorf("解析 Grok Web Imagine 配额字段 %s: %w", item.field, err)
+			return nil, fmt.Errorf("Huraian medan kuota Grok Web Imagine %s: %w", item.field, err)
 		}
 		if product.Available == nil {
-			return nil, fmt.Errorf("Grok Web Imagine 配额字段 %s 结构不完整", item.field)
+			return nil, fmt.Errorf("Struktur medan kuota Grok Web Imagine %s tidak lengkap", item.field)
 		}
 		if item.mode == "" {
 			continue
 		}
 		if *product.Available && (product.RemainingQueries == nil || product.WindowSizeSeconds == nil) {
-			return nil, fmt.Errorf("Grok Web Imagine 配额字段 %s 结构不完整", item.field)
+			return nil, fmt.Errorf("Struktur medan kuota Grok Web Imagine %s tidak lengkap", item.field)
 		}
 		remaining := 0
 		if product.RemainingQueries != nil {
@@ -194,7 +194,7 @@ func decodeImagineQuotaSnapshot(body []byte, accountID uint64, now time.Time) ([
 			windowSeconds = *product.WindowSizeSeconds
 		}
 		if windowSeconds <= 0 {
-			return nil, fmt.Errorf("Grok Web Imagine 配额字段 %s 的 windowSizeSeconds 无效", item.field)
+			return nil, fmt.Errorf("windowSizeSeconds medan kuota Grok Web Imagine %s tidak sah", item.field)
 		}
 		var resetAt *time.Time
 		if product.NextAvailableAt != nil {
@@ -291,7 +291,7 @@ func (a *Adapter) SyncQuotaMode(ctx context.Context, credential account.Credenti
 				return w, nil
 			}
 		}
-		return account.QuotaWindow{}, fmt.Errorf("imagine 配额响应缺少 %s", mode)
+		return account.QuotaWindow{}, fmt.Errorf("Respons kuota imagine tiada %s", mode)
 	}
 	cfg := a.config()
 	token, err := a.cipher.Decrypt(credential.EncryptedAccessToken)
@@ -347,7 +347,7 @@ func (a *Adapter) SyncQuotaMode(ctx context.Context, credential account.Credenti
 			return account.QuotaWindow{}, fmt.Errorf("%w: account blocked", provider.ErrUnauthorized)
 		}
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 额度接口返回 %d", response.StatusCode)
+		return account.QuotaWindow{}, fmt.Errorf("Antara muka kuota Grok Web mengembalikan %d", response.StatusCode)
 	}
 	a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
 	var value struct {
@@ -359,7 +359,7 @@ func (a *Adapter) SyncQuotaMode(ctx context.Context, credential account.Credenti
 		return account.QuotaWindow{}, err
 	}
 	if value.TotalQueries <= 0 {
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 额度响应缺少 totalQueries")
+		return account.QuotaWindow{}, fmt.Errorf("Respons kuota Grok Web tiada totalQueries")
 	}
 	if value.WindowSizeSeconds <= 0 {
 		value.WindowSizeSeconds = 7200
@@ -418,7 +418,7 @@ func (a *Adapter) syncWeeklyCredits(ctx context.Context, credential account.Cred
 			lease.InvalidateClearance()
 		}
 		a.egress.Feedback(context.WithoutCancel(ctx), lease.NodeID, response.StatusCode, nil)
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 周额度接口返回 %d", response.StatusCode)
+		return account.QuotaWindow{}, fmt.Errorf("Antara muka kuota mingguan Grok Web mengembalikan %d", response.StatusCode)
 	}
 	window, err := parseWeeklyCreditsResponse(body, credential.ID, time.Now().UTC())
 	if err != nil {
@@ -435,7 +435,7 @@ func parseWeeklyCreditsResponse(body []byte, accountID uint64, syncedAt time.Tim
 	}
 	config, err := protobufMessageField(payload, 1)
 	if err != nil {
-		return account.QuotaWindow{}, fmt.Errorf("解析 Grok Web 周额度响应: %w", err)
+		return account.QuotaWindow{}, fmt.Errorf("Huraian respons kuota mingguan Grok Web: %w", err)
 	}
 	var usagePercent float64
 	var usagePresent bool
@@ -444,14 +444,14 @@ func parseWeeklyCreditsResponse(body []byte, accountID uint64, syncedAt time.Tim
 	for len(config) > 0 {
 		number, fieldType, n := protowire.ConsumeTag(config)
 		if n < 0 {
-			return account.QuotaWindow{}, fmt.Errorf("周额度 protobuf tag 无效")
+			return account.QuotaWindow{}, fmt.Errorf("Tag protobuf kuota mingguan tidak sah")
 		}
 		config = config[n:]
 		switch {
 		case number == 1 && fieldType == protowire.Fixed32Type:
 			value, consumed := protowire.ConsumeFixed32(config)
 			if consumed < 0 {
-				return account.QuotaWindow{}, fmt.Errorf("周额度使用率无效")
+				return account.QuotaWindow{}, fmt.Errorf("Kadar penggunaan kuota mingguan tidak sah")
 			}
 			usagePercent = float64(math.Float32frombits(value))
 			usagePresent = true
@@ -459,7 +459,7 @@ func parseWeeklyCreditsResponse(body []byte, accountID uint64, syncedAt time.Tim
 		case (number == 4 || number == 5) && fieldType == protowire.BytesType:
 			value, consumed := protowire.ConsumeBytes(config)
 			if consumed < 0 {
-				return account.QuotaWindow{}, fmt.Errorf("周额度周期无效")
+				return account.QuotaWindow{}, fmt.Errorf("Tempoh kuota mingguan tidak sah")
 			}
 			parsed, parseErr := parseProtoTimestamp(value)
 			if parseErr != nil {
@@ -474,7 +474,7 @@ func parseWeeklyCreditsResponse(body []byte, accountID uint64, syncedAt time.Tim
 		case number == 7 && fieldType == protowire.BytesType:
 			value, consumed := protowire.ConsumeBytes(config)
 			if consumed < 0 {
-				return account.QuotaWindow{}, fmt.Errorf("周额度产品分解无效")
+				return account.QuotaWindow{}, fmt.Errorf("Pecahan produk kuota mingguan tidak sah")
 			}
 			if item, ok := parseQuotaBreakdown(value); ok {
 				breakdown = append(breakdown, item)
@@ -483,26 +483,26 @@ func parseWeeklyCreditsResponse(body []byte, accountID uint64, syncedAt time.Tim
 		default:
 			consumed := protowire.ConsumeFieldValue(number, fieldType, config)
 			if consumed < 0 {
-				return account.QuotaWindow{}, fmt.Errorf("周额度 protobuf 字段无效")
+				return account.QuotaWindow{}, fmt.Errorf("Medan protobuf kuota mingguan tidak sah")
 			}
 			config = config[consumed:]
 		}
 	}
 	if usagePresent && (math.IsNaN(usagePercent) || math.IsInf(usagePercent, 0) || usagePercent < 0 || usagePercent > 100) {
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 周额度响应缺少有效使用率")
+		return account.QuotaWindow{}, fmt.Errorf("Respons kuota mingguan Grok Web tiada kadar penggunaan yang sah")
 	}
 	if periodStart == nil || periodEnd == nil || !periodEnd.After(*periodStart) {
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 周额度响应缺少有效周期")
+		return account.QuotaWindow{}, fmt.Errorf("Respons kuota mingguan Grok Web tiada tempoh yang sah")
 	}
 	if !usagePresent && periodStart.Nanosecond() == 0 && periodEnd.Nanosecond() == 0 {
 		// Free accounts return a coarse entitlement period without a usage rate.
 		// A paid, unused weekly pool has the same rate omitted but retains its
 		// precise period boundaries, which represents zero percent used.
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 周额度响应缺少有效使用率")
+		return account.QuotaWindow{}, fmt.Errorf("Respons kuota mingguan Grok Web tiada kadar penggunaan yang sah")
 	}
 	windowSeconds := int(periodEnd.Sub(*periodStart).Seconds())
 	if windowSeconds < 24*60*60 || windowSeconds > 31*24*60*60 {
-		return account.QuotaWindow{}, fmt.Errorf("Grok Web 周额度周期长度异常")
+		return account.QuotaWindow{}, fmt.Errorf("Panjang tempoh kuota mingguan Grok Web tidak normal")
 	}
 	usedBasisPoints := int(math.Round(usagePercent * 100))
 	return account.QuotaWindow{
@@ -518,10 +518,10 @@ func firstGRPCWebMessage(body []byte) ([]byte, error) {
 		return nil, err
 	}
 	if grpcStatus != "" && grpcStatus != "0" {
-		return nil, fmt.Errorf("Grok Web 周额度 gRPC 状态为 %s", grpcStatus)
+		return nil, fmt.Errorf("Status gRPC kuota mingguan Grok Web ialah %s", grpcStatus)
 	}
 	if message == nil {
-		return nil, fmt.Errorf("Grok Web 周额度响应缺少消息帧")
+		return nil, fmt.Errorf("Respons kuota mingguan Grok Web tiada bingkai mesej")
 	}
 	return message, nil
 }
@@ -531,19 +531,19 @@ func parseGRPCWebFrames(body []byte) ([]byte, string, error) {
 	grpcStatus := ""
 	for len(body) > 0 {
 		if len(body) < 5 {
-			return nil, "", fmt.Errorf("gRPC-Web 响应包含不完整帧头")
+			return nil, "", fmt.Errorf("Respons gRPC-Web mengandungi pengepala bingkai yang tidak lengkap")
 		}
 		flag := body[0]
 		length := int(binary.BigEndian.Uint32(body[1:5]))
 		body = body[5:]
 		if length < 0 || length > len(body) {
-			return nil, "", fmt.Errorf("gRPC-Web 帧长度无效")
+			return nil, "", fmt.Errorf("Panjang bingkai gRPC-Web tidak sah")
 		}
 		payload := body[:length]
 		body = body[length:]
 		if flag&0x80 == 0 {
 			if flag != 0 {
-				return nil, "", fmt.Errorf("不支持压缩的 gRPC-Web 响应")
+				return nil, "", fmt.Errorf("Respons gRPC-Web termampat tidak disokong")
 			}
 			if message == nil {
 				message = append([]byte(nil), payload...)
@@ -564,23 +564,23 @@ func protobufMessageField(message []byte, target protowire.Number) ([]byte, erro
 	for len(message) > 0 {
 		number, fieldType, n := protowire.ConsumeTag(message)
 		if n < 0 {
-			return nil, fmt.Errorf("protobuf tag 无效")
+			return nil, fmt.Errorf("Tag protobuf tidak sah")
 		}
 		message = message[n:]
 		if number == target && fieldType == protowire.BytesType {
 			value, consumed := protowire.ConsumeBytes(message)
 			if consumed < 0 {
-				return nil, fmt.Errorf("protobuf message 无效")
+				return nil, fmt.Errorf("Mesej protobuf tidak sah")
 			}
 			return value, nil
 		}
 		consumed := protowire.ConsumeFieldValue(number, fieldType, message)
 		if consumed < 0 {
-			return nil, fmt.Errorf("protobuf 字段无效")
+			return nil, fmt.Errorf("Medan protobuf tidak sah")
 		}
 		message = message[consumed:]
 	}
-	return nil, fmt.Errorf("protobuf 缺少字段 %d", target)
+	return nil, fmt.Errorf("Protobuf tiada medan %d", target)
 }
 
 func parseProtoTimestamp(message []byte) (time.Time, error) {
@@ -589,13 +589,13 @@ func parseProtoTimestamp(message []byte) (time.Time, error) {
 	for len(message) > 0 {
 		number, fieldType, n := protowire.ConsumeTag(message)
 		if n < 0 {
-			return time.Time{}, fmt.Errorf("protobuf timestamp tag 无效")
+			return time.Time{}, fmt.Errorf("Tag protobuf timestamp tidak sah")
 		}
 		message = message[n:]
 		if fieldType == protowire.VarintType && (number == 1 || number == 2) {
 			value, consumed := protowire.ConsumeVarint(message)
 			if consumed < 0 {
-				return time.Time{}, fmt.Errorf("protobuf timestamp 值无效")
+				return time.Time{}, fmt.Errorf("Nilai protobuf timestamp tidak sah")
 			}
 			if number == 1 {
 				seconds = int64(value)
@@ -607,12 +607,12 @@ func parseProtoTimestamp(message []byte) (time.Time, error) {
 		}
 		consumed := protowire.ConsumeFieldValue(number, fieldType, message)
 		if consumed < 0 {
-			return time.Time{}, fmt.Errorf("protobuf timestamp 字段无效")
+			return time.Time{}, fmt.Errorf("Medan protobuf timestamp tidak sah")
 		}
 		message = message[consumed:]
 	}
 	if seconds <= 0 || nanos < 0 || nanos >= int32(time.Second) {
-		return time.Time{}, fmt.Errorf("protobuf timestamp 范围无效")
+		return time.Time{}, fmt.Errorf("Julat protobuf timestamp tidak sah")
 	}
 	return time.Unix(seconds, int64(nanos)).UTC(), nil
 }

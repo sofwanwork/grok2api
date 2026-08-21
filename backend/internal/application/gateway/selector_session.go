@@ -230,7 +230,7 @@ func (session *selectionSession) acquireNormal(ctx context.Context, excluded map
 		session.stickyTried = true
 		stickyID, ok, err := session.selector.sticky.Get(ctx, session.stickyKey, time.Now().UTC())
 		if err != nil {
-			return nil, fmt.Errorf("读取会话粘滞状态: %w", err)
+			return nil, fmt.Errorf("Membaca status sessi lekat: %w", err)
 		}
 		if ok && !session.candidateExcluded(excluded, stickyID) {
 			for _, index := range session.normalCandidates {
@@ -266,7 +266,7 @@ func (session *selectionSession) acquireNormal(ctx context.Context, excluded map
 		}
 		if lease.routingCandidate == nil {
 			lease.Release()
-			return nil, errors.New("分段选号缺少候选上下文")
+			return nil, errors.New("Pemilihan bersegmen tiada konteks calon")
 		}
 		return session.completeNormalLease(ctx, lease, *lease.routingCandidate, excluded)
 	}
@@ -321,32 +321,32 @@ func (session *selectionSession) completeNormalLease(ctx context.Context, lease 
 		boundID, err := session.selector.sticky.Bind(ctx, session.stickyKey, candidate.Credential.ID, now, now.Add(stickyTTL))
 		if err != nil {
 			lease.Release()
-			return nil, fmt.Errorf("写入会话粘滞状态: %w", err)
+			return nil, fmt.Errorf("Menulis status sessi lekat: %w", err)
 		}
 		if boundID != candidate.Credential.ID {
 			if boundCandidate, eligible := routingCandidateByID(session.values, session.normalCandidates, boundID); eligible && !session.candidateExcluded(excluded, boundID) {
 				boundLease, acquireErr := session.selector.claimAccountSlot(ctx, boundCandidate.Credential)
 				if acquireErr != nil {
-					if errors.Is(acquireErr, errRoutingCredentialStale) {
-						session.markCandidateStale(boundID)
-						_ = session.selector.sticky.DeleteByAccount(ctx, boundID)
-						if err := session.selector.sticky.Set(ctx, session.stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
-							lease.Release()
-							return nil, fmt.Errorf("重建会话粘滞状态: %w", err)
-						}
-					} else {
+				if errors.Is(acquireErr, errRoutingCredentialStale) {
+					session.markCandidateStale(boundID)
+					_ = session.selector.sticky.DeleteByAccount(ctx, boundID)
+					if err := session.selector.sticky.Set(ctx, session.stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
 						lease.Release()
-						return nil, acquireErr
+						return nil, fmt.Errorf("Membina semula status sessi lekat: %w", err)
 					}
-				} else if boundLease != nil {
+				} else {
 					lease.Release()
-					lease = boundLease
-					candidate = boundCandidate
+					return nil, acquireErr
 				}
-			} else if err := session.selector.sticky.Set(ctx, session.stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
+			} else if boundLease != nil {
 				lease.Release()
-				return nil, fmt.Errorf("重建会话粘滞状态: %w", err)
+				lease = boundLease
+				candidate = boundCandidate
 			}
+		} else if err := session.selector.sticky.Set(ctx, session.stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
+			lease.Release()
+			return nil, fmt.Errorf("Membina semula status sessi lekat: %w", err)
+		}
 		}
 	}
 	lease.Billing = candidate.Billing

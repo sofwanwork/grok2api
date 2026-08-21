@@ -230,7 +230,7 @@ func TestProbeEgressNodeLogsSanitizedFailureStage(t *testing.T) {
 	result, err := manager.probeEgressEndpoint(context.Background(), preparedEgressProbe{
 		nodeID: 7, nodeName: "web-jp", nodeScope: domain.ScopeWeb, proxyURL: "socks5://user:secret@proxy.example:1080",
 	}, "test", "ipv4", "https://probe.example/ip")
-	if err == nil || result.Error != "代理连接失败" || result.LatencyMS < 1 {
+	if err == nil || result.Error != "Sambungan proksi gagal" || result.LatencyMS < 1 {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	logOutput := output.String()
@@ -260,7 +260,7 @@ func TestProbeEgressNodeClassifiesTLSFailure(t *testing.T) {
 	result, err := manager.probeEgressEndpoint(context.Background(), preparedEgressProbe{
 		nodeID: 8, nodeName: "tls-failure", nodeScope: domain.ScopeBuild, proxyURL: "http://proxy.example:1080",
 	}, domain.ProbeProviderCloudflare, "ipv4", cloudflareIPv4ProbeEndpoint)
-	if err == nil || result.Error != "代理连接失败" || result.LatencyMS < 1 {
+	if err == nil || result.Error != "Sambungan proksi gagal" || result.LatencyMS < 1 {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	logOutput := output.String()
@@ -287,7 +287,7 @@ func TestProbeEgressNodeClassifiesFirstByteFailure(t *testing.T) {
 	result, err := manager.probeEgressEndpoint(context.Background(), preparedEgressProbe{
 		nodeID: 9, nodeName: "first-byte-failure", nodeScope: domain.ScopeBuild, proxyURL: "http://proxy.example:1080",
 	}, domain.ProbeProviderCloudflare, "ipv4", cloudflareIPv4ProbeEndpoint)
-	if err == nil || result.Error != "代理连接失败" || result.LatencyMS < 1 {
+	if err == nil || result.Error != "Sambungan proksi gagal" || result.LatencyMS < 1 {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	logOutput := output.String()
@@ -1130,7 +1130,7 @@ func TestAcquireCredentialDoesNotRouteDirectWhenBoundNodeHasNoProxy(t *testing.T
 	_, err = manager.AcquireCredential(context.Background(), domain.ScopeBuild, accountdomain.Credential{
 		ID: 42, Provider: accountdomain.ProviderBuild, EgressNodeID: 2,
 	})
-	if err == nil || !strings.Contains(err.Error(), "未配置代理地址") {
+	if err == nil || !strings.Contains(err.Error(), "tiada alamat proksi dikonfigurasi") {
 		t.Fatalf("bound node without proxy error = %v", err)
 	}
 }
@@ -1147,7 +1147,7 @@ func TestAcquireCredentialDoesNotFallbackWhenBoundNodeIsUnavailable(t *testing.T
 	_, err = manager.AcquireCredential(context.Background(), domain.ScopeBuild, accountdomain.Credential{
 		ID: 42, Provider: accountdomain.ProviderBuild, EgressNodeID: 2,
 	})
-	if err == nil || !strings.Contains(err.Error(), "已禁用") {
+	if err == nil || !strings.Contains(err.Error(), "telah dilumpuhkan") {
 		t.Fatalf("bound unavailable error = %v", err)
 	}
 }
@@ -1742,7 +1742,7 @@ func TestBoundFixedProxyKeepsCooldownAfterUnhealthyFailureProbe(t *testing.T) {
 	close(probeRelease)
 	select {
 	case err := <-result:
-		if err == nil || !strings.Contains(err.Error(), "正在冷却") {
+		if err == nil || !strings.Contains(err.Error(), "dalam tempoh sejuk") {
 			t.Fatalf("bound retry after unhealthy probe error = %v", err)
 		}
 	case <-time.After(time.Second):

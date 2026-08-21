@@ -18,10 +18,10 @@ type Cipher struct {
 func NewCipher(encodedKey string) (*Cipher, error) {
 	key, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil {
-		return nil, fmt.Errorf("解析凭据加密密钥: %w", err)
+		return nil, fmt.Errorf("Huraian kunci penyulitan kredensial: %w", err)
 	}
 	if len(key) != 32 {
-		return nil, fmt.Errorf("凭据加密密钥必须是 Base64 编码的 32 字节密钥")
+		return nil, fmt.Errorf("Kunci penyulitan kredensial mesti kunci 32 bait yang dikodkan Base64")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -54,15 +54,15 @@ func (c *Cipher) Decrypt(encoded string) (string, error) {
 	}
 	data, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {
-		return "", fmt.Errorf("解析加密凭据: %w", err)
+		return "", fmt.Errorf("Huraian kredensial tersulit: %w", err)
 	}
 	if len(data) < c.aead.NonceSize() {
-		return "", fmt.Errorf("加密凭据长度无效")
+		return "", fmt.Errorf("Panjang kredensial tersulit tidak sah")
 	}
 	nonce, ciphertext := data[:c.aead.NonceSize()], data[c.aead.NonceSize():]
 	plain, err := c.aead.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return "", fmt.Errorf("解密凭据: %w", err)
+		return "", fmt.Errorf("Menyahsulit kredensial: %w", err)
 	}
 	return string(plain), nil
 }

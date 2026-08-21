@@ -13,7 +13,7 @@ import (
 // 请求仍使用该 Console 凭据对应的代理、Cookie 与 Resin 身份。
 func (a *Adapter) SyncAccountIdentity(ctx context.Context, credential account.Credential) (provider.AccountIdentity, error) {
 	if credential.Provider != account.ProviderConsole || credential.AuthType != account.AuthTypeSSO {
-		return provider.AccountIdentity{}, fmt.Errorf("仅 Grok Console SSO 账号支持身份同步")
+		return provider.AccountIdentity{}, fmt.Errorf("Hanya akaun Grok Console SSO menyokong penyegerakan identiti")
 	}
 	return sessionidentity.Fetch(ctx, a.config().SessionBaseURL, credential, a.egress, a.cipher)
 }

@@ -10,7 +10,7 @@ import (
 	domain "github.com/chenyme/grok2api/backend/internal/domain/egress"
 )
 
-var ErrSubscriptionSync = errors.New("代理订阅同步失败")
+var ErrSubscriptionSync = errors.New("Penyegerakan langganan proksi gagal")
 
 func (s *Service) syncSource(ctx context.Context, operations OperationsRepository, source domain.SubscriptionSource) (ImportResult, error) {
 	now := time.Now().UTC()
@@ -18,7 +18,7 @@ func (s *Service) syncSource(ctx context.Context, operations OperationsRepositor
 	recordFailure := func() {
 		// The source URL and any transport detail are deliberately omitted from
 		// persisted status and API errors; they may contain subscription tokens.
-		_ = operations.UpdateEgressSourceSync(context.WithoutCancel(ctx), source.ID, now, nextSyncAt, 0, "订阅拉取或解析失败")
+		_ = operations.UpdateEgressSourceSync(context.WithoutCancel(ctx), source.ID, now, nextSyncAt, 0, "Tarikan atau huraian langganan gagal")
 	}
 	if strings.TrimSpace(source.EncryptedURL) == "" {
 		recordFailure()
@@ -55,7 +55,7 @@ func (s *Service) syncSource(ctx context.Context, operations OperationsRepositor
 		encryptedProxy, encryptErr := s.cipher.Encrypt(entry.ProxyURL)
 		if encryptErr != nil {
 			recordFailure()
-			return ImportResult{}, fmt.Errorf("%w: 加密导入节点", ErrSubscriptionSync)
+			return ImportResult{}, fmt.Errorf("%w: Mengenkripsi node import", ErrSubscriptionSync)
 		}
 		nodes = append(nodes, domain.Node{
 			Name: sourceNodeName(source.Name, index), Scope: source.Scope, Enabled: true,
@@ -93,7 +93,7 @@ func (s *Service) subscriptionFetchProxy(source domain.SubscriptionSource) (stri
 	}
 	normalized, err := NormalizeProxyURL(decrypted)
 	if err != nil || normalized == "" || strings.Contains(normalized, ProxyAccountPlaceholder) {
-		return "", errors.New("订阅拉取代理配置无效")
+		return "", errors.New("Konfigurasi proksi tarikan langganan tidak sah")
 	}
 	return normalized, nil
 }

@@ -455,7 +455,7 @@ func TestParseImportedCredentialsBareArray(t *testing.T) {
 // null 元素不在解码层拦截，归一化阶段须带账号序号报错。
 func TestParseImportedCredentialsBareArrayRejectsNullElement(t *testing.T) {
 	_, err := parseImportedCredentials([]byte(`[{"refresh_token":"refresh-1"},null]`))
-	if err == nil || !strings.Contains(err.Error(), "第 2 个账号") {
+	if err == nil || !strings.Contains(err.Error(), "Akaun ke-2") {
 		t.Fatalf("error = %v, want indexed normalize error", err)
 	}
 }
@@ -476,7 +476,7 @@ func TestParseImportedCredentialsLooseAccountsDocument(t *testing.T) {
 func TestParseImportedCredentialsLooseAccountsDocumentReportsLine(t *testing.T) {
 	data := []byte("{\n  \"accounts\": [\n{\"access_token\":\"access-1\"}\nnot-json\n")
 	_, err := parseImportedCredentials(data)
-	if err == nil || !strings.Contains(err.Error(), "第 4 行") {
+	if err == nil || !strings.Contains(err.Error(), "baris 4") {
 		t.Fatalf("error = %v, want line number", err)
 	}
 }

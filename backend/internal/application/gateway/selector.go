@@ -170,43 +170,43 @@ type SelectionUnavailableError struct {
 
 func (e *SelectionUnavailableError) Error() string {
 	if e == nil {
-		return "没有可用上游账号"
+		return "Tiada akaun upstream yang tersedia"
 	}
 	prefix := ""
 	if e.Scope.IsRestricted() {
-		prefix = "Client Key 限定范围"
+		prefix = "Skop terhad Client Key"
 	}
 	switch e.Reason {
 	case SelectionUnsupportedModel:
 		if prefix != "" {
-			return prefix + "不支持该模型"
+			return prefix + " tidak menyokong model ini"
 		}
-		return "当前账号池不支持该模型"
+		return "Kolam akaun semasa tidak menyokong model ini"
 	case SelectionCooling:
 		if prefix != "" {
-			return prefix + "中的可用账号正在冷却"
+			return prefix + " akaun tersedia sedang menyejuk"
 		}
-		return "可用上游账号正在冷却"
+		return "Akaun upstream yang tersedia sedang menyejuk"
 	case SelectionModelCooling:
 		if prefix != "" {
-			return prefix + "中可用账号的目标模型正在冷却"
+			return prefix + " akaun tersedia mempunyai model sasaran yang sedang menyejuk"
 		}
-		return "可用上游账号的目标模型正在冷却"
+		return "Model sasaran akaun upstream yang tersedia sedang menyejuk"
 	case SelectionQuotaExhausted:
 		if prefix != "" {
-			return prefix + "中的可用账号额度等待恢复"
+			return prefix + " akaun tersedia menunggu pemulihan kuota"
 		}
-		return "可用上游账号额度等待恢复"
+		return "Kuota akaun upstream yang tersedia menunggu pemulihan"
 	case SelectionSaturated:
 		if prefix != "" {
-			return prefix + "中的可用账号均达到并发上限"
+			return prefix + " akaun tersedia telah mencapai had serentak"
 		}
-		return "可用上游账号均达到并发上限"
+		return "Akaun upstream yang tersedia telah mencapai had serentak"
 	default:
 		if prefix != "" {
-			return prefix + "当前没有可用上游账号"
+			return prefix + " tiada akaun upstream yang tersedia buat masa ini"
 		}
-		return "没有可用上游账号"
+		return "Tiada akaun upstream yang tersedia"
 	}
 }
 
@@ -623,17 +623,17 @@ func (s *Selector) acquire(ctx context.Context, provider account.Provider, model
 	}
 	var saturatedStickyID uint64
 	if stickyKey != "" {
-		stickyID, ok, err := s.sticky.Get(ctx, stickyKey, now)
-		if err != nil {
-			return nil, fmt.Errorf("读取会话粘滞状态: %w", err)
-		}
+	stickyID, ok, err := s.sticky.Get(ctx, stickyKey, now)
+	if err != nil {
+		return nil, fmt.Errorf("Membaca status sessi lekat: %w", err)
+	}
 		if ok {
 			candidate, eligible := routingCandidateByID(values, normalCandidates, stickyID)
 			if eligible {
 				stickyTTL, _, _, _ := s.routingConfig()
 				boundID, bindErr := s.sticky.Bind(ctx, stickyKey, stickyID, now, now.Add(stickyTTL))
 				if bindErr != nil {
-					return nil, fmt.Errorf("刷新会话粘滞状态: %w", bindErr)
+					return nil, fmt.Errorf("Menyegarkan status sessi lekat: %w", bindErr)
 				}
 				if boundID != stickyID {
 					candidate, eligible = routingCandidateByID(values, normalCandidates, boundID)
@@ -690,10 +690,10 @@ func (s *Selector) acquire(ctx context.Context, provider account.Provider, model
 		if acquireErr != nil || lease == nil || stickyKey == "" {
 			return lease, acquireErr
 		}
-		if lease.routingCandidate == nil {
-			lease.Release()
-			return nil, errors.New("分段选号缺少候选上下文")
-		}
+	if lease.routingCandidate == nil {
+		lease.Release()
+		return nil, errors.New("Pemilihan bersegmen tiada konteks calon")
+	}
 		return s.completeStickyLease(ctx, stickyKey, values, normalCandidates, *lease.routingCandidate, lease, quotaMode)
 	}
 	_, _, _, capacityWait := s.routingConfig()
@@ -744,7 +744,7 @@ func (s *Selector) completeStickyLease(ctx context.Context, stickyKey string, va
 		boundID, err := s.sticky.Bind(ctx, stickyKey, candidate.Credential.ID, now, now.Add(stickyTTL))
 		if err != nil {
 			lease.Release()
-			return nil, fmt.Errorf("写入会话粘滞状态: %w", err)
+			return nil, fmt.Errorf("Menulis status sessi lekat: %w", err)
 		}
 		if boundID != candidate.Credential.ID {
 			if boundCandidate, eligible := routingCandidateByID(values, normalCandidates, boundID); eligible {
@@ -753,21 +753,21 @@ func (s *Selector) completeStickyLease(ctx context.Context, stickyKey string, va
 					lease.Release()
 					lease = boundLease
 					candidate = boundCandidate
-				} else if errors.Is(acquireErr, errRoutingCredentialStale) {
-					_ = s.sticky.DeleteByAccount(ctx, boundID)
-					if err := s.sticky.Set(ctx, stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
-						lease.Release()
-						return nil, fmt.Errorf("重建会话粘滞状态: %w", err)
-					}
-				} else if !isSelectionUnavailable(acquireErr, SelectionSaturated) {
+			} else if errors.Is(acquireErr, errRoutingCredentialStale) {
+				_ = s.sticky.DeleteByAccount(ctx, boundID)
+				if err := s.sticky.Set(ctx, stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
 					lease.Release()
-					return nil, acquireErr
+					return nil, fmt.Errorf("Membina semula status sessi lekat: %w", err)
 				}
-				// 已绑定账号满载时保留原绑定，本次请求使用已获取的临时账号。
-			} else if err := s.sticky.Set(ctx, stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
+			} else if !isSelectionUnavailable(acquireErr, SelectionSaturated) {
 				lease.Release()
-				return nil, fmt.Errorf("重建会话粘滞状态: %w", err)
+				return nil, acquireErr
 			}
+			// 已绑定账号满载时保留原绑定，本次请求使用已获取的临时账号。
+		} else if err := s.sticky.Set(ctx, stickyKey, candidate.Credential.ID, now.Add(stickyTTL)); err != nil {
+			lease.Release()
+			return nil, fmt.Errorf("Membina semula status sessi lekat: %w", err)
+		}
 		}
 	}
 	lease.Billing = candidate.Billing
@@ -863,7 +863,7 @@ func (s *Selector) acquirePinned(ctx context.Context, provider account.Provider,
 					if err != nil {
 						return nil, err
 					}
-					return nil, fmt.Errorf("绑定的上游账号恢复探测已被占用")
+					return nil, fmt.Errorf("Pengesanan pemulihan akaun upstream terikat telah diambil")
 				}
 				lease.QuotaProbe = true
 				lease.QuotaProbeKind = recovery.Kind
@@ -2001,7 +2001,7 @@ func (s *Selector) claimAccountSlot(ctx context.Context, value account.Credentia
 	}
 	release, acquired, err := s.concurrency.Acquire(ctx, accountConcurrencyKey(value.ID), limit)
 	if err != nil {
-		return nil, fmt.Errorf("获取账号并发租约: %w", err)
+		return nil, fmt.Errorf("Mendapatkan sewa serentak akaun: %w", err)
 	}
 	if !acquired {
 		return nil, nil
@@ -2018,7 +2018,7 @@ func (s *Selector) claimAccountSlot(ctx context.Context, value account.Credentia
 				s.ApplyInvalidation(repository.InvalidationEvent{Kind: repository.InvalidationAccountStateChanged, Provider: value.Provider, AccountID: value.ID})
 				return nil, errRoutingCredentialStale
 			}
-			return nil, fmt.Errorf("加载账号执行凭据: %w", loadErr)
+			return nil, fmt.Errorf("Memuat kredensial pelaksanaan akaun: %w", loadErr)
 		}
 		hydrated, matched := material.ApplyTo(value)
 		if !matched {

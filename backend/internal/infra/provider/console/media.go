@@ -87,17 +87,17 @@ func (e *consoleMediaUpstreamError) PublicErrorMessage() string {
 
 func (a *Adapter) GenerateImage(ctx context.Context, request provider.ImageGenerationRequest) (*provider.Response, error) {
 	if !ResolveMedia(request.Model, modeldomain.CapabilityImage) {
-		return invalidConsoleMediaRequest("模型不支持 Console 图片生成"), nil
+		return invalidConsoleMediaRequest("Model tidak menyokong penjanaan imej Console"), nil
 	}
 	if request.Streaming || request.PartialImages != 0 {
-		return invalidConsoleMediaRequest("Grok Console 标准图片接口不支持 stream 或 partial_images"), nil
+		return invalidConsoleMediaRequest("Antara muka imej standard Grok Console tidak menyokong stream atau partial_images"), nil
 	}
 	count := request.Count
 	if count <= 0 {
 		count = 1
 	}
 	if count > 10 {
-		return invalidConsoleMediaRequest("n 必须在 1 到 10 之间"), nil
+		return invalidConsoleMediaRequest("n mesti antara 1 hingga 10"), nil
 	}
 	format, err := normalizeConsoleImageFormat(request.ResponseFormat)
 	if err != nil {
@@ -130,20 +130,20 @@ func (a *Adapter) GenerateImage(ctx context.Context, request provider.ImageGener
 
 func (a *Adapter) EditImage(ctx context.Context, request provider.ImageEditRequest) (*provider.Response, error) {
 	if !ResolveMedia(request.Model, modeldomain.CapabilityImageEdit) {
-		return invalidConsoleMediaRequest("模型不支持 Console 图片编辑"), nil
+		return invalidConsoleMediaRequest("Model tidak menyokong penyuntingan imej Console"), nil
 	}
 	if request.Streaming || request.PartialImages != 0 {
-		return invalidConsoleMediaRequest("Grok Console 标准图片接口不支持 stream 或 partial_images"), nil
+		return invalidConsoleMediaRequest("Antara muka imej standard Grok Console tidak menyokong stream atau partial_images"), nil
 	}
 	if len(request.ImageURLs) == 0 || len(request.ImageURLs) > consoleMaxEditImages {
-		return invalidConsoleMediaRequest("Console 图片编辑必须提供 1 到 3 张图片"), nil
+		return invalidConsoleMediaRequest("Penyuntingan imej Console mesti menyediakan 1 hingga 3 imej"), nil
 	}
 	count := request.Count
 	if count <= 0 {
 		count = 1
 	}
 	if count > 10 {
-		return invalidConsoleMediaRequest("n 必须在 1 到 10 之间"), nil
+		return invalidConsoleMediaRequest("n mesti antara 1 hingga 10"), nil
 	}
 	format, err := normalizeConsoleImageFormat(request.ResponseFormat)
 	if err != nil {
@@ -165,7 +165,7 @@ func (a *Adapter) EditImage(ctx context.Context, request provider.ImageEditReque
 	for _, rawURL := range request.ImageURLs {
 		value := strings.TrimSpace(rawURL)
 		if !validConsoleMediaInputURL(value, "image") {
-			return invalidConsoleMediaRequest("每张编辑图片都必须是 HTTPS URL 或 image data URL"), nil
+			return invalidConsoleMediaRequest("Setiap imej suntingan mesti merupakan URL HTTPS atau image data URL"), nil
 		}
 		images = append(images, map[string]any{"type": "image_url", "url": value})
 	}
@@ -252,7 +252,7 @@ func (a *Adapter) forwardConsoleMedia(ctx context.Context, credential account.Cr
 		lease.Release()
 		cancel()
 		if readErr == nil && len(data) > consoleMediaBodyLimit {
-			readErr = errors.New("Console 图片上游响应超过 2 MiB")
+			readErr = errors.New("Respons upstream imej Console melebihi 2 MiB")
 		}
 		if readErr == nil {
 			data, readErr = a.localizeConsoleImageResponse(ctx, credential, cfg.BaseURL, data)
@@ -285,21 +285,21 @@ func (a *Adapter) forwardConsoleMedia(ctx context.Context, credential account.Cr
 
 func (a *Adapter) localizeConsoleImageResponse(ctx context.Context, credential account.Credential, baseURL string, data []byte) ([]byte, error) {
 	if a.assets == nil {
-		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, errors.New("图片媒体存储未配置"))
+		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingStorage, errors.New("Storan media imej tidak dikonfigurasi"))
 	}
 	var envelope map[string]json.RawMessage
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, fmt.Errorf("解析 Console 图片响应: %w", err))
+		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, fmt.Errorf("Huraian respons imej Console: %w", err))
 	}
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(envelope["data"], &items); err != nil || len(items) == 0 || len(items) > 10 {
-		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, errors.New("Console 图片响应缺少有效 data"))
+		return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, errors.New("Respons imej Console tiada data yang sah"))
 	}
 
 	for index, item := range items {
 		var rawURL string
 		if err := json.Unmarshal(item["url"], &rawURL); err != nil || strings.TrimSpace(rawURL) == "" {
-			return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, fmt.Errorf("Console 图片响应第 %d 项缺少 URL", index+1))
+			return nil, provider.NewMediaPostProcessingError(provider.MediaPostProcessingDownload, fmt.Errorf("Item %d respons imej Console tiada URL", index+1))
 		}
 		raw, err := a.downloadConsoleImage(ctx, credential, baseURL, rawURL)
 		if err != nil {
@@ -367,31 +367,31 @@ func (a *Adapter) downloadConsoleImageAttempt(ctx context.Context, credential ac
 	response, err := lease.DoDeferredForbidden(request)
 	if err != nil {
 		a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsoleAsset, lease.NodeID, 0, err)
-		return nil, ctx.Err() == nil, fmt.Errorf("下载 Console 图片: %w", err)
+		return nil, ctx.Err() == nil, fmt.Errorf("Muat turun imej Console: %w", err)
 	}
 	defer response.Body.Close()
 	// 标准 net/http 响应会保留最终请求 URL；兼容不填充 Request 的自定义出口客户端时，
 	// 初始 URL 已在发起请求前完成校验。若存在最终 URL，则额外检查重定向目标。
 	if response.Request != nil && response.Request.URL != nil {
 		if _, err := trustedConsoleImageURL(response.Request.URL.String(), baseURL); err != nil {
-			return nil, false, errors.New("Console 图片下载重定向到不受信任的地址")
+			return nil, false, errors.New("Muat turun imej Console dibelokkan ke alamat yang tidak dipercayai")
 		}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		retryable := response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooEarly || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500
 		a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsoleAsset, lease.NodeID, response.StatusCode, nil)
-		return nil, retryable, fmt.Errorf("下载 Console 图片返回 %d", response.StatusCode)
+		return nil, retryable, fmt.Errorf("Muat turun imej Console mengembalikan %d", response.StatusCode)
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
 	if contentType != "" && contentType != "application/octet-stream" && !strings.HasPrefix(contentType, "image/") {
-		return nil, false, errors.New("Console 图片 Content-Type 无效")
+		return nil, false, errors.New("Content-Type imej Console tidak sah")
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, consoleImageBodyLimit+1))
 	if err != nil {
-		return nil, ctx.Err() == nil, fmt.Errorf("读取 Console 图片: %w", err)
+		return nil, ctx.Err() == nil, fmt.Errorf("Membaca imej Console: %w", err)
 	}
 	if len(raw) == 0 || len(raw) > consoleImageBodyLimit {
-		return nil, false, errors.New("Console 图片为空或超过 32 MiB")
+		return nil, false, errors.New("Imej Console kosong atau melebihi 32 MiB")
 	}
 	a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsoleAsset, lease.NodeID, response.StatusCode, nil)
 	return raw, false, nil
@@ -425,7 +425,7 @@ func waitConsoleMediaRetry(ctx context.Context, attempt int) error {
 func trustedConsoleImageURL(rawURL, baseURL string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || parsed.User != nil || parsed.Hostname() == "" {
-		return nil, errors.New("Console 图片内容 URL 不受信任")
+		return nil, errors.New("URL kandungan imej Console tidak dipercayai")
 	}
 	if parsed.Scheme == "https" && trustedConsoleImageHost(parsed.Hostname()) {
 		return parsed, nil
@@ -434,7 +434,7 @@ func trustedConsoleImageURL(rawURL, baseURL string) (*url.URL, error) {
 	if baseErr == nil && base.User == nil && strings.EqualFold(parsed.Scheme, base.Scheme) && strings.EqualFold(parsed.Host, base.Host) && (parsed.Scheme == "http" || parsed.Scheme == "https") {
 		return parsed, nil
 	}
-	return nil, errors.New("Console 图片内容 URL 不受信任")
+	return nil, errors.New("URL kandungan imej Console tidak dipercayai")
 }
 
 func trustedConsoleImageHost(host string) bool {
@@ -447,7 +447,7 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 		modelName = "grok-imagine-video"
 	}
 	if !ResolveMedia(modelName, modeldomain.CapabilityVideo) {
-		return provider.VideoResult{}, fmt.Errorf("Console 视频模型未注册: %s", modelName)
+		return provider.VideoResult{}, fmt.Errorf("Model video Console tidak didaftarkan: %s", modelName)
 	}
 	operation := request.Operation
 	if operation == "" {
@@ -456,23 +456,23 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 	switch operation {
 	case provider.VideoOperationGenerate, provider.VideoOperationEdit, provider.VideoOperationExtend:
 	default:
-		return provider.VideoResult{}, fmt.Errorf("不支持的视频操作: %s", operation)
+		return provider.VideoResult{}, fmt.Errorf("Operasi video tidak disokong: %s", operation)
 	}
 	// Official video edit/extension docs and model catalog only expose VIDEO input on
 	// grok-imagine-video. 1.5 is generation-oriented (TEXT/IMAGE/AUDIO) and is rejected here.
 	if operation != provider.VideoOperationGenerate && modelName != "grok-imagine-video" {
-		return provider.VideoResult{}, fmt.Errorf("%s 仅支持 grok-imagine-video", operation)
+		return provider.VideoResult{}, fmt.Errorf("%s hanya menyokong grok-imagine-video", operation)
 	}
 	firstFrames, referenceImages := consoleVideoImageCounts(request)
 	if firstFrames > consoleMaxVideoFirstFrames {
-		return provider.VideoResult{}, fmt.Errorf("Console %s 最多支持 %d 张首帧图，当前为 %d 张", modelName, consoleMaxVideoFirstFrames, firstFrames)
+		return provider.VideoResult{}, fmt.Errorf("Console %s menyokong maksimum %d imej bingkai pertama, semasa %d", modelName, consoleMaxVideoFirstFrames, firstFrames)
 	}
 	if referenceImages > provider.ConsoleVideoMaxReferenceImages {
-		return provider.VideoResult{}, fmt.Errorf("Console %s 最多支持 %d 张参考图，当前为 %d 张", modelName, provider.ConsoleVideoMaxReferenceImages, referenceImages)
+		return provider.VideoResult{}, fmt.Errorf("Console %s menyokong maksimum %d imej rujukan, semasa %d", modelName, provider.ConsoleVideoMaxReferenceImages, referenceImages)
 	}
 	if operation == provider.VideoOperationGenerate {
 		if request.Duration < 1 || request.Duration > 15 {
-			return provider.VideoResult{}, errors.New("duration 必须在 1 到 15 秒之间")
+			return provider.VideoResult{}, errors.New("duration mesti antara 1 hingga 15 saat")
 		}
 		// reference-to-video on the base model caps at 10s upstream; measured:
 		//   grok-imagine-video + reference_images + duration=15
@@ -480,7 +480,7 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 		// image-to-video (the image field) and grok-imagine-video-1.5 both keep 15s,
 		// so the cap keys on reference_images plus the base model, not on duration alone.
 		if modelName == "grok-imagine-video" && referenceImages > 0 && request.Duration > provider.ConsoleVideoMaxReferenceDurationSeconds {
-			return provider.VideoResult{}, fmt.Errorf("%s 的参考图生视频最长 %d 秒，当前为 %d 秒", modelName, provider.ConsoleVideoMaxReferenceDurationSeconds, request.Duration)
+			return provider.VideoResult{}, fmt.Errorf("Rujukan imej ke video %s maksimum %d saat, semasa %d saat", modelName, provider.ConsoleVideoMaxReferenceDurationSeconds, request.Duration)
 		}
 	} else if operation == provider.VideoOperationExtend {
 		// Official /v1/videos/extensions defaults to 6s and accepts 2-10s.
@@ -488,20 +488,20 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 			request.Duration = 6
 		}
 		if request.Duration < 2 || request.Duration > 10 {
-			return provider.VideoResult{}, errors.New("视频延长 duration 必须在 2 到 10 秒之间")
+			return provider.VideoResult{}, errors.New("Pemanjangan video duration mesti antara 2 hingga 10 saat")
 		}
 	} else if request.Duration != 0 {
-		return provider.VideoResult{}, errors.New("视频编辑不支持 duration")
+		return provider.VideoResult{}, errors.New("Penyuntingan video tidak menyokong duration")
 	}
 	if request.Resolution == "1080p" {
 		if modelName != "grok-imagine-video-1.5" {
-			return provider.VideoResult{}, fmt.Errorf("%s 不支持 1080p", modelName)
+			return provider.VideoResult{}, fmt.Errorf("%s tidak menyokong 1080p", modelName)
 		}
 		if len(request.ReferenceURLs) > 0 {
-			return provider.VideoResult{}, errors.New("reference_images 模式最高支持 720p")
+			return provider.VideoResult{}, errors.New("Mod reference_images menyokong sehingga 720p sahaja")
 		}
 	} else if request.Resolution != "" && request.Resolution != "480p" && request.Resolution != "720p" {
-		return provider.VideoResult{}, fmt.Errorf("%s 仅支持 480p、720p 或 1080p", modelName)
+		return provider.VideoResult{}, fmt.Errorf("%s hanya menyokong 480p, 720p atau 1080p", modelName)
 	}
 	payload := map[string]any{"model": modelName}
 	if operation == provider.VideoOperationGenerate || operation == provider.VideoOperationExtend {
@@ -519,19 +519,19 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 		}
 		if imageURL := strings.TrimSpace(request.ImageURL); imageURL != "" {
 			if !validConsoleMediaInputURL(imageURL, "image") {
-				return provider.VideoResult{}, errors.New("视频首图必须是 HTTPS URL 或 image data URL")
+				return provider.VideoResult{}, errors.New("Imej pertama video mesti merupakan URL HTTPS atau image data URL")
 			}
 			payload["image"] = map[string]any{"url": imageURL}
 		}
 		if strings.TrimSpace(request.ImageURL) != "" && (len(request.ReferenceURLs) > 0 || len(request.ReferenceAudios) > 0) {
-			return provider.VideoResult{}, errors.New("image 不能与 reference_images/reference_audios 同时使用")
+			return provider.VideoResult{}, errors.New("image tidak boleh digunakan bersama reference_images/reference_audios")
 		}
 		if len(request.ReferenceURLs) > 0 {
 			references := make([]map[string]any, 0, len(request.ReferenceURLs))
 			for _, rawURL := range request.ReferenceURLs {
 				value := strings.TrimSpace(rawURL)
 				if !validConsoleMediaInputURL(value, "image") {
-					return provider.VideoResult{}, errors.New("每张视频参考图都必须是 HTTPS URL 或 image data URL")
+					return provider.VideoResult{}, errors.New("Setiap imej rujukan video mesti merupakan URL HTTPS atau image data URL")
 				}
 				references = append(references, map[string]any{"url": value})
 			}
@@ -540,13 +540,13 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 		}
 		if len(request.ReferenceAudios) > 0 {
 			if len(request.ReferenceAudios) > 3 {
-				return provider.VideoResult{}, errors.New("reference_audios 最多 3 个")
+				return provider.VideoResult{}, errors.New("reference_audios maksimum 3")
 			}
 			audios := make([]map[string]any, 0, len(request.ReferenceAudios))
 			for _, raw := range request.ReferenceAudios {
 				voiceID := strings.TrimSpace(raw)
 				if voiceID == "" {
-					return provider.VideoResult{}, errors.New("reference_audios.voice_id 不能为空")
+					return provider.VideoResult{}, errors.New("reference_audios.voice_id tak boleh kosong")
 				}
 				audios = append(audios, map[string]any{"voice_id": voiceID})
 			}
@@ -555,35 +555,35 @@ func (a *Adapter) GenerateVideo(ctx context.Context, request provider.VideoReque
 		hasReferenceMode := len(request.ReferenceURLs) > 0 || len(request.ReferenceAudios) > 0
 		if hasReferenceMode {
 			if strings.TrimSpace(request.Prompt) == "" {
-				return provider.VideoResult{}, errors.New("参考图/参考音频视频必须提供 prompt")
+				return provider.VideoResult{}, errors.New("Video rujukan imej/audio mesti menyediakan prompt")
 			}
 			if strings.EqualFold(strings.TrimSpace(request.Resolution), "1080p") {
-				return provider.VideoResult{}, errors.New("参考图视频 resolution 最高 720p")
+				return provider.VideoResult{}, errors.New("Resolusi video rujukan imej maksimum 720p")
 			}
 		}
 		if _, hasPrompt := payload["prompt"]; !hasPrompt {
 			if _, hasImage := payload["image"]; !hasImage {
 				if !hasReferenceMode {
-					return provider.VideoResult{}, errors.New("文本生视频必须提供 prompt；图片生视频可以省略 prompt")
+					return provider.VideoResult{}, errors.New("Teks ke video mesti menyediakan prompt; imej ke video boleh mengabaikan prompt")
 				}
 			}
 		}
 	} else {
 		prompt := strings.TrimSpace(request.Prompt)
 		if prompt == "" {
-			return provider.VideoResult{}, errors.New("视频编辑/延长必须提供 prompt")
+			return provider.VideoResult{}, errors.New("Penyuntingan/pemanjangan video mesti menyediakan prompt")
 		}
 		videoURL := strings.TrimSpace(request.VideoURL)
 		if !validConsoleMediaInputURL(videoURL, "video") {
-			return provider.VideoResult{}, errors.New("输入视频必须是 HTTPS URL 或 video data URL")
+			return provider.VideoResult{}, errors.New("Video input mesti merupakan URL HTTPS atau video data URL")
 		}
 		payload["prompt"] = prompt
 		payload["video"] = map[string]any{"url": videoURL}
 		if strings.TrimSpace(request.ImageURL) != "" || len(request.ReferenceURLs) > 0 || len(request.ReferenceAudios) > 0 {
-			return provider.VideoResult{}, errors.New("视频编辑/延长不支持 image、reference_images 或 reference_audios")
+			return provider.VideoResult{}, errors.New("Penyuntingan/pemanjangan video tidak menyokong image, reference_images atau reference_audios")
 		}
 		if strings.TrimSpace(request.AspectRatio) != "" || strings.TrimSpace(request.Resolution) != "" {
-			return provider.VideoResult{}, errors.New("视频编辑/延长不支持 aspect_ratio 或 resolution")
+			return provider.VideoResult{}, errors.New("Penyuntingan/pemanjangan video tidak menyokong aspect_ratio atau resolution")
 		}
 	}
 
@@ -659,7 +659,7 @@ func (a *Adapter) doConsoleVideoJSON(ctx context.Context, credential account.Cre
 		return nil, err
 	}
 	if len(data) > consoleMediaBodyLimit {
-		return nil, errors.New("Console 视频上游响应超过 2 MiB")
+		return nil, errors.New("Respons upstream video Console melebihi 2 MiB")
 	}
 	if response.StatusCode == http.StatusUnauthorized {
 		return nil, provider.ErrUnauthorized
@@ -681,7 +681,7 @@ func (a *Adapter) doConsoleVideoJSON(ctx context.Context, credential account.Cre
 func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credential, rawURL string) (io.ReadCloser, string, int64, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || parsed.Scheme != "https" || parsed.User != nil || !trustedConsoleVideoHost(parsed.Hostname()) {
-		return nil, "", 0, errors.New("Console 视频内容 URL 不受信任")
+		return nil, "", 0, errors.New("URL kandungan video Console tidak dipercayai")
 	}
 	lease, err := a.egress.AcquireCredential(ctx, egressdomain.ScopeConsoleAsset, credential)
 	if err != nil {
@@ -709,14 +709,14 @@ func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credenti
 		if finalURL.Scheme != "https" || finalURL.User != nil || !trustedConsoleVideoHost(finalURL.Hostname()) {
 			_ = response.Body.Close()
 			lease.Release()
-			return nil, "", 0, errors.New("Console 视频下载重定向到不受信任的地址")
+			return nil, "", 0, errors.New("Muat turun video Console dibelokkan ke alamat yang tidak dipercayai")
 		}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_ = response.Body.Close()
 		a.egress.FeedbackForScope(context.WithoutCancel(ctx), egressdomain.ScopeConsoleAsset, lease.NodeID, response.StatusCode, nil)
 		lease.Release()
-		return nil, "", 0, fmt.Errorf("下载 Console 视频返回 %d", response.StatusCode)
+		return nil, "", 0, fmt.Errorf("Muat turun video Console mengembalikan %d", response.StatusCode)
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
 	if contentType == "" || contentType == "application/octet-stream" {
@@ -725,7 +725,7 @@ func (a *Adapter) DownloadVideo(ctx context.Context, credential account.Credenti
 	if !strings.HasPrefix(contentType, "video/") {
 		_ = response.Body.Close()
 		lease.Release()
-		return nil, "", 0, errors.New("Console 视频 Content-Type 无效")
+		return nil, "", 0, errors.New("Content-Type video Console tidak sah")
 	}
 	onFinished := func(readErr error, complete bool) {
 		if readErr != nil {
@@ -750,7 +750,7 @@ func normalizeConsoleImageFormat(value string) (string, error) {
 		return "url", nil
 	}
 	if value != "url" && value != "b64_json" {
-		return "", errors.New("response_format 必须是 url 或 b64_json")
+		return "", errors.New("response_format mesti url atau b64_json")
 	}
 	return value, nil
 }
@@ -761,7 +761,7 @@ func normalizeConsoleImageResolution(value string) (string, error) {
 		return "", nil
 	}
 	if value != "1k" && value != "2k" {
-		return "", errors.New("resolution 必须是 1k 或 2k")
+		return "", errors.New("resolution mesti 1k atau 2k")
 	}
 	return value, nil
 }
@@ -772,10 +772,10 @@ func normalizeConsoleImageQuality(model, value string) (string, error) {
 		return "", nil
 	}
 	if strings.TrimSpace(model) != "grok-imagine-image-2.0" {
-		return "", errors.New("quality 仅支持 grok-imagine-image-2.0")
+		return "", errors.New("quality hanya menyokong grok-imagine-image-2.0")
 	}
 	if value != "low" && value != "medium" {
-		return "", errors.New("quality 必须是 low 或 medium")
+		return "", errors.New("quality mesti low atau medium")
 	}
 	return value, nil
 }
@@ -795,7 +795,7 @@ func resolveConsoleImageAspectRatio(aspectRatio, size string) (string, error) {
 	if resolved := values[value]; resolved != "" {
 		return resolved, nil
 	}
-	return "", errors.New("aspect_ratio 或 size 不受支持")
+	return "", errors.New("aspect_ratio atau size tidak disokong")
 }
 
 func validConsoleMediaInputURL(value, mediaType string) bool {
@@ -812,10 +812,10 @@ func parseConsoleVideoCreate(body []byte) (string, error) {
 		RequestID string `json:"request_id"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return "", fmt.Errorf("解析 Console 视频创建响应: %w", err)
+		return "", fmt.Errorf("Huraian respons penciptaan video Console: %w", err)
 	}
 	if strings.TrimSpace(payload.RequestID) == "" {
-		return "", errors.New("Console 视频创建响应缺少 request_id")
+		return "", errors.New("Respons penciptaan video Console tiada request_id")
 	}
 	return payload.RequestID, nil
 }
@@ -830,7 +830,7 @@ func parseConsoleVideoStatus(body []byte, progress func(int)) (provider.VideoRes
 		Error any `json:"error"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return provider.VideoResult{}, false, fmt.Errorf("解析 Console 视频状态响应: %w", err)
+		return provider.VideoResult{}, false, fmt.Errorf("Huraian respons status video Console: %w", err)
 	}
 	if progress != nil && payload.Progress > 0 {
 		progress(min(99, payload.Progress))
@@ -838,7 +838,7 @@ func parseConsoleVideoStatus(body []byte, progress func(int)) (provider.VideoRes
 	switch status := strings.ToLower(strings.TrimSpace(payload.Status)); status {
 	case "done", "completed", "succeeded", "success", "ready":
 		if strings.TrimSpace(payload.Video.URL) == "" {
-			return provider.VideoResult{}, false, errors.New("Console 视频生成完成但没有返回内容 URL")
+			return provider.VideoResult{}, false, errors.New("Penjanaan video Console selesai tetapi tiada URL kandungan dikembalikan")
 		}
 		return provider.VideoResult{URL: strings.TrimSpace(payload.Video.URL), ContentType: "video/mp4"}, true, nil
 	case "failed", "expired", "cancelled", "canceled", "error":
@@ -846,11 +846,11 @@ func parseConsoleVideoStatus(body []byte, progress func(int)) (provider.VideoRes
 		if message == "" {
 			message = strings.ToLower(strings.TrimSpace(payload.Status))
 		}
-		return provider.VideoResult{}, false, fmt.Errorf("Console 视频生成失败: %s", message)
+		return provider.VideoResult{}, false, fmt.Errorf("Penjanaan video Console gagal: %s", message)
 	case "pending", "processing", "in_progress", "queued":
 		return provider.VideoResult{}, false, nil
 	default:
-		return provider.VideoResult{}, false, fmt.Errorf("Console 视频状态无效: %q", safeConsoleMediaText(status))
+		return provider.VideoResult{}, false, fmt.Errorf("Status video Console tidak sah: %q", safeConsoleMediaText(status))
 	}
 }
 
@@ -866,7 +866,7 @@ func newConsoleMediaUpstreamError(status int, body []byte, retryAfter time.Durat
 			message = safeConsoleMediaErrorValue(payload["detail"])
 		}
 	}
-	summary := fmt.Sprintf("Console 媒体上游返回 %d", status)
+	summary := fmt.Sprintf("Console media upstream mengembalikan %d", status)
 	if message != "" {
 		summary += ": " + message
 	}
@@ -917,7 +917,7 @@ func safeConsoleMediaText(value string) string {
 		"api_key", "api-key", "sso-rw", "cf_clearance",
 	} {
 		if strings.Contains(lower, sensitive) {
-			return "上游拒绝请求"
+			return "Upstream menolak permintaan"
 		}
 	}
 	const limit = 160

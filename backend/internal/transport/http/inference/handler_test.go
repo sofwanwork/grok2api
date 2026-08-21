@@ -71,7 +71,7 @@ func TestVideoGenerationUsesOfficialXAIEndpointsAndFields(t *testing.T) {
 	invalidDuration.Header.Set("Content-Type", "application/json")
 	invalidRecorder := httptest.NewRecorder()
 	router.ServeHTTP(invalidRecorder, invalidDuration)
-	if invalidRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidRecorder.Body.String(), "1 到 15") {
+	if invalidRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidRecorder.Body.String(), "1 hingga 15 saat") {
 		t.Fatalf("invalid duration status=%d body=%s", invalidRecorder.Code, invalidRecorder.Body.String())
 	}
 
@@ -112,7 +112,7 @@ func TestVideoGenerationUsesOfficialXAIEndpointsAndFields(t *testing.T) {
 	ambiguousInput.Header.Set("Content-Type", "application/json")
 	ambiguousRecorder := httptest.NewRecorder()
 	router.ServeHTTP(ambiguousRecorder, ambiguousInput)
-	if ambiguousRecorder.Code != http.StatusBadRequest || !strings.Contains(ambiguousRecorder.Body.String(), "url 或 file_id") {
+	if ambiguousRecorder.Code != http.StatusBadRequest || !strings.Contains(ambiguousRecorder.Body.String(), "url atau file_id") {
 		t.Fatalf("ambiguous input status=%d body=%s", ambiguousRecorder.Code, ambiguousRecorder.Body.String())
 	}
 
@@ -223,7 +223,7 @@ func TestGatewayErrorDoesNotExposeInternalDetails(t *testing.T) {
 	})
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
-	if recorder.Code != http.StatusBadGateway || strings.Contains(recorder.Body.String(), "postgres") || !strings.Contains(recorder.Body.String(), "上游服务暂不可用") {
+	if recorder.Code != http.StatusBadGateway || strings.Contains(recorder.Body.String(), "postgres") || !strings.Contains(recorder.Body.String(), "Perkhidmatan upstream tidak tersedia buat sementara waktu") {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
@@ -334,7 +334,7 @@ func TestGatewayErrorHidesUpstreamCredentialStatus(t *testing.T) {
 	})
 	openAIRecorder := httptest.NewRecorder()
 	openAIRouter.ServeHTTP(openAIRecorder, httptest.NewRequest(http.MethodGet, "/", nil))
-	if openAIRecorder.Code != http.StatusServiceUnavailable || !strings.Contains(openAIRecorder.Body.String(), `"code":"permission-denied"`) || !strings.Contains(openAIRecorder.Body.String(), "上游服务暂不可用，聊天端点访问被拒绝") || strings.Contains(openAIRecorder.Body.String(), "secret") || strings.Contains(openAIRecorder.Body.String(), "上游拒绝了该请求") {
+	if openAIRecorder.Code != http.StatusServiceUnavailable || !strings.Contains(openAIRecorder.Body.String(), `"code":"permission-denied"`) || !strings.Contains(openAIRecorder.Body.String(), "Perkhidmatan upstream tidak tersedia buat sementara waktu, akses ke titik akhir sembang ditolak") || strings.Contains(openAIRecorder.Body.String(), "secret") || strings.Contains(openAIRecorder.Body.String(), "上游拒绝了该请求") {
 		t.Fatalf("OpenAI status=%d body=%s", openAIRecorder.Code, openAIRecorder.Body.String())
 	}
 
@@ -417,7 +417,7 @@ func TestDirectUpstreamCredentialResponsesAreRewritten(t *testing.T) {
 			if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), `"`+tc.wantCode+`"`) || strings.Contains(recorder.Body.String(), "secret") || finalCode != "upstream_unavailable" {
 				t.Fatalf("status=%d body=%s finalize=%s", recorder.Code, recorder.Body.String(), finalCode)
 			}
-			if tc.wantCode == "permission-denied" && !strings.Contains(recorder.Body.String(), "上游服务暂不可用，聊天端点访问被拒绝") {
+			if tc.wantCode == "permission-denied" && !strings.Contains(recorder.Body.String(), "Perkhidmatan upstream tidak tersedia buat sementara waktu, akses ke titik akhir sembang ditolak") {
 				t.Fatalf("permission message missing: %s", recorder.Body.String())
 			}
 		})
@@ -609,10 +609,10 @@ func TestImageGenerationEndpointValidatesXAIContractBeforeRouting(t *testing.T) 
 		body string
 		want string
 	}{
-		{name: "zero n", body: `{"model":"grok-imagine-image","prompt":"test","n":0}`, want: "n 必须在 1 到 10 之间"},
-		{name: "large n", body: `{"model":"grok-imagine-image","prompt":"test","n":11}`, want: "n 必须在 1 到 10 之间"},
-		{name: "invalid quality", body: `{"model":"grok-imagine-image-2.0","prompt":"test","quality":"high"}`, want: "quality 必须是 low 或 medium"},
-		{name: "storage options", body: `{"model":"grok-imagine-image","prompt":"test","storage_options":{"filename":"test.jpg"}}`, want: "不支持 storage_options"},
+		{name: "zero n", body: `{"model":"grok-imagine-image","prompt":"test","n":0}`, want: "n mesti antara 1 hingga 10"},
+		{name: "large n", body: `{"model":"grok-imagine-image","prompt":"test","n":11}`, want: "n mesti antara 1 hingga 10"},
+		{name: "invalid quality", body: `{"model":"grok-imagine-image-2.0","prompt":"test","quality":"high"}`, want: "quality mesti low atau medium"},
+		{name: "storage options", body: `{"model":"grok-imagine-image","prompt":"test","storage_options":{"filename":"test.jpg"}}`, want: "belum menyokong storage_options"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(test.body))
@@ -643,7 +643,7 @@ func TestImageEditAcceptsOfficialJSONShape(t *testing.T) {
 	missingImage.Header.Set("Content-Type", "application/json")
 	missingRecorder := httptest.NewRecorder()
 	router.ServeHTTP(missingRecorder, missingImage)
-	if missingRecorder.Code != http.StatusBadRequest || !strings.Contains(missingRecorder.Body.String(), "image 或 images") {
+	if missingRecorder.Code != http.StatusBadRequest || !strings.Contains(missingRecorder.Body.String(), "Bilangan image atau images mesti antara 1 hingga 8") {
 		t.Fatalf("missing image status=%d body=%s", missingRecorder.Code, missingRecorder.Body.String())
 	}
 
@@ -666,7 +666,7 @@ func TestImageEditAcceptsOfficialJSONShape(t *testing.T) {
 	invalidResolution.Header.Set("Content-Type", "application/json")
 	invalidResolutionRecorder := httptest.NewRecorder()
 	router.ServeHTTP(invalidResolutionRecorder, invalidResolution)
-	if invalidResolutionRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidResolutionRecorder.Body.String(), "resolution 必须是 1k 或 2k") {
+	if invalidResolutionRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidResolutionRecorder.Body.String(), "resolution mesti 1k atau 2k") {
 		t.Fatalf("invalid resolution status=%d body=%s", invalidResolutionRecorder.Code, invalidResolutionRecorder.Body.String())
 	}
 
@@ -677,7 +677,7 @@ func TestImageEditAcceptsOfficialJSONShape(t *testing.T) {
 	invalidQuality.Header.Set("Content-Type", "application/json")
 	invalidQualityRecorder := httptest.NewRecorder()
 	router.ServeHTTP(invalidQualityRecorder, invalidQuality)
-	if invalidQualityRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidQualityRecorder.Body.String(), "quality 必须是 low 或 medium") {
+	if invalidQualityRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidQualityRecorder.Body.String(), "quality mesti low atau medium") {
 		t.Fatalf("invalid quality status=%d body=%s", invalidQualityRecorder.Code, invalidQualityRecorder.Body.String())
 	}
 
@@ -699,7 +699,7 @@ func TestImageEditAcceptsOfficialJSONShape(t *testing.T) {
 	invalidCount.Header.Set("Content-Type", "application/json")
 	invalidCountRecorder := httptest.NewRecorder()
 	router.ServeHTTP(invalidCountRecorder, invalidCount)
-	if invalidCountRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidCountRecorder.Body.String(), "n 必须在 1 到 10 之间") {
+	if invalidCountRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidCountRecorder.Body.String(), "n mesti antara 1 hingga 10") {
 		t.Fatalf("invalid count status=%d body=%s", invalidCountRecorder.Code, invalidCountRecorder.Body.String())
 	}
 
@@ -992,7 +992,7 @@ func TestCopyStreamWritesTerminalOnIdleTimeout(t *testing.T) {
 	}{
 		{name: "chat", protocol: streamProtocolChat, want: []string{`"code":"upstream_stream_idle_timeout"`, "data: [DONE]"}},
 		{name: "responses", protocol: streamProtocolResponses, want: []string{`"type":"response.incomplete"`, `"id":"resp_abort"`, `"created_at":`, `"sequence_number":`, `"incomplete_details"`}},
-		{name: "anthropic", protocol: streamProtocolAnthropic, want: []string{`"type":"error"`, "上游流式响应长时间无数据"}},
+		{name: "anthropic", protocol: streamProtocolAnthropic, want: []string{`"type":"error"`, "Respons berstrim upstream tiada data terlalu lama"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1530,7 +1530,7 @@ func TestReferenceToVideoRequestValidation(t *testing.T) {
 	combined.Header.Set("Content-Type", "application/json")
 	combinedRec := httptest.NewRecorder()
 	router.ServeHTTP(combinedRec, combined)
-	if combinedRec.Code != http.StatusBadRequest || !strings.Contains(combinedRec.Body.String(), "不能与") {
+	if combinedRec.Code != http.StatusBadRequest || !strings.Contains(combinedRec.Body.String(), "tidak boleh digunakan bersama") {
 		t.Fatalf("combined image+refs status=%d body=%s", combinedRec.Code, combinedRec.Body.String())
 	}
 
@@ -1552,7 +1552,7 @@ func TestReferenceToVideoRequestValidation(t *testing.T) {
 	tooManyAudio.Header.Set("Content-Type", "application/json")
 	tooManyAudioRec := httptest.NewRecorder()
 	router.ServeHTTP(tooManyAudioRec, tooManyAudio)
-	if tooManyAudioRec.Code != http.StatusBadRequest || !strings.Contains(tooManyAudioRec.Body.String(), "最多 3") {
+	if tooManyAudioRec.Code != http.StatusBadRequest || !strings.Contains(tooManyAudioRec.Body.String(), "maksimum 3") {
 		t.Fatalf("too many audios status=%d body=%s", tooManyAudioRec.Code, tooManyAudioRec.Body.String())
 	}
 

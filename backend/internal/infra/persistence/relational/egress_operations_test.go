@@ -1079,7 +1079,7 @@ func TestFixedFallbackReferenceIsProtectedAndClearedOnDelete(t *testing.T) {
 	}
 	if _, err := service.Update(ctx, fixed.ID, egressapp.Input{
 		Name: fixed.Name, Scope: fixed.Scope, Enabled: false,
-	}); !errors.Is(err, egressapp.ErrInvalidInput) || !strings.Contains(err.Error(), "固定回退") {
+	}); !errors.Is(err, egressapp.ErrInvalidInput) || !strings.Contains(err.Error(), "fallback tetap") {
 		t.Fatalf("disable fixed fallback error = %v", err)
 	}
 	if err := service.Delete(ctx, fixed.ID); err != nil {
@@ -1157,7 +1157,7 @@ func TestEgressOperationsConfigRejectsUnsafeFixedFallback(t *testing.T) {
 			egress.ScopeBuild: {Mode: egress.FallbackModeFixed, NodeID: pool.ID},
 		},
 	})
-	if !errors.Is(err, egressapp.ErrInvalidInput) || !strings.Contains(err.Error(), "代理池") {
+	if !errors.Is(err, egressapp.ErrInvalidInput) || !strings.Contains(err.Error(), "mod kolam proksi") {
 		t.Fatalf("pool fallback error = %v", err)
 	}
 }

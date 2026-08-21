@@ -219,11 +219,11 @@ func (r *DashboardRepository) Snapshot(ctx context.Context, window repository.Da
 
 func validateDashboardBoundaries(boundaries []time.Time) error {
 	if len(boundaries) < 2 {
-		return fmt.Errorf("Dashboard 聚合范围无效")
+		return fmt.Errorf("Skop pengagregatan Dashboard tidak sah")
 	}
 	for index := 1; index < len(boundaries); index++ {
 		if !boundaries[index-1].Before(boundaries[index]) {
-			return fmt.Errorf("Dashboard 时间桶无效")
+			return fmt.Errorf("Tong masa Dashboard tidak sah")
 		}
 	}
 	return nil

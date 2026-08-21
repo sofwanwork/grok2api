@@ -314,7 +314,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	client := redisclient.NewClient(options)
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		return nil, fmt.Errorf("连接 Redis: %w", err)
+		return nil, fmt.Errorf("Menyambung ke Redis: %w", err)
 	}
 	lease := cfg.ConcurrencyLease
 	if lease <= 0 {
@@ -440,7 +440,7 @@ func (s *Store) ListenSettingsChanges(ctx context.Context, handler func(context.
 			return nil
 		case _, ok := <-channel:
 			if !ok {
-				return errors.New("Redis 设置通知通道已关闭")
+				return errors.New("Saluran pemberitahuan tetapan Redis telah ditutup")
 			}
 			if err := handler(ctx); err != nil {
 				return err
@@ -698,7 +698,7 @@ func (s *Store) DeleteByAccounts(ctx context.Context, accountIDs []uint64) error
 
 func (s *Store) ScheduleQuotaRecovery(ctx context.Context, value account.QuotaRecoveryEvent) error {
 	if value.AccountID == 0 || value.Mode == "" || value.DueAt.IsZero() {
-		return fmt.Errorf("额度恢复事件无效")
+		return fmt.Errorf("Peristiwa pemulihan kuota tidak sah")
 	}
 	member := strconv.FormatUint(value.AccountID, 10) + ":" + value.Mode
 	result, err := scheduleQuotaRecoveryScript.Run(ctx, s.client, []string{s.key("quota-recovery", "events"), s.key("quota-recovery", "attempts"), s.key("quota-recovery", "claims")}, member, value.DueAt.UnixMilli(), max(0, value.Attempts), maxQuotaRecoveryEvents).Int()
@@ -706,7 +706,7 @@ func (s *Store) ScheduleQuotaRecovery(ctx context.Context, value account.QuotaRe
 		return err
 	}
 	if result == 0 {
-		return fmt.Errorf("额度恢复队列已满")
+		return fmt.Errorf("Baris gilir pemulihan kuota sudah penuh")
 	}
 	return nil
 }
@@ -786,7 +786,7 @@ func (s *Store) ListQuotaRefreshDirty(ctx context.Context, now time.Time, limit 
 
 func (s *Store) EnsureQuotaRecovery(ctx context.Context, value account.QuotaRecoveryEvent) error {
 	if value.AccountID == 0 || value.Mode == "" || value.DueAt.IsZero() {
-		return fmt.Errorf("额度恢复事件无效")
+		return fmt.Errorf("Peristiwa pemulihan kuota tidak sah")
 	}
 	member := strconv.FormatUint(value.AccountID, 10) + ":" + value.Mode
 	result, err := ensureQuotaRecoveryScript.Run(ctx, s.client, []string{s.key("quota-recovery", "events"), s.key("quota-recovery", "attempts")}, member, value.DueAt.UnixMilli(), max(0, value.Attempts), maxQuotaRecoveryEvents).Int()
@@ -794,7 +794,7 @@ func (s *Store) EnsureQuotaRecovery(ctx context.Context, value account.QuotaReco
 		return err
 	}
 	if result == 0 {
-		return fmt.Errorf("额度恢复队列已满")
+		return fmt.Errorf("Baris gilir pemulihan kuota sudah penuh")
 	}
 	return nil
 }
@@ -802,7 +802,7 @@ func (s *Store) EnsureQuotaRecovery(ctx context.Context, value account.QuotaReco
 func (s *Store) CancelQuotaRecovery(ctx context.Context, accountID uint64, mode string) error {
 	mode = strings.TrimSpace(mode)
 	if accountID == 0 || mode == "" {
-		return fmt.Errorf("额度恢复事件无效")
+		return fmt.Errorf("Peristiwa pemulihan kuota tidak sah")
 	}
 	member := strconv.FormatUint(accountID, 10) + ":" + mode
 	_, err := cancelQuotaRecoveryScript.Run(ctx, s.client, []string{s.key("quota-recovery", "events"), s.key("quota-recovery", "attempts"), s.key("quota-recovery", "claims")}, member).Int()

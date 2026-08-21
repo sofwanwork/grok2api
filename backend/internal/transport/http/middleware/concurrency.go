@@ -17,7 +17,7 @@ type ConcurrencyGate struct {
 // NewConcurrencyGate 创建指定上限的推理入口并发闸门。
 func NewConcurrencyGate(limit int) *ConcurrencyGate {
 	if limit < 1 {
-		panic("middleware: 并发上限必须大于零")
+		panic("middleware: had serentak mesti lebih besar daripada sifar")
 	}
 	return &ConcurrencyGate{limit: limit}
 }
@@ -25,7 +25,7 @@ func NewConcurrencyGate(limit int) *ConcurrencyGate {
 // UpdateLimit 热更新并发上限；降低上限不会中断正在执行的请求。
 func (g *ConcurrencyGate) UpdateLimit(limit int) {
 	if limit < 1 {
-		panic("middleware: 并发上限必须大于零")
+		panic("middleware: had serentak mesti lebih besar daripada sifar")
 	}
 	g.mu.Lock()
 	g.limit = limit
@@ -40,7 +40,7 @@ func (g *ConcurrencyGate) Middleware() gin.HandlerFunc {
 			g.mu.Unlock()
 			c.Header("Retry-After", "1")
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{
-				"code": "server_overloaded", "message": "服务并发已达到上限，请稍后重试", "param": nil, "type": "server_error",
+				"code": "server_overloaded", "message": "Serentak perkhidmatan telah mencapai had, sila cuba semula kemudian", "param": nil, "type": "server_error",
 			}})
 			return
 		}

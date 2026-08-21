@@ -45,10 +45,10 @@ func (s *webResponsesStream) allocateOutputIndex() int {
 
 func (s *webResponsesStream) completeOutput(index int, item map[string]any) error {
 	if index < 0 || index >= len(s.outputs) {
-		return fmt.Errorf("Responses output_index %d 超出已分配范围", index)
+		return fmt.Errorf("output_index Responses %d melebihi julat yang diperuntukkan", index)
 	}
 	if s.outputs[index] != nil {
-		return fmt.Errorf("Responses output_index %d 被重复完成", index)
+		return fmt.Errorf("output_index Responses %d dilengkapkan berulang kali", index)
 	}
 	s.outputs[index] = item
 	return nil
@@ -326,7 +326,7 @@ func (s *webResponsesStream) Finish(parsed *parsedChat) error {
 	}
 	for index, item := range s.outputs {
 		if item == nil {
-			return fmt.Errorf("Responses output_index %d 未完成", index)
+			return fmt.Errorf("output_index Responses %d tidak dilengkapkan", index)
 		}
 	}
 	parsed.ResponseOutput = append([]any(nil), s.outputs...)

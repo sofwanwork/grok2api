@@ -38,7 +38,7 @@ func TestDecodeCredentialJSONEntriesAcceptsDocumentAndJSONLines(t *testing.T) {
 
 func TestDecodeCredentialJSONEntriesReportsMalformedLineWithoutContent(t *testing.T) {
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte("{\"token\":\"safe\"}\n\nnot-json-secret\n"), "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "第 3 行") {
+	if err == nil || !strings.Contains(err.Error(), "baris 3") {
 		t.Fatalf("error = %v, want line number", err)
 	}
 	if strings.Contains(err.Error(), "not-json-secret") || strings.Contains(err.Error(), "safe") {
@@ -48,7 +48,7 @@ func TestDecodeCredentialJSONEntriesReportsMalformedLineWithoutContent(t *testin
 
 func TestDecodeCredentialJSONEntriesRejectsNonObjects(t *testing.T) {
 	for _, data := range []string{`"token"`, `null`} {
-		if _, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(data), "grok_test", 10); err == nil || !strings.Contains(err.Error(), "必须是 JSON 对象") {
+		if _, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(data), "grok_test", 10); err == nil || !strings.Contains(err.Error(), "mesti objek JSON") {
 			t.Fatalf("data = %s, error = %v", data, err)
 		}
 	}
@@ -64,7 +64,7 @@ func TestDecodeCredentialJSONEntriesEnforcesLimitAcrossValues(t *testing.T) {
 
 func TestDecodeCredentialJSONEntriesRejectsWrongProvider(t *testing.T) {
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(`{"provider":"other","token":"one"}`), "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "Provider 必须是 grok_test") {
+	if err == nil || !strings.Contains(err.Error(), "Provider pada baris 1 mesti grok_test") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -142,20 +142,20 @@ func TestDecodeCredentialJSONEntriesAcceptsMultilineArrayWithBOMAndCRLF(t *testi
 func TestDecodeCredentialJSONEntriesRejectsArrayWithNonObjectElements(t *testing.T) {
 	for _, data := range []string{`[42]`, `["token"]`, `[true]`, `[[{"token":"one"}]]`} {
 		_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(data), "grok_test", 10)
-		if err == nil || !strings.Contains(err.Error(), "第 1 个元素必须是 JSON 对象") {
+		if err == nil || !strings.Contains(err.Error(), "Elemen ke-1 tatasusunan akaun pada baris 1 mesti objek JSON") {
 			t.Fatalf("data = %s, error = %v", data, err)
 		}
 	}
 
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(`[{"token":"one"}, 42]`), "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "第 2 个元素必须是 JSON 对象") {
+	if err == nil || !strings.Contains(err.Error(), "Elemen ke-2 tatasusunan akaun pada baris 1 mesti objek JSON") {
 		t.Fatalf("error = %v", err)
 	}
 }
 
 func TestDecodeCredentialJSONEntriesRejectsArrayElementWithInvalidContent(t *testing.T) {
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(`[{"token":123}]`), "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "第 1 个元素内容无效") {
+	if err == nil || !strings.Contains(err.Error(), "Kandungan elemen ke-1 tatasusunan akaun pada baris 1 tidak sah") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -171,7 +171,7 @@ func TestDecodeCredentialJSONEntriesArrayErrorsDoNotLeakSecrets(t *testing.T) {
 	}
 	// 哨兵位于实际报错的元素内部（字段类型错误）：错误文本同样不得捎带。
 	_, err = DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte(`[{"token":123,"note":"s3cr3t-sentinel"}]`), "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "内容无效") {
+	if err == nil || !strings.Contains(err.Error(), "tidak sah") {
 		t.Fatalf("error = %v, want invalid element content", err)
 	}
 	if strings.Contains(err.Error(), "s3cr3t-sentinel") {
@@ -222,14 +222,14 @@ func TestDecodeCredentialJSONEntriesLimitSkipsElementParsingEntirely(t *testing.
 func TestDecodeCredentialJSONEntriesReportsArrayStartLineWithElementIndex(t *testing.T) {
 	data := []byte("{\"token\":\"zero\"}\n[\n  {\"token\":\"one\"},\n  42\n]\n")
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry](data, "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "第 2 行账号数组的第 2 个元素") {
+	if err == nil || !strings.Contains(err.Error(), "Elemen ke-2 tatasusunan akaun pada baris 2 mesti objek JSON") {
 		t.Fatalf("error = %v, want array start line with element index", err)
 	}
 }
 
 func TestDecodeCredentialJSONEntriesReportsMalformedLineAfterArray(t *testing.T) {
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry]([]byte("[{\"token\":\"one\"}]\n\nnot-json\n"), "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "第 3 行") {
+	if err == nil || !strings.Contains(err.Error(), "baris 3") {
 		t.Fatalf("error = %v, want line number", err)
 	}
 	if strings.Contains(err.Error(), "not-json") {
@@ -240,7 +240,7 @@ func TestDecodeCredentialJSONEntriesReportsMalformedLineAfterArray(t *testing.T)
 func TestDecodeCredentialJSONEntriesRejectsCommaLessMultilineArray(t *testing.T) {
 	data := []byte("[\n{\"token\":\"one\"}\n{\"token\":\"two\"}\n]")
 	_, err := DecodeCredentialJSONEntries[credentialJSONTestEntry](data, "grok_test", 10)
-	if err == nil || !strings.Contains(err.Error(), "格式无效") {
+	if err == nil || !strings.Contains(err.Error(), "Format JSON akaun pada baris 3 tidak sah") {
 		t.Fatalf("error = %v", err)
 	}
 }

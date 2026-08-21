@@ -23,7 +23,7 @@ func (c *responsesToolCompatibility) normalizeResponseJSON(body []byte) ([]byte,
 	}
 	var response map[string]any
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("解析 Grok Build Responses 响应: %w", err)
+		return nil, fmt.Errorf("Huraian respons Grok Build Responses: %w", err)
 	}
 	if err := c.rewriteResponseValue(response); err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (c *responsesToolCompatibility) normalizeResponseJSON(body []byte) ([]byte,
 	c.restoreVisibleTools(response)
 	converted, err := json.Marshal(response)
 	if err != nil {
-		return nil, fmt.Errorf("编码兼容 Responses 响应: %w", err)
+		return nil, fmt.Errorf("Mengkod respons Responses serasi: %w", err)
 	}
 	return converted, nil
 }
@@ -63,7 +63,7 @@ func (c *responsesToolCompatibility) normalizeResponseStream(source io.ReadClose
 					c.resequenceStreamPayload(output.Payload)
 					encoded, encodeErr := json.Marshal(output.Payload)
 					if encodeErr != nil {
-						return fmt.Errorf("编码兼容 Responses SSE: %w", encodeErr)
+						return fmt.Errorf("Mengkod SSE Responses serasi: %w", encodeErr)
 					}
 					outputData = encoded
 				}
@@ -388,7 +388,7 @@ func (c *responsesToolCompatibility) rewriteFunctionCall(call map[string]any) er
 	case responsesApplyPatchTool:
 		operation, err := decodeApplyPatchArguments(call["arguments"], "response.output[].arguments")
 		if err != nil {
-			return fmt.Errorf("恢复 apply_patch_call: %w", err)
+			return fmt.Errorf("Memulihkan apply_patch_call: %w", err)
 		}
 		call["type"] = "apply_patch_call"
 		call["operation"] = operation
@@ -556,7 +556,7 @@ func consumeCompatibleSSE(source io.Reader, handle func(compatibleSSEEvent) erro
 		}
 		eventBytes += len(line)
 		if eventBytes > maxCompatibleSSEEventBytes {
-			return fmt.Errorf("Grok Build Responses SSE 单事件超过 %d MiB", maxCompatibleSSEEventBytes>>20)
+			return fmt.Errorf("Acara tunggal SSE Grok Build Responses melebihi %d MiB", maxCompatibleSSEEventBytes>>20)
 		}
 		field, value, found := strings.Cut(line, ":")
 		if found && strings.HasPrefix(value, " ") {

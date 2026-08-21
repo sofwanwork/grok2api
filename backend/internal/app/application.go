@@ -104,7 +104,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 	case "postgres":
 		database, err = relational.OpenPostgres(ctx, cfg.Database.Postgres.DSN, cfg.Database.Postgres.MaxOpenConns, cfg.Database.Postgres.MaxIdleConns)
 	default:
-		return nil, fmt.Errorf("不支持的数据库驱动: %s", cfg.Database.Driver)
+		return nil, fmt.Errorf("Pemacu pangkalan data tidak disokong: %s", cfg.Database.Driver)
 	}
 	if err != nil {
 		return nil, err
@@ -196,7 +196,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 		quotaRefreshState = memory.NewQuotaRefreshCoordinator()
 	default:
 		database.Close()
-		return nil, fmt.Errorf("不支持的运行态驱动: %s", cfg.RuntimeStore.Driver)
+		return nil, fmt.Errorf("Pemacu runtime tidak disokong: %s", cfg.RuntimeStore.Driver)
 	}
 	logger.Info("deployment_topology", "replicas", cfg.Deployment.Replicas, "instance_id", cfg.Deployment.InstanceID, "cluster_id", cfg.Deployment.ClusterID, "database", cfg.Database.Driver, "runtime_store", cfg.RuntimeStore.Driver, "media_driver", cfg.Media.Driver, "shared_media", cfg.Deployment.SharedMedia)
 	mediaService := mediaapp.NewServiceWithTickets(mediaAssetRepo, mediaJobRepo, mediaUploadTicketRepo, localMediaStore, refreshLock, mediaConfig(cfg))
@@ -233,7 +233,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 			_ = runtimeStore.Close()
 		}
 		database.Close()
-		return nil, fmt.Errorf("校验 Provider 注册表: %w", err)
+		return nil, fmt.Errorf("Mengesahkan registri Provider: %w", err)
 	}
 	adminService := adminauth.NewService(adminRepo, sessionRepo, security.NewTokenService(cfg.Secrets.JWTSecret), cfg.Auth.AccessTokenTTL.Value(), cfg.Auth.RefreshTokenTTL.Value())
 	adminService.SetLoginRateLimiter(rateLimiter)
@@ -269,7 +269,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 			_ = runtimeStore.Close()
 		}
 		database.Close()
-		return nil, fmt.Errorf("重建 Build 风控路由索引: %w", err)
+		return nil, fmt.Errorf("Membina semula indeks laluan risiko Build: %w", err)
 	}
 	windows, err := accountRepo.ListQuotaRecoveryWindows(ctx, 100000)
 	if err != nil {
@@ -277,7 +277,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 			_ = runtimeStore.Close()
 		}
 		database.Close()
-		return nil, fmt.Errorf("加载 Web 额度恢复事件: %w", err)
+		return nil, fmt.Errorf("Memuatkan peristiwa pemulihan kuota Web: %w", err)
 	}
 	for _, window := range windows {
 		if window.ResetAt != nil {
@@ -286,7 +286,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 					_ = runtimeStore.Close()
 				}
 				database.Close()
-				return nil, fmt.Errorf("恢复 Web 额度事件: %w", err)
+				return nil, fmt.Errorf("Memulihkan peristiwa kuota Web: %w", err)
 			}
 		}
 	}
@@ -298,14 +298,14 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 			_ = runtimeStore.Close()
 		}
 		database.Close()
-		return nil, fmt.Errorf("初始化 Grok Web 模型目录: %w", err)
+		return nil, fmt.Errorf("Memulakan katalog model Grok Web: %w", err)
 	}
 	if err := modelRepo.ReplaceProviderRoutes(ctx, account.ProviderConsole, consoleprovider.Routes()); err != nil {
 		if runtimeStore != nil {
 			_ = runtimeStore.Close()
 		}
 		database.Close()
-		return nil, fmt.Errorf("初始化 Grok Console 模型目录: %w", err)
+		return nil, fmt.Errorf("Memulakan katalog model Grok Console: %w", err)
 	}
 	accountSyncService := accountsyncapp.NewService(logger, accountService, accountService, accountService, modelService)
 	accountSyncService.SetBulkPool(importPool)
@@ -693,7 +693,7 @@ func (a *Application) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := a.server.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("关闭 HTTP 服务: %w", err)
+			return fmt.Errorf("Menutup perkhidmatan HTTP: %w", err)
 		}
 		return nil
 	case err := <-errCh:
@@ -828,7 +828,7 @@ func (a *Application) runSupervisedTask(ctx context.Context, name string, task f
 			return
 		}
 		if err == nil {
-			err = errors.New("后台任务意外退出")
+			err = errors.New("Tugas latar belakang keluar secara tidak dijangka")
 		}
 		var panicErr *batch.PanicError
 		if errors.As(err, &panicErr) {

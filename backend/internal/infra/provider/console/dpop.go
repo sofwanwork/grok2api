@@ -81,7 +81,7 @@ func (e *dpopTokenEndpointError) Error() string {
 	if e.bodyTruncated {
 		suffix = " (response truncated)"
 	}
-	return fmt.Sprintf("Console DPoP token 接口返回 %d%s", e.status, suffix)
+	return fmt.Sprintf("Antara muka token Console DPoP mengembalikan %d%s", e.status, suffix)
 }
 
 func (e *dpopTokenEndpointError) response() *http.Response {
@@ -127,7 +127,7 @@ func (m *dpopSessionManager) get(
 	}
 	session, ok := value.(dpopSession)
 	if !ok {
-		return dpopSession{}, key, errors.New("Console DPoP session 类型无效")
+		return dpopSession{}, key, errors.New("Jenis sesi Console DPoP tidak sah")
 	}
 	return session, key, nil
 }
@@ -201,7 +201,7 @@ func dpopSessionCacheKey(baseURL string, credential account.Credential, ssoToken
 func (a *Adapter) fetchDPoPSession(ctx context.Context, ssoToken string, lease *infraegress.Lease) (dpopSession, error) {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return dpopSession{}, fmt.Errorf("生成 Console DPoP 密钥: %w", err)
+		return dpopSession{}, fmt.Errorf("Menjana kunci Console DPoP: %w", err)
 	}
 	publicJWK := publicDPoPJWK(&privateKey.PublicKey)
 	payload, err := json.Marshal(map[string]any{"jwk": publicJWK})
@@ -246,13 +246,13 @@ func (a *Adapter) fetchDPoPSession(ctx context.Context, ssoToken string, lease *
 		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(data, &tokenResponse); err != nil {
-		return dpopSession{}, fmt.Errorf("解析 Console DPoP token: %w", err)
+		return dpopSession{}, fmt.Errorf("Huraian token Console DPoP: %w", err)
 	}
 	if strings.TrimSpace(tokenResponse.AccessToken) == "" || !strings.EqualFold(strings.TrimSpace(tokenResponse.TokenType), "DPoP") {
-		return dpopSession{}, errors.New("Console DPoP token 响应无效")
+		return dpopSession{}, errors.New("Respons token Console DPoP tidak sah")
 	}
 	if tokenResponse.ExpiresIn <= 0 || time.Duration(tokenResponse.ExpiresIn)*time.Second > maxDPoPTokenLifetime {
-		return dpopSession{}, errors.New("Console DPoP token 有效期无效")
+		return dpopSession{}, errors.New("Tempoh sah token Console DPoP tidak sah")
 	}
 	thumbprint, err := dpopJWKThumbprint(publicJWK)
 	if err != nil {
@@ -263,7 +263,7 @@ func (a *Adapter) fetchDPoPSession(ctx context.Context, ssoToken string, lease *
 		return dpopSession{}, err
 	}
 	if tokenThumbprint != thumbprint {
-		return dpopSession{}, errors.New("Console DPoP token 与本地密钥不匹配")
+		return dpopSession{}, errors.New("Token Console DPoP tidak sepadan dengan kunci tempatan")
 	}
 	// Expiry bookkeeping stays on the local monotonic wall clock so cache checks
 	// remain self-consistent; proof iat alone is shifted by clockSkew.
@@ -273,7 +273,7 @@ func (a *Adapter) fetchDPoPSession(ctx context.Context, ssoToken string, lease *
 		expiresAt = tokenExpiry
 	}
 	if !expiresAt.After(now.Add(dpopRefreshSkew)) {
-		return dpopSession{}, errors.New("Console DPoP token 已过期或即将过期")
+		return dpopSession{}, errors.New("Token Console DPoP sudah tamat tempoh atau hampir tamat tempoh")
 	}
 	return dpopSession{
 		accessToken: tokenResponse.AccessToken,
@@ -350,7 +350,7 @@ func (a *Adapter) doDPoPRequestWithContentType(
 		_ = response.Body.Close()
 		a.dpop.invalidate(cacheKey, session.accessToken)
 	}
-	return nil, errors.New("Console DPoP 重试状态无效")
+	return nil, errors.New("Status cuba semula Console DPoP tidak sah")
 }
 
 func publicDPoPJWK(key *ecdsa.PublicKey) dpopJWK {
@@ -379,11 +379,11 @@ func dpopJWKThumbprint(jwk dpopJWK) (string, error) {
 func parseDPoPAccessToken(value string) (time.Time, string, error) {
 	parts := strings.Split(value, ".")
 	if len(parts) != 3 {
-		return time.Time{}, "", errors.New("Console DPoP access token 格式无效")
+		return time.Time{}, "", errors.New("Format access token Console DPoP tidak sah")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return time.Time{}, "", errors.New("Console DPoP access token payload 无效")
+		return time.Time{}, "", errors.New("Payload access token Console DPoP tidak sah")
 	}
 	var claims struct {
 		ExpiresAt int64 `json:"exp"`
@@ -392,14 +392,14 @@ func parseDPoPAccessToken(value string) (time.Time, string, error) {
 		} `json:"cnf"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil || claims.ExpiresAt <= 0 || strings.TrimSpace(claims.CNF.JKT) == "" {
-		return time.Time{}, "", errors.New("Console DPoP access token claims 无效")
+		return time.Time{}, "", errors.New("Claims access token Console DPoP tidak sah")
 	}
 	return time.Unix(claims.ExpiresAt, 0).UTC(), claims.CNF.JKT, nil
 }
 
 func applyDPoPAuthorization(request *http.Request, session dpopSession) error {
 	if request == nil || request.URL == nil || session.privateKey == nil || strings.TrimSpace(session.accessToken) == "" {
-		return errors.New("Console DPoP 请求参数无效")
+		return errors.New("Parameter permintaan Console DPoP tidak sah")
 	}
 	digest := sha256.Sum256([]byte(session.accessToken))
 	claims := jwt.MapClaims{
@@ -414,7 +414,7 @@ func applyDPoPAuthorization(request *http.Request, session dpopSession) error {
 	proof.Header["jwk"] = session.publicJWK
 	signed, err := proof.SignedString(session.privateKey)
 	if err != nil {
-		return fmt.Errorf("签名 Console DPoP proof: %w", err)
+		return fmt.Errorf("Menandatangani proof Console DPoP: %w", err)
 	}
 	request.Header.Set("Authorization", "DPoP "+session.accessToken)
 	request.Header.Set("DPoP", signed)

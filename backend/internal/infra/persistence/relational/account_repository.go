@@ -1221,7 +1221,7 @@ func (r *AccountRepository) UpsertManyByIdentity(ctx context.Context, values []a
 			for _, row := range sourceRows {
 				key := providerSourceLookupKey(row.Provider, row.SourceKey)
 				if existing, duplicate := existingBySource[key]; duplicate && existing.ID != row.ID {
-					return fmt.Errorf("Provider %s 的来源凭据匹配多个账号", row.Provider)
+					return fmt.Errorf("Kredensial sumber Provider %s sepadan dengan berbilang akaun", row.Provider)
 				}
 				existingBySource[key] = row
 			}
@@ -1231,7 +1231,7 @@ func (r *AccountRepository) UpsertManyByIdentity(ctx context.Context, values []a
 			existing, foundByIdentity := existingByIdentity[identityKey]
 			bySource, foundBySource := existingBySource[providerSourceLookupKey(string(value.Provider), value.SourceKey)]
 			if foundByIdentity && foundBySource && existing.ID != bySource.ID {
-				return fmt.Errorf("账号身份与来源凭据指向不同账号")
+				return fmt.Errorf("Identiti akaun dan kredensial sumber menunjuk kepada akaun yang berbeza")
 			}
 			if !foundByIdentity && foundBySource {
 				existing = bySource
@@ -1276,11 +1276,11 @@ func upsertAccountByIdentity(tx *gorm.DB, value account.Credential) (repository.
 			return repository.AccountUpsertResult{}, err
 		}
 		if len(sourceRows) > 1 {
-			return repository.AccountUpsertResult{}, fmt.Errorf("Provider %s 的来源凭据匹配多个账号", row.Provider)
+			return repository.AccountUpsertResult{}, fmt.Errorf("Kredensial sumber Provider %s sepadan dengan berbilang akaun", row.Provider)
 		}
 	}
 	if identityErr == nil && len(sourceRows) == 1 && byIdentity.ID != sourceRows[0].ID {
-		return repository.AccountUpsertResult{}, fmt.Errorf("账号身份与来源凭据指向不同账号")
+		return repository.AccountUpsertResult{}, fmt.Errorf("Identiti akaun dan kredensial sumber menunjuk kepada akaun yang berbeza")
 	}
 	if identityErr == nil {
 		result, _, err := upsertKnownAccountByIdentity(tx, value, &byIdentity)
@@ -1440,7 +1440,7 @@ func saveAccountRelations(tx *gorm.DB, value account.Credential, accountID uint6
 // MarkWebNSFWEnabled 幂等保存首次成功开启时间；重复执行不会覆盖已有标记。
 func (r *AccountRepository) MarkWebNSFWEnabled(ctx context.Context, id uint64, enabledAt time.Time) error {
 	if id == 0 || enabledAt.IsZero() {
-		return fmt.Errorf("Web NSFW 标记参数无效")
+		return fmt.Errorf("Parameter penanda NSFW Web tidak sah")
 	}
 	err := r.markWebProfileTimestamp(ctx, id, "nsfw_enabled_at", enabledAt)
 	if err == nil {
@@ -1453,7 +1453,7 @@ func (r *AccountRepository) MarkWebNSFWEnabled(ctx context.Context, id uint64, e
 // 协议升级时会同步更新完成时间；相同或更高版本不会被覆盖。
 func (r *AccountRepository) MarkWebTermsAccepted(ctx context.Context, id uint64, version int, acceptedAt time.Time) error {
 	if id == 0 || version <= 0 || acceptedAt.IsZero() {
-		return fmt.Errorf("Web 服务协议标记参数无效")
+		return fmt.Errorf("Parameter penanda perjanjian perkhidmatan Web tidak sah")
 	}
 	acceptedAt = acceptedAt.UTC()
 	err := mapError(r.db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -1462,7 +1462,7 @@ func (r *AccountRepository) MarkWebTermsAccepted(ctx context.Context, id uint64,
 			return err
 		}
 		if account.Provider(accountRow.Provider) != account.ProviderWeb {
-			return fmt.Errorf("仅 Grok Web 账号支持资料状态标记")
+			return fmt.Errorf("Hanya akaun Grok Web menyokong penanda status profil")
 		}
 		profile := webAccountProfileModel{
 			AccountID: id, Tier: string(account.WebTierAuto),
@@ -1485,7 +1485,7 @@ func (r *AccountRepository) MarkWebTermsAccepted(ctx context.Context, id uint64,
 // MarkWebBirthDateSet 幂等保存首次成功设置或确认已有生日的时间。
 func (r *AccountRepository) MarkWebBirthDateSet(ctx context.Context, id uint64, setAt time.Time) error {
 	if id == 0 || setAt.IsZero() {
-		return fmt.Errorf("Web 生日标记参数无效")
+		return fmt.Errorf("Parameter penanda hari lahir Web tidak sah")
 	}
 	err := r.markWebProfileTimestamp(ctx, id, "birth_date_set_at", setAt)
 	if err == nil {
@@ -1502,7 +1502,7 @@ func (r *AccountRepository) markWebProfileTimestamp(ctx context.Context, id uint
 			return err
 		}
 		if account.Provider(accountRow.Provider) != account.ProviderWeb {
-			return fmt.Errorf("仅 Grok Web 账号支持资料状态标记")
+			return fmt.Errorf("Hanya akaun Grok Web menyokong penanda status profil")
 		}
 		profile := webAccountProfileModel{AccountID: id, Tier: string(account.WebTierAuto)}
 		switch column {
@@ -1511,7 +1511,7 @@ func (r *AccountRepository) markWebProfileTimestamp(ctx context.Context, id uint
 		case "birth_date_set_at":
 			profile.BirthDateSetAt = &value
 		default:
-			return fmt.Errorf("Web 资料状态字段无效")
+			return fmt.Errorf("Medan status profil Web tidak sah")
 		}
 		created := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&profile)
 		if created.Error != nil || created.RowsAffected > 0 {
@@ -1527,7 +1527,7 @@ func (r *AccountRepository) markWebProfileTimestamp(ctx context.Context, id uint
 				Where("account_id = ? AND birth_date_set_at IS NULL", id).
 				Update("birth_date_set_at", value).Error
 		default:
-			return fmt.Errorf("Web 资料状态字段无效")
+			return fmt.Errorf("Medan status profil Web tidak sah")
 		}
 	}))
 }
@@ -1842,7 +1842,7 @@ func rejectAccountsWithMediaJobs(db *gorm.DB, ids []uint64) error {
 		return err
 	}
 	if count > 0 {
-		return fmt.Errorf("%w: 账号仍关联 %d 条排队中或进行中的视频任务，请等待任务结束后重试", repository.ErrConflict, count)
+		return fmt.Errorf("%w: Akaun masih dikaitkan dengan %d tugas video dalam baris gilir atau sedang berjalan, sila tunggu tugas selesai sebelum mencuba lagi", repository.ErrConflict, count)
 	}
 	return nil
 }
@@ -2094,7 +2094,7 @@ func (r *AccountRepository) MarkBuildAPIFallback(ctx context.Context, id uint64,
 		if count == 0 {
 			return repository.ErrNotFound
 		}
-		return fmt.Errorf("仅 grok_build 账号支持 Build API 降级标记")
+		return fmt.Errorf("Hanya akaun grok_build menyokong penanda penurunan taraf Build API")
 	}
 	r.notifyInvalidation(ctx, repository.InvalidationEvent{Kind: repository.InvalidationAccountStateChanged, Provider: account.ProviderBuild, AccountID: id})
 	return nil

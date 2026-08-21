@@ -843,11 +843,11 @@ func TestConsoleImportAcceptsBareArray(t *testing.T) {
 
 func TestConsoleImportBareArrayErrors(t *testing.T) {
 	// 空数组：JSON 路径解析出 0 个账号，而不是被当成空文本导入。
-	if _, err := parseImportedCredentials([]byte("[]")); err == nil || !strings.Contains(err.Error(), "没有 Grok Console 账号") {
+	if _, err := parseImportedCredentials([]byte("[]")); err == nil || !strings.Contains(err.Error(), "Tiada akaun Grok Console") {
 		t.Fatalf("empty array error = %v", err)
 	}
 	// null 元素：归一化阶段带账号序号报错。
-	if _, err := parseImportedCredentials([]byte(`[{"sso_token":"token-a"},null]`)); err == nil || !strings.Contains(err.Error(), "第 2 个账号缺少 sso_token") {
+	if _, err := parseImportedCredentials([]byte(`[{"sso_token":"token-a"},null]`)); err == nil || !strings.Contains(err.Error(), "Akaun ke-2 tiada sso_token") {
 		t.Fatalf("null element error = %v", err)
 	}
 	// 非法 [ 开头输入：明确 JSON 报错，禁止静默当纯文本导入。
@@ -1834,7 +1834,7 @@ func TestConsoleVideoRejectsImageWithReferences(t *testing.T) {
 		ImageURL:      "https://example.com/first.png",
 		ReferenceURLs: []string{"https://example.com/ref.png"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "不能与") {
+	if err == nil || !strings.Contains(err.Error(), "tidak boleh digunakan bersama") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -1903,7 +1903,7 @@ func TestConsoleVideoRejectsTooManyReferenceImages(t *testing.T) {
 	_, err := adapter.GenerateVideo(context.Background(), provider.VideoRequest{
 		Credential: credential, Prompt: "animate", Duration: 6, ReferenceURLs: references,
 	})
-	if err == nil || !strings.Contains(err.Error(), "最多支持") {
+	if err == nil || !strings.Contains(err.Error(), "menyokong maksimum") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -1918,7 +1918,7 @@ func TestConsoleVideoRejectsTooManyCombinedImages(t *testing.T) {
 		Credential: credential, Prompt: "animate", Duration: 6,
 		ImageURL: "https://example.com/first.png", ReferenceURLs: references,
 	})
-	if err == nil || !(strings.Contains(err.Error(), "不能与") || strings.Contains(err.Error(), "最多支持")) {
+	if err == nil || !(strings.Contains(err.Error(), "tidak boleh digunakan bersama") || strings.Contains(err.Error(), "menyokong maksimum")) {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -1932,7 +1932,7 @@ func TestConsoleVideoRejectsLongReferenceDurationOnBaseModel(t *testing.T) {
 		Credential: credential, Prompt: "animate", Duration: 15,
 		ReferenceURLs: []string{"https://example.com/ref.png"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "最长 10 秒") {
+	if err == nil || !strings.Contains(err.Error(), "maksimum 10 saat") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -2010,13 +2010,13 @@ func TestConsoleVideo15Rejects1080pReferenceMode(t *testing.T) {
 		Credential: credential, Model: "grok-imagine-video-1.5", Prompt: "animate", Duration: 6, Resolution: "1080p",
 		ReferenceURLs: []string{"https://example.com/reference.png"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "最高支持 720p") {
+	if err == nil || !strings.Contains(err.Error(), "sehingga 720p sahaja") {
 		t.Fatalf("error = %v", err)
 	}
 }
 
 func TestParseConsoleVideoStatusRejectsUnknownState(t *testing.T) {
-	if _, _, err := parseConsoleVideoStatus([]byte(`{"status":"mystery"}`), nil); err == nil || !strings.Contains(err.Error(), "状态无效") {
+	if _, _, err := parseConsoleVideoStatus([]byte(`{"status":"mystery"}`), nil); err == nil || !strings.Contains(err.Error(), "Status video Console tidak sah") {
 		t.Fatalf("unknown status error = %v", err)
 	}
 }

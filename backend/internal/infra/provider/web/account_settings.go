@@ -44,7 +44,7 @@ func (a *Adapter) AcceptTerms(ctx context.Context, credential account.Credential
 	}
 	webBaseURL := strings.TrimRight(a.config().BaseURL, "/")
 	if webBaseURL == "" {
-		return fmt.Errorf("Grok Web BaseURL 不能为空")
+		return fmt.Errorf("BaseURL Grok Web tak boleh kosong")
 	}
 	productBody, err := json.Marshal(struct {
 		TOSVersion int `json:"tosVersion"`
@@ -135,7 +135,7 @@ func (a *Adapter) runWebAccountSetting(ctx context.Context, credential account.C
 
 func (a *Adapter) runWebAccountSettings(ctx context.Context, credential account.Credential, inputs ...webAccountSettingRequest) error {
 	if credential.Provider != account.ProviderWeb || credential.AuthType != account.AuthTypeSSO {
-		return fmt.Errorf("仅 Grok Web SSO 账号支持资料设置")
+		return fmt.Errorf("Hanya akaun Grok Web SSO menyokong tetapan profil")
 	}
 	token, err := a.cipher.Decrypt(credential.EncryptedAccessToken)
 	if err != nil {
@@ -196,7 +196,7 @@ func (a *Adapter) executeWebAccountSetting(ctx context.Context, token string, le
 			return readErr
 		}
 		if len(body) > webAccountSettingBodyLimit {
-			return fmt.Errorf("Grok Web 账号设置响应超过安全上限")
+			return fmt.Errorf("Respons tetapan akaun Grok Web melebihi had selamat")
 		}
 		if response.StatusCode == http.StatusForbidden && input.statsig && attempt == 0 && a.invalidateSignedStatsig(http.MethodPost, input.endpoint) {
 			continue
@@ -215,13 +215,13 @@ func (a *Adapter) executeWebAccountSetting(ctx context.Context, token string, le
 		}
 		return nil
 	}
-	return fmt.Errorf("Grok Web Statsig 刷新后仍被拒绝")
+	return fmt.Errorf("Masih ditolak selepas pembaruan Statsig Grok Web")
 }
 
 func validateAccountSettingGRPCStatus(response *http.Response, body []byte) error {
 	_, bodyStatus, err := parseGRPCWebFrames(body)
 	if err != nil {
-		return fmt.Errorf("解析 Grok Web 账号设置响应: %w", err)
+		return fmt.Errorf("Huraian respons tetapan akaun Grok Web: %w", err)
 	}
 	for _, status := range []string{
 		response.Header.Get("grpc-status"),
@@ -230,7 +230,7 @@ func validateAccountSettingGRPCStatus(response *http.Response, body []byte) erro
 	} {
 		status = strings.TrimSpace(status)
 		if status != "" && status != "0" {
-			return fmt.Errorf("Grok Web 账号设置 gRPC 状态 %s", status)
+			return fmt.Errorf("Status gRPC tetapan akaun Grok Web %s", status)
 		}
 	}
 	return nil
@@ -252,9 +252,9 @@ func newWebAccountSettingError(status int, body []byte) *webAccountSettingError 
 
 func (e *webAccountSettingError) Error() string {
 	if e.body == "" {
-		return fmt.Sprintf("Grok Web 账号设置上游返回 %d", e.status)
+		return fmt.Sprintf("Upstream tetapan akaun Grok Web mengembalikan %d", e.status)
 	}
-	return fmt.Sprintf("Grok Web 账号设置上游返回 %d: %s", e.status, e.body)
+	return fmt.Sprintf("Upstream tetapan akaun Grok Web mengembalikan %d: %s", e.status, e.body)
 }
 
 func (e *webAccountSettingError) HTTPStatusCode() int { return e.status }

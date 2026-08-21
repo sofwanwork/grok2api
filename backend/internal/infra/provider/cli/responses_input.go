@@ -30,7 +30,7 @@ func normalizeAgentMessageInput(item map[string]any, _ string) (map[string]any, 
 func normalizeLocalShellInput(item map[string]any, param string) (map[string]any, error) {
 	action, err := json.Marshal(item["action"])
 	if err != nil {
-		return nil, &responsesRequestError{Message: "local_shell_call.action 无法编码", Param: param + ".action", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "local_shell_call.action tak boleh dikodkan", Param: param + ".action", Code: "invalid_parameter"}
 	}
 	status := strings.TrimSpace(stringField(item, "status"))
 	if status == "" {
@@ -46,7 +46,7 @@ func normalizeLocalShellInput(item map[string]any, param string) (map[string]any
 func normalizeMCPOutputInput(item map[string]any, param string) (map[string]any, error) {
 	output, err := json.Marshal(item["output"])
 	if err != nil {
-		return nil, &responsesRequestError{Message: "mcp_tool_call_output.output 无法编码", Param: param + ".output", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: "mcp_tool_call_output.output tak boleh dikodkan", Param: param + ".output", Code: "invalid_parameter"}
 	}
 	callID := strings.TrimSpace(stringField(item, "call_id"))
 	if callID == "" {
@@ -81,7 +81,7 @@ func (c *responsesToolCompatibility) normalizeMessageContent(value any, role, pa
 	}
 	items, ok := value.([]any)
 	if !ok {
-		return nil, &responsesRequestError{Message: param + " 必须是字符串或数组", Param: param, Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + " mesti string atau array", Param: param, Code: "invalid_parameter"}
 	}
 	// 官方 Grok CLI 会把 assistant 的多个输出文本合并为 EasyInputMessage
 	// 字符串，既保留语义，也绕开 OutputMessage 对 id/status 的输入限制。
@@ -118,7 +118,7 @@ func (c *responsesToolCompatibility) normalizeMessageContent(value any, role, pa
 	for index, raw := range items {
 		item, ok := raw.(map[string]any)
 		if !ok {
-			return nil, &responsesRequestError{Message: param + "[] 必须是对象", Param: fmt.Sprintf("%s[%d]", param, index), Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + "[] mesti objek", Param: fmt.Sprintf("%s[%d]", param, index), Code: "invalid_parameter"}
 		}
 		switch stringField(item, "type") {
 		case "text", "input_text", "output_text":
@@ -135,7 +135,7 @@ func (c *responsesToolCompatibility) normalizeMessageContent(value any, role, pa
 		case "input_file":
 			normalized = append(normalized, normalizeInputFilePart(item))
 		default:
-			return nil, &responsesRequestError{Message: "Grok Build 不支持该 message.content 类型", Param: fmt.Sprintf("%s[%d].type", param, index), Code: "unsupported_parameter"}
+			return nil, &responsesRequestError{Message: "Grok Build tidak menyokong jenis message.content ini", Param: fmt.Sprintf("%s[%d].type", param, index), Code: "unsupported_parameter"}
 		}
 	}
 	return normalized, nil
@@ -146,7 +146,7 @@ func (c *responsesToolCompatibility) normalizeInputImagePart(item map[string]any
 	if raw, exists := item["detail"]; exists && raw != nil {
 		value, ok := raw.(string)
 		if !ok {
-			return nil, &responsesRequestError{Message: param + ".detail 必须是字符串", Param: param + ".detail", Code: "invalid_parameter"}
+			return nil, &responsesRequestError{Message: param + ".detail mesti string", Param: param + ".detail", Code: "invalid_parameter"}
 		}
 		detail = strings.TrimSpace(value)
 		if detail == "" {
@@ -160,7 +160,7 @@ func (c *responsesToolCompatibility) normalizeInputImagePart(item map[string]any
 		detail = "high"
 		c.addWarning("image_detail_original_downgraded")
 	default:
-		return nil, &responsesRequestError{Message: param + ".detail 只支持 auto、low、high 或 original", Param: param + ".detail", Code: "invalid_parameter"}
+		return nil, &responsesRequestError{Message: param + ".detail hanya menyokong auto, low, high, atau original", Param: param + ".detail", Code: "invalid_parameter"}
 	}
 
 	converted := map[string]any{"type": "input_image", "detail": detail}
