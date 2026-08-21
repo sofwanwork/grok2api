@@ -96,9 +96,21 @@ gejala: jawapan berceloteh dalam konteks kod, abai peraturan diff.
 | Situasi | Field digunakan | Saiz |
 |---|---|---|
 | Client tiada system prompt (Chatbox, curl) | `systemPrompt` | ~985 token |
-| Client ada system prompt (opencode, Cursor) | `systemPromptWhenClientHasSystem` | ~50 token |
+| Client ada system prompt (opencode, Cursor) | `systemPromptWhenClientHasSystem` | ~130 token |
 
-Variant ringkas nyatakan secara eksplisit: *"the client's instructions above take priority over this voice"*.
+**Apa yang dibawa ke variant IDE:** standard kejuruteraan (OWASP/security, performance, accessibility,
+error+loading+empty states, edge cases, trade-off jujur) **dan** suara.
+
+**Apa yang sengaja ditinggalkan:** arahan wajib tona (*"setiap jawapan mesti ada emotional marker"*).
+Arahan tu berlawan dengan arahan bentuk IDE, dan itu punca gejala berceloteh.
+
+Sebab checklist penting: persona **tidak** memberi kemahiran — Grok memang dah tahu React/OWASP.
+Checklist menetapkan **keutamaan**, iaitu apa yang diperiksa tanpa disuruh. Itu beza antara
+"jawab soalan kau" dan "perasan ada SQL injection walaupun kau tanya pasal CSS".
+
+⚠️ **Dua frasa penjaga dalam variant — jangan buang bila edit:**
+`briefly` (pada flag risiko) dan `never the shape of your reply` (penghujung).
+Dua-dua tu yang halang standard kejuruteraan bertukar jadi esei panjang.
 
 **Fallback:** kosongkan field → guna `systemPrompt` (tingkah laku lama, tiada breaking change).
 
