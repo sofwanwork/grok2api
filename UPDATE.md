@@ -1,6 +1,6 @@
 # UPDATE.md — Panduan Update grok2api (dengan local patches)
 
-> Repo ni ada **12 local commits** di atas upstream `chenyme/grok2api`.
+> Repo ni ada **local patches di atas upstream `chenyme/grok2api`** (merge terakhir: 22 Ogos 2026).
 > Fail ni sebagai rujukan bila nak update ke versi baru.
 > **Amalan: bagitahu agent AI check dulu sebelum merge.**
 
@@ -9,11 +9,27 @@
 | Item | Nilai |
 |---|---|
 | Branch aktif | `main` |
-| Bookmark patches | `local-patches` (commit 47596974) |
-| Jumlah local commits | 12 (909bb810, 6a954e5b, c541a436, b83b3e8b, 5b880b92, 6fd81ada, 47596974, 17080ba8, 04da9cc0, 15fb4147, 54c29d41, 93a74557) |
-| Base upstream terakhir | `c9916f65` (19 Ogos 2026) |
-| Image Docker | `grok2api:local-nltools` |
+| Bookmark patches | `local-patches` (kini sejajar dengan merge `bed7232d` — di-refresh 22 Ogos, jangan biar stale lagi) |
+| Tag fallback | `backup-pre-merge-20260822` (keadaan pra-merge, 12 commit) |
+| Base upstream terakhir | `d6f6e9f5` (19 Ogos 2026) — **merged 22 Ogos 2026** |
+| Image Docker | `grok2api:local-nltools` (post-merge); fallback: `grok2api:backup-20260822`, `grok2api:local-layered` (pra-merge) |
 | Container | `grok2api` (docker compose) |
+| Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` |
+
+## Merge 22 Ogos 2026 — apa yang berlaku
+
+11 konflik diselesaikan, semua patch terselamat (verify: 6/6 marker PASS, live limits + persona PASS):
+
+- **4 fail bermakna digabung dua-dua:** `stream.go` (patch reasoning_opaque + upstream markReasoningEvidence),
+  `conversation_test.go` (test kita + test evidence upstream — assertion anti-leak upstream
+  diadapt supaya `reasoning_opaque` yang disengajakan dianggap channel sah, bukan leak),
+  `handler.go`/`handler_test.go` (BM kekal + fix upstream `bytes.NewReader(body)` untuk double-read bug +
+  protokol `response.failed` baru)
+- **Upstream buang protokol media/post lama:** `createMediaPost`, `parseMediaPostResponse`,
+  `prepareVideoReference` dibuang (video dah guna `mediaGenInput` baharu) — kita ikut, kod itu bukan patch kita
+- **3 section baru masuk config.yaml:** `deployment`, `audit` (retention 7 hari), `qualityGuard`
+  (requestRetry enabled default, holdTimeout 30s, idleAccountCooldown 15m)
+- **i18n:** locale zh-CN dibuang sekali lagi (kekal English-only), strings EN baru upstream auto-merge masuk
 
 ## Toolchain (WAJIB sebelum merge)
 
@@ -27,8 +43,9 @@ cd backend; go build ./...; go test ./...
 
 Baseline sihat: **62 pakej lulus, 0 gagal**.
 
-**Penting:** CI repo ni (`.github/workflows/`) hanya ada CodeQL + docker image — **tiada `go test` automatik**.
-Jadi `go test ./...` manual adalah satu-satunya jaring keselamatan selepas merge. Jangan skip.
+**Penting:** UPDATE lama kata CI tiada `go test` — **tak betul lagi**. `ghcr-image.yml` job `verify`
+dah jalankan `go test ./...` + `go vet` + swagger check + frontend lint/build pada setiap push/PR ke `main`.
+Ia hanya berkesan bila repo di-push ke GitHub (fork `sofwanwork/grok2api`).
 
 `gofmt -l` akan flag ~12 fail dalam repo — itu **CRLF sahaja** (checkout Windows), bukan isu format.
 Confirm dengan `gofmt -d <fail>` kalau ragu.
@@ -129,44 +146,31 @@ Dipin dalam `TestModelMaxOutputTokensUnsupportedEffortSuffixIsNotAnAlias`.
 
 ### Patch mana upstream dah ada, mana masih eksklusif kita
 
-Disemak pada 22 Ogos 2026 terhadap `origin/main` (`d6f6e9f5`) — **jangan assume ikut tajuk commit sahaja, grep kod**:
+Disemak pada 22 Ogos 2026 selepas merge `d6f6e9f5` — **semua patch di bawah masih eksklusif kita** dan terselamat dalam merge:
 
 | Patch | Upstream ada? | Nota |
 |---|---|---|
-| Doom-loop (semua) | ❌ **takda sama sekali** | `git grep -n "DoomLoop\|RepeatCount" origin/main` = kosong. `doom_loop_check` yang muncul tu event Grok CLI, benda lain. |
-| reasoning_opaque | ❌ takda | `git grep -n "reasoning_opaque" origin/main` = kosong |
-| Reasoning `detailed`, persona, max_tokens 65536 | ❌ takda | `normalize.go`, `adapter.go`, `prompt_cache.go` tak disentuh upstream — auto-merge bersih |
+| Doom-loop (semua) | ❌ | `git grep -n "DoomLoop\|RepeatCount" origin/main` = kosong |
+| reasoning_opaque | ❌ | `git grep -n "reasoning_opaque" origin/main` = kosong |
+| Reasoning `detailed`, persona, max_tokens 65536 | ❌ | tak disentuh upstream |
 
-**PR dihantar ke upstream:** [chenyme/grok2api#994](https://github.com/chenyme/grok2api/pull/994) — doom-loop split thresholds + ujian.
-Fork: `sofwanwork/grok2api`, remote `fork`, branch `feat/split-doom-loop-thresholds`.
-Kalau PR ni diterima, **buang patch #2 dari senarai atas** dan konflik `stream.go` hilang selamanya.
+Upstream kini ada sistem **reasoning evidence markers** (`grok2api-reasoning-start`/`-evidence` SSE comments)
+untuk quality-guard — kita gabungkan dengan reasoning_opaque; dua-dua hidup berdampingan.
+Video `mediaGenInput`, audit retention, account-bound proxy leases, dan requestRetry default baru
+semua dah masuk melalui merge 22 Ogos.
 
-### Yang upstream ada tapi kita belum (dapat bila merge)
+**PR dihantar ke upstream:** [chenyme/grok2api#994](https://github.com/chenyme/grok2api/pull/994) — doom-loop split thresholds + ujian
+(status: masih OPEN, tiada review lagi). Kalau diterima, buang patch #2 dari senarai.
 
-| Feature | Commit | Kenapa berguna |
-|---|---|---|
-| Kesan 降智 + tukar akaun automatik | `d1aeb775`, `6b288f20` | Grok bagi jawapan tanpa berfikir → rotate akaun |
-| Audit request + retention 7 hari | `1316ed73`, `86010fc5` | Diagnostik bila request pelik |
-| Proxy per-akaun (`account-bound leases`) | `c0d7c94e` | Penting untuk multi-akaun |
-| Video protokol `mediaGenInput` terkini | `46cfa374` | Video gen kita dah obsolete |
+### Benda baru dari merge 22 Ogos yang patut kau tahu
 
-Default upstream pun berubah: `holdTimeout 3s→30s`, `minOutputTokens 32→8`, `accountCooldown 24h→12h`,
-tambah `idleAccountCooldown: 15m`, dan `requestRetry.enabled: false→true`.
-
-### ⚠️ config.yaml kita tertinggal 3 section
-
-`config.yaml` kita **takda** `deployment:`, `audit:`, `qualityGuard:` — semua tuning baru di atas tak aktif.
-Sebab `config.yaml` gitignored, kena tambah **manual** dari `config.example.yaml` selepas merge.
-
-### Kos konflik merge (dry-run 22 Ogos)
-
-`git merge-tree --write-tree HEAD origin/main` → **11 fail konflik**:
-
-- **Bermakna (4):** `conversation/stream.go`, `inference/handler.go`, `handler_test.go`, `conversation_test.go` — kena **gabung dua-dua**, bukan pilih satu
-- **Kosmetik (7):** `egress/service.go`, `web/image.go`, `web/video.go`, `openai_audio_handler.go`, `voice_handler.go`, `config.example.yaml`, `i18n/index.ts` — semua dari commit terjemahan BM/EN (`17080ba8`, `04da9cc0`, `15fb4147`, `54c29d41`)
-
-**64% kerja merge adalah kosmetik.** Kalau patch terjemahan di-drop, konflik turun dari 11 → 4.
-Pertimbangkan bila terjemahan tu dah tak berbaloi.
+- **requestRetry aktif sekarang** (`qualityGuard.requestRetry.enabled: true`): jawapan tanpa thinking akan
+  dicuba semula hingga 6 kali (hold 30s). Kalau rasa lambat untuk model bukan-thinking, boleh matikan.
+- **audit retentionDays: 7** — log request lebih lama dari 7 hari dibuang automatik.
+- **Compose** sekarang ada healthcheck eksplisit + log rotation (10m × 3) — pilihan aku, bukan upstream.
+- **`make verify` / `tools/verify-patches.ps1`** — satu command verify semua patch selepas merge.
+  Key disimpan dalam `tools/.verify-key.txt` (gitignored). Reveal semula kat admin UI kalau hilang:
+  Client Keys → reveal secret.
 
 ## Senarai semak bila ada update upstream
 
@@ -197,32 +201,34 @@ git merge origin/main
 ### Selepas merge (WAJIB)
 1. **Build + test:**
    ```powershell
-   docker run --rm -v "${PWD}\backend:/src" -w /src golang:1.26 go test ./...
+   $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
+   cd backend; go build ./...; go test ./...
    ```
 2. **Rebuild image:**
    ```powershell
    docker build -t grok2api:local-nltools .
    docker compose up -d
    ```
-3. **Verify patch masih ada** — quick test:
+3. **Verify patch masih ada — SATU COMMAND:**
    ```powershell
-   # Persona masih inject? (mesti keluar AKIF style)
-   curl -s -X POST http://127.0.0.1:8000/v1/chat/completions -H "Authorization: Bearer <KEY>" -H "Content-Type: application/json" -d '{"model":"grok-4.6-xhigh","messages":[{"role":"user","content":"hi"}],"stream":false}'
+   powershell -ExecutionPolicy Bypass -File tools/verify-patches.ps1
+   # atau offline-only: ... verify-patches.ps1 -SkipLive
    ```
+   Ia check: patch markers (6), config drift vs example, live `/v1/models` limits
+   (context=500000/output=65536), dan chat completion persona.
    - ✅ Persona: jawapan mula dengan emosi AKIF ("Wah...", "Aduh...")
    - ❌ Persona hilang: jawapan neutral → check `config.yaml` section `persona:` masih `enabled: true`
 
-4. **Verify limits:**
-   ```powershell
-   curl -s http://127.0.0.1:8000/v1/models -H "Authorization: Bearer <KEY>"
-   # grok-4.6-xhigh mesti: context=500000, output=65536
-   ```
+   **Kalau reveal key diperlukan:** admin UI → Client Keys → reveal secret → simpan dalam
+   `tools/.verify-key.txt` (gitignored).
 
 ### Kalau benda rosak teruk (fallback)
 ```powershell
 # Balik ke patch kita, buang merge
 git merge --abort          # kalau masih dalam merge
-git reset --hard local-patches   # kalau dah commit tapi rosak
+git reset --hard backup-pre-merge-20260822   # keadaan pra-merge 22 Ogos (atau local-patches)
+docker tag grok2api:backup-20260822 grok2api:local-nltools   # image pra-merge
+docker compose up -d
 
 # Atau extract diff kita untuk apply semula atas upstream fresh
 git diff local-patches main -- backend/ > my-patches.diff

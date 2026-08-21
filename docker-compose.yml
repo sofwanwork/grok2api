@@ -22,8 +22,20 @@ services:
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
-
-  # ================================ WARP ================================
+    # Belt-and-suspenders with the Dockerfile HEALTHCHECK: makes service_healthy
+    # in depends_on work even when the image is swapped (e.g. upstream ghcr image).
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    # Keep json-file logs bounded so long-running containers cannot fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
   # If the egress IP is not clean, uncomment the section below to use WARP as the exit proxy.
   # After enabling, add socks5://warp:1080 in the admin UI under "Settings -> Egress Proxy".
 
@@ -78,6 +90,11 @@ services:
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   grok2api-data:

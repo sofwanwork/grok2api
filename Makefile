@@ -1,4 +1,4 @@
-.PHONY: run swagger
+.PHONY: run swagger verify
 
 CONFIG ?= $(CURDIR)/config.yaml
 
@@ -12,3 +12,8 @@ swagger:
 		--parseInternal \
 		--output docs \
 		--outputTypes go,json,yaml
+
+# Verify local patches survived a merge/deploy (markers, config drift, live limits, persona).
+# Requires PowerShell (Windows) - for the Docker-based Go test suite see UPDATE.md.
+verify:
+	powershell -ExecutionPolicy Bypass -File tools/verify-patches.ps1 $(VERIFY_ARGS)
