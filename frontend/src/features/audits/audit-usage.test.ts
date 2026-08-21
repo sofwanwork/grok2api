@@ -9,14 +9,14 @@ import {
 } from "./audit-usage.ts";
 
 const labels: AuditUsageLabels = {
-  input: "输入",
-  output: "输出",
-  cached: "缓存",
-  reasoning: "推理",
-  mediaInput: "媒体输入",
-  mediaOutput: "媒体输出",
-  imageCount: (count) => `${count} 张`,
-  secondsCount: (count) => `${count} 秒`,
+  input: "Input",
+  output: "Output",
+  cached: "Cached",
+  reasoning: "Reasoning",
+  mediaInput: "Media Input",
+  mediaOutput: "Media Output",
+  imageCount: (count) => `${count} images`,
+  secondsCount: (count) => `${count} sec`,
 };
 
 function formatNumber(value: number): string {
@@ -56,9 +56,9 @@ describe("buildAuditUsageView", () => {
     }), formatNumber, labels);
 
     assert.equal(view.mode, "metrics");
-    assert.equal(values(view.mediaItems, "mediaInput"), "10 张");
-    assert.equal(view.mediaItems?.find((item) => item.key === "mediaOutput")?.label, "媒体输出");
-    assert.equal(values(view.mediaItems, "mediaOutput"), "0 张");
+    assert.equal(values(view.mediaItems, "mediaInput"), "10 images");
+    assert.equal(view.mediaItems?.find((item) => item.key === "mediaOutput")?.label, "Media Output");
+    assert.equal(values(view.mediaItems, "mediaOutput"), "0 images");
     assert.equal(values(view.tokenItems, "input"), "39,229");
     assert.equal(values(view.tokenItems, "cached"), "128");
     assert.equal(values(view.tokenItems, "output"), "275");
@@ -72,7 +72,7 @@ describe("buildAuditUsageView", () => {
     }), formatNumber, labels);
 
     assert.equal(view.mode, "metrics");
-    assert.equal(values(view.mediaItems, "mediaInput"), "10 张");
+    assert.equal(values(view.mediaItems, "mediaInput"), "10 images");
     assert.equal(values(view.tokenItems, "input"), MISSING_AUDIT_USAGE_PLACEHOLDER);
     assert.equal(values(view.tokenItems, "cached"), MISSING_AUDIT_USAGE_PLACEHOLDER);
     assert.equal(values(view.tokenItems, "output"), MISSING_AUDIT_USAGE_PLACEHOLDER);
@@ -114,7 +114,7 @@ describe("buildAuditUsageView", () => {
       totalTokens: 96,
     }), formatNumber, labels);
 
-    assert.equal(values(view.mediaItems, "mediaOutput"), "12 秒");
+    assert.equal(values(view.mediaItems, "mediaOutput"), "12 sec");
     assert.equal(values(view.tokenItems, "input"), "80");
     assert.equal(values(view.tokenItems, "output"), "16");
   });

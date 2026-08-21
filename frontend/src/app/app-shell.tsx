@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AudioLines, Box, ChevronDown, Eye, Image, KeyRound, Languages, LayoutDashboard, LogOut, Menu, MessageSquareText, Monitor, Moon, MoreHorizontal, Settings, ShieldCheck, Sparkles, Sun, Users, Video } from "lucide-react";
+import { AudioLines, Box, ChevronDown, Eye, Image, KeyRound, LayoutDashboard, LogOut, Menu, MessageSquareText, Monitor, Moon, MoreHorizontal, Settings, ShieldCheck, Sparkles, Sun, Users, Video } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
@@ -76,7 +76,7 @@ const documentation = [
 ] as const;
 
 export function AppShell() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { admin, logout, changePassword } = useAuth();
   const location = useLocation();
   const { setTheme } = useTheme();
@@ -205,13 +205,6 @@ export function AppShell() {
               <DropdownMenuItem onClick={() => setTheme("light")}><Sun />{t("shell.light")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")}><Moon />{t("shell.dark")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")}><Monitor />{t("shell.system")}</DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="h-8"><Languages />{t("shell.language")}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem onClick={() => void i18n.changeLanguage("zh-CN")}>简体中文</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void i18n.changeLanguage("en")}>English</DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuItem className="h-8" onClick={() => setPasswordOpen(true)}><KeyRound />{t("auth.changePassword")}</DropdownMenuItem>
