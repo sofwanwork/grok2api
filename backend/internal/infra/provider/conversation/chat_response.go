@@ -1,6 +1,19 @@
 package conversation
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
+
+// systemFingerprint returns a stable fp_ identifier for the model+provider
+// combination. OpenAI-compatible clients use this to detect model changes for
+// caching and routing decisions; the value only changes when the upstream
+// model changes.
+func systemFingerprint(model string) string {
+	sum := sha256.Sum256([]byte("grok2api:" + model))
+	return "fp_" + hex.EncodeToString(sum[:6])
+}
 
 func chatResponse(value parsedResponse) map[string]any {
 	message := map[string]any{"role": "assistant", "content": value.Text}
@@ -41,8 +54,9 @@ func chatResponse(value parsedResponse) map[string]any {
 	id := strings.Replace(value.ID, "resp_", "chatcmpl_", 1)
 	return map[string]any{
 		"id": id, "object": "chat.completion", "created": value.CreatedAt, "model": value.Model,
-		"choices": []any{map[string]any{"index": 0, "message": message, "finish_reason": finishReason}},
-		"usage":   chatUsage(value.Usage),
+		"system_fingerprint": systemFingerprint(value.Model),
+		"choices":            []any{map[string]any{"index": 0, "message": message, "finish_reason": finishReason}},
+		"usage":              chatUsage(value.Usage),
 	}
 }
 

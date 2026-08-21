@@ -101,11 +101,14 @@ func normalizeBuildRequestPayloadWithMetadata(payload map[string]json.RawMessage
 	if normalizeBuildReasoningEffortPayload(payload, model) {
 		changed = true
 	}
-	// grok-build 1.0.4 always requests a concise reasoning summary from its
-	// Responses backend, even when it uses the model's default effort. Chat
-	// Completions has no separate summary parameter, so make that Build-specific
-	// compatibility contract explicit without changing native Responses,
-	// Console, or Web semantics.
+	// grok-build 1.0.4 requests a reasoning summary from its Responses backend.
+	// For Chat Completions there is no separate summary parameter, but forcing
+	// "concise" suppresses the depth that high/xhigh effort callers expect and
+	// makes replies feel flattened ("not the real model"). Only default absent
+	// summaries to "concise" when no explicit effort was requested; when the
+	// caller asked for high/xhigh/max reasoning, let the summary default to
+	// "detailed" so the upstream emits full reasoning content. Explicit
+	// caller-supplied summaries are always preserved.
 	if operation == conversation.OperationChat {
 		var reasoning map[string]json.RawMessage
 		if raw := payload["reasoning"]; !isEmptyJSON(raw) {
@@ -117,7 +120,15 @@ func normalizeBuildRequestPayloadWithMetadata(payload map[string]json.RawMessage
 			reasoning = make(map[string]json.RawMessage)
 		}
 		if isEmptyJSON(reasoning["summary"]) {
-			reasoning["summary"] = mustJSON("concise")
+			effort, _ := buildReasoningEffort(payload)
+			switch strings.ToLower(strings.TrimSpace(effort)) {
+			case "high", "xhigh", "max":
+				reasoning["summary"] = mustJSON("detailed")
+			case "", "low", "medium", "minimal", "auto":
+				reasoning["summary"] = mustJSON("concise")
+			default:
+				reasoning["summary"] = mustJSON("concise")
+			}
 			payload["reasoning"] = mustJSON(reasoning)
 			changed = true
 		}

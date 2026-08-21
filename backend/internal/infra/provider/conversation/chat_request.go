@@ -22,6 +22,9 @@ func convertChatRequest(body []byte, model string) ([]byte, ResponseOptions, err
 	if err != nil {
 		return nil, ResponseOptions{}, err
 	}
+	// No persona injection: the upstream Grok Build backend applies its own
+	// system behaviour. A synthetic generic persona here overrides the model's
+	// natural voice and made high-effort aliases (grok-4.6-xhigh) feel flattened.
 	target := map[string]json.RawMessage{"model": mustJSON(model), "input": mustJSON(input)}
 	copyFields(target, source, "stream", "temperature", "top_p", "parallel_tool_calls", "metadata", "store", "service_tier")
 	if raw := source["user"]; !isEmptyJSON(raw) {
@@ -104,6 +107,11 @@ type chatMessage struct {
 	ToolCalls  json.RawMessage `json:"tool_calls"`
 	ToolCallID string          `json:"tool_call_id"`
 	Name       string          `json:"name"`
+	// ReasoningOpaque carries the upstream encrypted reasoning blob that this
+	// gateway previously emitted as reasoning_opaque. Replay it as a reasoning
+	// input item so multi-turn conversations retain thinking continuity even
+	// when the server-side replay cache misses (TTL expiry, account rotation).
+	ReasoningOpaque string `json:"reasoning_opaque"`
 }
 
 func convertChatMessages(messages []chatMessage) ([]any, error) {
@@ -112,6 +120,14 @@ func convertChatMessages(messages []chatMessage) ([]any, error) {
 		role := strings.ToLower(strings.TrimSpace(message.Role))
 		switch role {
 		case "system", "developer", "user", "assistant":
+			// Assistant reasoning blobs are replayed as dedicated reasoning input
+			// items ahead of the message content, matching the upstream Responses
+			// history contract for cross-turn thinking continuity.
+			if role == "assistant" && strings.TrimSpace(message.ReasoningOpaque) != "" {
+				input = append(input, map[string]any{
+					"type": "reasoning", "summary": []any{}, "encrypted_content": message.ReasoningOpaque,
+				})
+			}
 			if !isEmptyJSON(message.Content) && !bytes.Equal(bytes.TrimSpace(message.Content), []byte("null")) {
 				content, err := convertChatContent(message.Content)
 				if err != nil {

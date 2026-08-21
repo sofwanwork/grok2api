@@ -66,6 +66,7 @@ type Config struct {
 	Batch             BatchConfig             `yaml:"-"`
 	Media             MediaConfig             `yaml:"media"`
 	Routing           RoutingConfig           `yaml:"routing"`
+	Persona           PersonaConfig           `yaml:"persona"`
 	Audit             AuditConfig             `yaml:"audit"`
 	QualityGuard      QualityGuardConfig      `yaml:"qualityGuard"`
 	ClientKeyDefaults ClientKeyDefaultsConfig `yaml:"clientKeyDefaults"`
@@ -245,6 +246,53 @@ type RoutingConfig struct {
 	// capacity/rebalance repair. GROK2API_AUTO_ASSIGN_MAX_MIGRATION_SHARE
 	// overrides this field when set to a valid value.
 	AutoAssignMaxMigrationShare float64 `yaml:"autoAssignMaxMigrationShare"`
+}
+
+// PersonaConfig defines an optional gateway-level persona injected into
+// downstream Chat Completions / Anthropic Messages requests. Clients that
+// already send their own system/developer message are never overridden unless
+// AppendWhenClientHasSystem is enabled, which appends the persona after the
+// client's own instructions instead of replacing them.
+type PersonaConfig struct {
+	Enabled                   bool   `yaml:"enabled"`
+	SystemPrompt              string `yaml:"systemPrompt"`
+	AppendWhenClientHasSystem bool   `yaml:"appendWhenClientHasSystem"`
+	// MaxSystemPromptBytes caps the persona size to protect the upstream payload.
+	MaxSystemPromptBytes int `yaml:"maxSystemPromptBytes"`
+}
+
+const DefaultPersonaMaxSystemPromptBytes = 32 << 10
+
+// EffectiveSystemPrompt returns the trimmed persona text, or an empty string
+// when the persona is disabled or blank.
+func (p PersonaConfig) EffectiveSystemPrompt() string {
+	if !p.Enabled {
+		return ""
+	}
+	return strings.TrimSpace(p.SystemPrompt)
+}
+
+// SizeLimitedSystemPrompt returns the persona text capped to
+// MaxSystemPromptBytes (default 32 KiB). Oversized personas are truncated on a
+// rune boundary rather than rejected so a misconfigured value cannot take down
+// inference.
+func (p PersonaConfig) SizeLimitedSystemPrompt() string {
+	value := p.EffectiveSystemPrompt()
+	if value == "" {
+		return ""
+	}
+	limit := p.MaxSystemPromptBytes
+	if limit <= 0 {
+		limit = DefaultPersonaMaxSystemPromptBytes
+	}
+	if len(value) <= limit {
+		return value
+	}
+	runes := []rune(value)
+	for len(string(runes)) > limit && len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+	}
+	return string(runes)
 }
 
 type AuditConfig struct {

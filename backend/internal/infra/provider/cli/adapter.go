@@ -40,6 +40,12 @@ type Config struct {
 	UserAgent             string
 	ResponseHeaderTimeout time.Duration
 	StreamIdleTimeout     time.Duration
+	// PersonaSystemPrompt, when non-empty, is injected into Chat Completions
+	// and Anthropic Messages requests that carry no client system/developer
+	// message. PersonaAppendWithClientSystem additionally appends it after a
+	// client's own instructions.
+	PersonaSystemPrompt          string
+	PersonaAppendWithClientSystem bool
 }
 
 const (
@@ -220,6 +226,164 @@ func (a *Adapter) config() Config {
 	return a.cfg
 }
 
+// personaPrompt returns the gateway-configured persona system prompt.
+// Empty when the persona is disabled or blank.
+func (a *Adapter) personaPrompt() (prompt string, appendWithClient bool) {
+	a.cfgMu.RLock()
+	defer a.cfgMu.RUnlock()
+	return strings.TrimSpace(a.cfg.PersonaSystemPrompt), a.cfg.PersonaAppendWithClientSystem
+}
+
+func hasSystemOrDeveloper(messages []map[string]json.RawMessage) bool {
+	for _, m := range messages {
+		role := strings.ToLower(strings.TrimSpace(stringFieldRaw(m["role"])))
+		if role == "system" || role == "developer" {
+			return true
+		}
+	}
+	return false
+}
+
+func stringFieldRaw(raw json.RawMessage) string {
+	var s string
+	_ = json.Unmarshal(raw, &s)
+	return s
+}
+
+// injectPersonaIntoChatRequest inserts the persona system prompt into a Chat
+// Completions request body when the client did not supply one, or appends it
+// after the last system/developer message when AppendWhenClientHasSystem is set.
+// The body is returned unchanged when the persona is empty or the request
+// already carries a system message and appending is disabled.
+func (a *Adapter) injectPersonaIntoChatRequest(body []byte) ([]byte, error) {
+	persona, appendWithClient := a.personaPrompt()
+	if persona == "" {
+		return body, nil
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body, nil // malformed bodies are rejected downstream
+	}
+	messagesRaw, ok := payload["messages"]
+	if !ok {
+		return body, nil
+	}
+	var messages []map[string]json.RawMessage
+	if err := json.Unmarshal(messagesRaw, &messages); err != nil {
+		return body, nil
+	}
+	if hasSystemOrDeveloper(messages) && !appendWithClient {
+		return body, nil
+	}
+	// Encode persona as a JSON string value so it becomes the "content" field
+	// of the new system message, not a nested object.
+	contentRaw, err := json.Marshal(persona)
+	if err != nil {
+		return body, err
+	}
+	if hasSystemOrDeveloper(messages) {
+		insertAt := 0
+		for i := len(messages) - 1; i >= 0; i-- {
+			role := strings.ToLower(strings.TrimSpace(stringFieldRaw(messages[i]["role"])))
+			if role == "system" || role == "developer" {
+				insertAt = i + 1
+				break
+			}
+		}
+		if insertAt == 0 {
+			insertAt = len(messages)
+		}
+		messages = append(messages[:insertAt], append([]map[string]json.RawMessage{{
+			"role":    json.RawMessage(`"system"`),
+			"content": contentRaw,
+		}}, messages[insertAt:]...)...)
+	} else {
+		messages = append([]map[string]json.RawMessage{{
+			"role":    json.RawMessage(`"system"`),
+			"content": contentRaw,
+		}}, messages...)
+	}
+	updated, err := json.Marshal(messages)
+	if err != nil {
+		return body, err
+	}
+	payload["messages"] = updated
+	return json.Marshal(payload)
+}
+
+// chatDefaultMaxOutputTokens is the fallback completion budget applied to
+// Chat Completions and Anthropic Messages requests that omit max_tokens.
+// Reasoning-capable models count reasoning tokens against the budget, so a
+// small or absent cap starves high-effort thinking; 64k matches the verified
+// upstream capacity for grok-4.5/4.6 and stays a no-op for smaller models.
+const chatDefaultMaxOutputTokens = 65536
+
+// ensureChatMaxOutputTokens injects a default max_tokens when the client did
+// not send one. Requests that already carry max_tokens or
+// max_completion_tokens are left untouched so explicit caller budgets win.
+func ensureChatMaxOutputTokens(body []byte) []byte {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	if !isEmptyJSON(payload["max_tokens"]) || !isEmptyJSON(payload["max_completion_tokens"]) {
+		return body
+	}
+	payload["max_tokens"] = mustJSON(chatDefaultMaxOutputTokens)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return encoded
+}
+
+// injectPersonaIntoMessagesRequest mirrors the Chat Completions persona logic
+// for Anthropic Messages requests. Anthropic accepts system as a top-level
+// field or inline system-role message blocks; we prepend a system block so the
+// upstream converter surfaces it as instructions.
+func (a *Adapter) injectPersonaIntoMessagesRequest(body []byte) ([]byte, error) {
+	persona, appendWithClient := a.personaPrompt()
+	if persona == "" {
+		return body, nil
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body, nil
+	}
+	// Detect a client-supplied system field (string or block array).
+	systemRaw, hasSystemField := payload["system"]
+	if hasSystemField && !isEmptyJSON(systemRaw) && !appendWithClient {
+		return body, nil
+	}
+	if hasSystemField && !isEmptyJSON(systemRaw) && appendWithClient {
+		// Append the persona to the existing system block(s).
+		combined, err := appendPersonaToAnthropicSystem(systemRaw, persona)
+		if err != nil {
+			return body, err
+		}
+		payload["system"] = combined
+		return json.Marshal(payload)
+	}
+	payload["system"] = mustJSON(persona)
+	return json.Marshal(payload)
+}
+
+func appendPersonaToAnthropicSystem(raw json.RawMessage, persona string) (json.RawMessage, error) {
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		return mustJSON(asString + "\n\n" + persona), nil
+	}
+	var blocks []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return nil, err
+	}
+	blocks = append(blocks, map[string]json.RawMessage{
+		"type": json.RawMessage(`"text"`),
+		"text": mustJSON(persona),
+	})
+	return json.Marshal(blocks)
+}
+
 func (a *Adapter) ForwardResponse(ctx context.Context, request provider.ResponseResourceRequest) (*provider.Response, error) {
 	if request.NormalizedMetadata != nil {
 		*request.NormalizedMetadata = provider.NormalizedRequestMetadata{}
@@ -235,6 +399,21 @@ func (a *Adapter) ForwardResponse(ctx context.Context, request provider.Response
 	compactionRequested := false
 	if request.NormalizeBody {
 		if request.Operation == conversation.OperationChat || request.Operation == conversation.OperationMessages {
+			// Inject the gateway-level persona before protocol conversion so the
+			// persona becomes the upstream instructions block for IDE clients that
+			// do not send their own system prompt.
+			if request.Operation == conversation.OperationChat {
+				if injected, injectErr := a.injectPersonaIntoChatRequest(body); injectErr == nil {
+					body = injected
+				}
+			} else {
+				if injected, injectErr := a.injectPersonaIntoMessagesRequest(body); injectErr == nil {
+					body = injected
+				}
+			}
+			// Ensure a default max_tokens budget when the client omitted one so
+			// high-effort reasoning models do not inherit a tiny upstream default.
+			body = ensureChatMaxOutputTokens(body)
 			body, conversationOptions, err = conversation.ConvertRequestWithOptions(body, request.Model, request.Operation)
 			if err == nil && conversationOptions.ReasoningEffortSet && request.NormalizedMetadata != nil {
 				request.NormalizedMetadata.ReasoningEffort = conversationOptions.ReasoningEffort

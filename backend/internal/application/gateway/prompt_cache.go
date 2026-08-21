@@ -12,7 +12,7 @@ import (
 	modeldomain "github.com/chenyme/grok2api/backend/internal/domain/model"
 )
 
-const buildSessionIdentityVersion = "v3"
+const buildSessionIdentityVersion = "v4"
 
 type buildSessionIdentity struct {
 	// upstreamID is sent as prompt_cache_key and x-grok-conv-id and must remain stable across turns.
@@ -54,6 +54,9 @@ func resolveBuildSessionIdentity(clientKeyID uint64, provider accountdomain.Prov
 		}
 	}
 	// Fall back to a message-prefix hash to keep account affinity and session IDs stable without client session signals.
+	// The version bump (v3 -> v4) invalidates all prior soft sessions so conversations that previously collided on
+	// similar opening text (and caused the "repeats the same closing phrase on every new chat" symptom) get a fresh
+	// upstream conversation. Stable across retries because the body is identical within one request.
 	system, firstUser, _ := extractMessageAnchors(body)
 	firstUser = truncateAnchor(firstUser, 200)
 	system = truncateAnchor(system, 100)

@@ -112,7 +112,10 @@ func TestNormalizeBuildChatRequestsVisibleReasoningSummary(t *testing.T) {
 		wantObject  bool
 	}{
 		{name: "Chat model default", operation: conversation.OperationChat, body: `{"input":"hello"}`, wantSummary: "concise", wantObject: true},
-		{name: "Chat explicit effort", operation: conversation.OperationChat, body: `{"input":"hello","reasoning":{"effort":"high"}}`, wantSummary: "concise", wantEffort: "high", wantObject: true},
+		{name: "Chat explicit low effort", operation: conversation.OperationChat, body: `{"input":"hello","reasoning":{"effort":"low"}}`, wantSummary: "concise", wantEffort: "low", wantObject: true},
+		{name: "Chat explicit medium effort", operation: conversation.OperationChat, body: `{"input":"hello","reasoning":{"effort":"medium"}}`, wantSummary: "concise", wantEffort: "medium", wantObject: true},
+		{name: "Chat explicit high effort keeps detailed", operation: conversation.OperationChat, body: `{"input":"hello","reasoning":{"effort":"high"}}`, wantSummary: "detailed", wantEffort: "high", wantObject: true},
+		{name: "Chat explicit xhigh effort keeps detailed", operation: conversation.OperationChat, body: `{"input":"hello","reasoning":{"effort":"xhigh"}}`, wantSummary: "detailed", wantEffort: "xhigh", wantObject: true},
 		{name: "Chat explicit summary", operation: conversation.OperationChat, body: `{"input":"hello","reasoning":{"effort":"high","summary":"detailed"}}`, wantSummary: "detailed", wantEffort: "high", wantObject: true},
 		{name: "native Responses remains caller controlled", operation: conversation.OperationResponses, body: `{"input":"hello"}`},
 	}

@@ -128,7 +128,19 @@ func TestConvertChatToolImageResultToMultimodalFunctionOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := payload["input"].([]any)
-	output := input[1].(map[string]any)["output"].([]any)
+	// No persona injection is performed, but locate the tool output by type
+	// to remain robust against future input ordering changes.
+	var output []any
+	for _, item := range input {
+		entry, _ := item.(map[string]any)
+		if entry["type"] == "function_call_output" {
+			output = entry["output"].([]any)
+			break
+		}
+	}
+	if output == nil {
+		t.Fatalf("no function_call_output in input: %#v", input)
+	}
 	if len(output) != 2 {
 		t.Fatalf("tool output = %#v", output)
 	}
@@ -154,7 +166,19 @@ func TestConvertChatKeepsNonMultimodalToolJSONAsText(t *testing.T) {
 	if err := json.Unmarshal(converted, &payload); err != nil {
 		t.Fatal(err)
 	}
-	output := payload["input"].([]any)[0].(map[string]any)["output"]
+	// No persona injection is performed, but locate the tool output entry by
+	// type to remain robust against future input ordering changes.
+	var output any
+	for _, item := range payload["input"].([]any) {
+		entry, _ := item.(map[string]any)
+		if entry["type"] == "function_call_output" {
+			output = entry["output"]
+			break
+		}
+	}
+	if output == nil {
+		t.Fatalf("no function_call_output in input: %#v", payload["input"])
+	}
 	if output != `[{"name":"value","value":1}]` {
 		t.Fatalf("tool output = %#v", output)
 	}
@@ -230,7 +254,19 @@ func TestConvertChatPreservesOpaqueToolArgumentsHistory(t *testing.T) {
 	if err := json.Unmarshal(converted, &payload); err != nil {
 		t.Fatal(err)
 	}
-	call := payload["input"].([]any)[0].(map[string]any)
+	// No persona injection is performed, but locate the function call entry by
+	// type to remain robust against future input ordering changes.
+	var call map[string]any
+	for _, item := range payload["input"].([]any) {
+		entry, _ := item.(map[string]any)
+		if entry["type"] == "function_call" {
+			call = entry
+			break
+		}
+	}
+	if call == nil {
+		t.Fatalf("no function_call in input: %#v", payload["input"])
+	}
 	if call["arguments"] != "{partial" {
 		t.Fatalf("function call = %#v", call)
 	}

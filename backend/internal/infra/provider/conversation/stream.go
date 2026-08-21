@@ -13,6 +13,17 @@ import (
 const (
 	maxDeferredSearchTextBytes       = 8 << 20
 	maxDeferredReasoningSummaryBytes = 8 << 20
+
+	// contentDoomLoopThreshold kills the stream when the model emits the exact
+	// same visible-content delta this many times in a row. Kept low because a
+	// true content loop burns real quota and client context.
+	contentDoomLoopThreshold = 32
+
+	// reasoningDoomLoopThreshold is higher than the content one: high/xhigh
+	// effort models legitimately repeat the same reasoning token ("so", "hmm",
+	// "wait", bullet markers) dozens of times during deep thinking. A low
+	// threshold killed valid xhigh responses prematurely.
+	reasoningDoomLoopThreshold = 256
 )
 
 // ConvertResponseStream 将 Responses SSE 转换为 Chat Completions 或 Anthropic Messages SSE。
@@ -68,9 +79,15 @@ type streamConverter struct {
 	stopSequence      string
 	refused           bool
 	// doomLoop detection: track repeated identical deltas to detect model
-	// output loops before they exhaust the response budget.
-	lastDelta      string
-	sameDeltaCount int
+	// output loops before they exhaust the response budget. Content and
+	// reasoning keep separate counters because high/xhigh effort models
+	// legitimately repeat similar reasoning tokens ("so", "hmm", "wait")
+	// many times during deep thinking; a single shared counter killed valid
+	// xhigh responses prematurely.
+	lastContentDelta   string
+	contentRepeatCount int
+	lastReasonDelta    string
+	reasonRepeatCount  int
 }
 
 type streamTool struct {
@@ -406,15 +423,16 @@ func (c *streamConverter) reasoningSummaryDelta(itemID, delta string) error {
 	if delta == "" || !c.reasoningOutputEnabled() {
 		return nil
 	}
-	// Doom loop detection for buffered reasoning summaries.
-	if delta == c.lastDelta {
-		c.sameDeltaCount++
-		if c.sameDeltaCount >= 16 {
-			return fmt.Errorf("model reasoning summary loop detected (repeated delta %d times)", c.sameDeltaCount)
+	// Doom loop detection for buffered reasoning summaries. Threshold is higher
+	// than the content one because reasoning legitimately repeats tokens.
+	if delta == c.lastReasonDelta {
+		c.reasonRepeatCount++
+		if c.reasonRepeatCount >= reasoningDoomLoopThreshold {
+			return fmt.Errorf("model reasoning summary loop detected (repeated delta %d times)", c.reasonRepeatCount)
 		}
 	} else {
-		c.lastDelta = delta
-		c.sameDeltaCount = 0
+		c.lastReasonDelta = delta
+		c.reasonRepeatCount = 0
 	}
 	_, state := c.ensureReasoningState(itemID)
 	if state.done || state.rawSeen {
@@ -447,15 +465,17 @@ func (c *streamConverter) reasoningTextDelta(itemID, delta string) error {
 }
 
 func (c *streamConverter) emitReasoningDelta(delta string) error {
-	// Doom loop detection for reasoning content too.
-	if delta != "" && delta == c.lastDelta {
-		c.sameDeltaCount++
-		if c.sameDeltaCount >= 16 {
-			return fmt.Errorf("model reasoning loop detected (repeated delta %d times)", c.sameDeltaCount)
+	// Doom loop detection for reasoning content too. Same elevated threshold
+	// as summaries: high-effort reasoning reuses tokens far more often than
+	// visible output does.
+	if delta != "" && delta == c.lastReasonDelta {
+		c.reasonRepeatCount++
+		if c.reasonRepeatCount >= reasoningDoomLoopThreshold {
+			return fmt.Errorf("model reasoning loop detected (repeated delta %d times)", c.reasonRepeatCount)
 		}
 	} else {
-		c.lastDelta = delta
-		c.sameDeltaCount = 0
+		c.lastReasonDelta = delta
+		c.reasonRepeatCount = 0
 	}
 	if c.operation == OperationChat {
 		return c.chatDelta(map[string]any{"reasoning_content": delta})
@@ -576,17 +596,19 @@ func (c *streamConverter) start() error {
 }
 
 func (c *streamConverter) textDelta(delta string) error {
-	// Doom loop detection: if the model repeats the exact same delta more than
-	// a threshold of times, terminate the stream with an error instead of
-	// letting the loop exhaust the account quota and the client context window.
-	if delta != "" && delta == c.lastDelta {
-		c.sameDeltaCount++
-		if c.sameDeltaCount >= 16 {
-			return fmt.Errorf("model output loop detected (repeated delta %d times)", c.sameDeltaCount)
+	// Doom loop detection: if the model repeats the exact same content delta
+	// more than a threshold of times, terminate the stream with an error
+	// instead of letting the loop exhaust the account quota and the client
+	// context window. Reasoning deltas have their own counter because deep
+	// thinking legitimately reuses tokens.
+	if delta != "" && delta == c.lastContentDelta {
+		c.contentRepeatCount++
+		if c.contentRepeatCount >= contentDoomLoopThreshold {
+			return fmt.Errorf("model output loop detected (repeated content delta %d times)", c.contentRepeatCount)
 		}
 	} else {
-		c.lastDelta = delta
-		c.sameDeltaCount = 0
+		c.lastContentDelta = delta
+		c.contentRepeatCount = 0
 	}
 	if c.operation == OperationChat {
 		return c.textDeltaChat(delta)

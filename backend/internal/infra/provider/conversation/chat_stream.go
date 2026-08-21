@@ -8,7 +8,7 @@ import (
 func (c *streamConverter) startChat() error {
 	return c.writeData(map[string]any{
 		"id": strings.Replace(c.id, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk",
-		"created": c.created, "model": c.model,
+		"created": c.created, "model": c.model, "system_fingerprint": systemFingerprint(c.model),
 		"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"role": "assistant"}, "finish_reason": nil}},
 	})
 }
@@ -29,7 +29,7 @@ func (c *streamConverter) chatDelta(delta map[string]any) error {
 		return err
 	}
 	return c.writeData(map[string]any{
-		"id": strings.Replace(c.id, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": c.created, "model": c.model,
+		"id": strings.Replace(c.id, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": c.created, "model": c.model, "system_fingerprint": systemFingerprint(c.model),
 		"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": nil}},
 	})
 }
@@ -112,7 +112,7 @@ func (c *streamConverter) doneChat(status string) error {
 		finishReason = "length"
 	}
 	if err := c.writeData(map[string]any{
-		"id": strings.Replace(c.id, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": c.created, "model": c.model,
+		"id": strings.Replace(c.id, "resp_", "chatcmpl_", 1), "object": "chat.completion.chunk", "created": c.created, "model": c.model, "system_fingerprint": systemFingerprint(c.model),
 		"choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": finishReason}}, "usage": chatUsage(c.usage),
 	}); err != nil {
 		return err

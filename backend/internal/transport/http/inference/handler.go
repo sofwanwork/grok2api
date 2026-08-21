@@ -378,14 +378,21 @@ func enrichModelListItems(items []modelListItem) {
 
 // modelMaxOutputTokens returns a conservative completion budget per model.
 // Agents use this to bound max_tokens without exceeding the upstream limit.
+// Effort-suffixed aliases (grok-4.6-xhigh) inherit the base model's budget.
 func modelMaxOutputTokens(id string, contextWindow int) int {
 	if limit, ok := grokMaxOutputTokens[id]; ok {
 		return limit
 	}
-	// Default: 10% of the context window, capped at 16k, floored at 4k.
+	if base, _, ok := modeldomain.ParseReasoningModelAlias(id); ok {
+		if limit, ok := grokMaxOutputTokens[base]; ok {
+			return limit
+		}
+		id = base
+	}
+	// Default: 10% of the context window, capped at 64k, floored at 4k.
 	limit := contextWindow / 10
-	if limit > 16384 {
-		limit = 16384
+	if limit > 65536 {
+		limit = 65536
 	}
 	if limit < 4096 {
 		limit = 4096
@@ -395,14 +402,16 @@ func modelMaxOutputTokens(id string, contextWindow int) int {
 
 // grokMaxOutputTokens pins explicit completion budgets where the upstream
 // advertised limit is known; everything else falls back to the heuristic.
+// grok-4.5/4.6 are reasoning-capable models with verified 64k output capacity;
+// capping at 16k starved xhigh effort by counting reasoning against content.
 var grokMaxOutputTokens = map[string]int{
-	"grok-4.5":                     16384,
-	"grok-4.6":                     16384,
-	"grok-4.3":                     16384,
-	"grok-build-0.1":               16384,
-	"grok-4.20-0309-reasoning":     16384,
-	"grok-4.20-0309-non-reasoning": 16384,
-	"grok-4.20-multi-agent-0309":   16384,
+	"grok-4.5":                     65536,
+	"grok-4.6":                     65536,
+	"grok-4.3":                     65536,
+	"grok-build-0.1":               65536,
+	"grok-4.20-0309-reasoning":     65536,
+	"grok-4.20-0309-non-reasoning": 65536,
+	"grok-4.20-multi-agent-0309":   65536,
 	"grok-3-mini":                  8192,
 	"grok-3-mini-fast":             8192,
 	"grok-composer-2.5-fast":       8192,
