@@ -15,9 +15,13 @@ const (
 	maxDeferredReasoningSummaryBytes = 8 << 20
 
 	// contentDoomLoopThreshold kills the stream when the model emits the exact
-	// same visible-content delta this many times in a row. Kept low because a
-	// true content loop burns real quota and client context.
-	contentDoomLoopThreshold = 32
+	// same visible-content delta this many times in a row. A true content loop
+	// burns real quota and client context, so this stays far below the
+	// reasoning ceiling. It must still clear legitimate repetition in visible
+	// output: markdown rules and ASCII table borders stream as long runs of an
+	// identical single-character delta ("-", "=", "|"), and wide tables with
+	// empty cells repeat the same separator delta.
+	contentDoomLoopThreshold = 128
 
 	// reasoningDoomLoopThreshold is higher than the content one: high/xhigh
 	// effort models legitimately repeat the same reasoning token ("so", "hmm",
