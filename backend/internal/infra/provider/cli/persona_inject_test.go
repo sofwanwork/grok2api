@@ -196,27 +196,94 @@ func TestInjectPersonaIntoMessagesRequestFillsAbsentOrEmptySystem(t *testing.T) 
 	}
 }
 
-// KNOWN GAP, documented rather than asserted as desired behaviour.
-//
-// isEmptyJSON (normalize.go) treats only ``, `null` and `""` as empty, so an
-// explicit empty block array `"system": []` counts as a client-supplied system
-// field. The persona is therefore skipped and upstream receives no instructions
-// at all. Anthropic SDKs that always emit the key and let callers append blocks
-// hit this: the request is silently persona-less.
-//
-// This test pins the current behaviour so the gap is visible and a future fix
-// is a deliberate, reviewed change. To fix, extend isEmptyJSON to recognise
-// `[]` and `{}` — but that helper is shared with other normalisation paths, so
-// the blast radius needs checking first.
-func TestInjectPersonaIntoMessagesRequestSkipsPersonaForEmptyBlockArray(t *testing.T) {
-	adapter := NewAdapter(Config{PersonaSystemPrompt: testPersona}, nil)
-	injected, err := adapter.injectPersonaIntoMessagesRequest(
-		[]byte(`{"model":"grok-4.6","system":[],"messages":[]}`))
-	if err != nil {
-		t.Fatal(err)
+// A system field that carries no actual instructions must not suppress the
+// persona. Anthropic allows system to be a string or a block array, so
+// "present" is not the same as "has content": an SDK that always emits the key
+// and lets callers append blocks would otherwise reach upstream with no
+// instructions at all — neither the client's nor the persona's.
+func TestInjectPersonaIntoMessagesRequestFillsContentlessSystemField(t *testing.T) {
+	for _, testCase := range []struct{ name, body string }{
+		{"empty block array", `{"model":"grok-4.6","system":[],"messages":[]}`},
+		{"whitespace string", `{"model":"grok-4.6","system":"   ","messages":[]}`},
+		{"newline string", `{"model":"grok-4.6","system":"\n\t","messages":[]}`},
+		{"blank text block", `{"model":"grok-4.6","system":[{"type":"text","text":""}],"messages":[]}`},
+		{"whitespace text block", `{"model":"grok-4.6","system":[{"type":"text","text":"  "}],"messages":[]}`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			adapter := NewAdapter(Config{PersonaSystemPrompt: testPersona}, nil)
+			injected, err := adapter.injectPersonaIntoMessagesRequest([]byte(testCase.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(injected), testPersona) {
+				t.Fatalf("request reached upstream with no instructions at all: %s", injected)
+			}
+		})
 	}
-	if strings.Contains(string(injected), testPersona) {
-		t.Fatal("persona now fills an empty block array: update this test and remove the KNOWN GAP note")
+}
+
+// Append mode must also treat a contentless system field as absent: appending
+// the persona to nothing would leave an empty leading block or a stray
+// separator.
+func TestInjectPersonaIntoMessagesRequestAppendModeHandlesContentlessSystem(t *testing.T) {
+	for _, testCase := range []struct{ name, body string }{
+		{"empty block array", `{"model":"grok-4.6","system":[],"messages":[]}`},
+		{"whitespace string", `{"model":"grok-4.6","system":"   ","messages":[]}`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			adapter := NewAdapter(Config{
+				PersonaSystemPrompt:           testPersona,
+				PersonaAppendWithClientSystem: true,
+			}, nil)
+			injected, err := adapter.injectPersonaIntoMessagesRequest([]byte(testCase.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(injected, &payload); err != nil {
+				t.Fatalf("injected body is not valid JSON: %v\n%s", err, injected)
+			}
+			// The persona replaces the contentless field outright rather than
+			// being appended to emptiness.
+			if payload["system"] != testPersona {
+				t.Fatalf("system = %#v, want the persona alone", payload["system"])
+			}
+		})
+	}
+}
+
+// The contentless check must not overreach. A block this gateway does not
+// introspect still counts as client content, so the persona must not overwrite
+// it: a false "empty" verdict would discard real instructions.
+func TestHasAnthropicSystemContentTreatsUnknownShapesAsContent(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"absent", ``, false},
+		{"null", `null`, false},
+		{"empty string", `""`, false},
+		{"whitespace string", `"  \n"`, false},
+		{"empty array", `[]`, false},
+		{"blank text block", `[{"type":"text","text":""}]`, false},
+		{"real string", `"client rules"`, true},
+		{"real text block", `[{"type":"text","text":"client rules"}]`, true},
+		{"mixed blank and real", `[{"type":"text","text":""},{"type":"text","text":"rules"}]`, true},
+		{"non-text block", `[{"type":"image","source":{"data":"..."}}]`, true},
+		{"cache control only", `[{"type":"text","text":"","cache_control":{"type":"ephemeral"}}]`, false},
+		{"object shape", `{"type":"text"}`, true},
+		{"number shape", `42`, true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			var raw json.RawMessage
+			if testCase.raw != "" {
+				raw = json.RawMessage(testCase.raw)
+			}
+			if got := hasAnthropicSystemContent(raw); got != testCase.want {
+				t.Fatalf("hasAnthropicSystemContent(%s) = %v, want %v", testCase.raw, got, testCase.want)
+			}
+		})
 	}
 }
 

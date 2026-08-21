@@ -62,16 +62,27 @@ Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **62 pake
 | 6+7. Persona | `cli/persona_inject_test.go`, `config/persona_test.go` |
 | 8. reasoning_opaque replay | `conversation/reasoning_replay_test.go` |
 
-### ⚠️ KNOWN GAP: persona dilangkau bila `"system": []`
+### ✅ DIBAIKI: persona dilangkau bila `system` ada tapi kosong
 
-`isEmptyJSON` (`cli/normalize.go`) anggap hanya ``, `null`, `""` sebagai kosong — **bukan** `[]`.
-Jadi bila client Anthropic hantar `"system": []` (array blok kosong), ia dikira "client dah bagi system prompt",
-persona dilangkau, dan request sampai ke upstream **tanpa arahan sama sekali**.
+**Gejala:** request `/v1/messages` sampai ke upstream **tanpa arahan sama sekali** — bukan persona AKIF,
+bukan arahan client. Jawapan jadi generik tanpa sebab yang jelas.
 
-SDK Anthropic yang sentiasa hantar key `system` dan biar caller append blok akan terkena.
+**Punca:** pintu persona tanya *"adakah field `system` wujud?"* dan bukan *"adakah ia ada isi?"*.
+`isEmptyJSON` (`cli/normalize.go`) hanya kenal ``, `null`, `""` sebagai kosong. Field `system` Anthropic
+boleh jadi string **atau** array blok, jadi 5 bentuk ini semua tersalah dikira "client dah bagi arahan":
 
-Dipin sebagai ujian (`TestInjectPersonaIntoMessagesRequestSkipsPersonaForEmptyBlockArray`), **belum dibaiki** —
-sebab `isEmptyJSON` dikongsi dengan laluan normalisasi lain, jadi kena periksa blast radius dulu.
+`[]` · `"   "` · `"\n\t"` · `[{"type":"text","text":""}]` · `[{"type":"text","text":"  "}]`
+
+**Pembetulan:** helper baru `hasAnthropicSystemContent()` dalam `cli/adapter.go`, dipakai dalam
+`injectPersonaIntoMessagesRequest` **sahaja**.
+
+**Sebab tak ubah `isEmptyJSON`:** helper tu dipakai **43 tempat dalam 9 fail** (`tools`, `include`, `input`,
+`max_tokens`, `response_format`, ...). Menambah `[]` sebagai "kosong" di situ akan ubah tingkah laku
+semua tempat tu sekali gus — contohnya `"tools": []` jadi "tiada tools". Blast radius helper baru: **1 fungsi**.
+
+Ujian: `TestInjectPersonaIntoMessagesRequestFillsContentlessSystemField` (5 varian),
+`TestHasAnthropicSystemContentTreatsUnknownShapesAsContent` (13 varian — termasuk blok imej dan
+`cache_control` yang mesti dikira ada/tiada isi dengan betul).
 
 ### Nota: alias effort hanya diwarisi kalau model sokong level tu
 

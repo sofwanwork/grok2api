@@ -350,12 +350,15 @@ func (a *Adapter) injectPersonaIntoMessagesRequest(body []byte) ([]byte, error) 
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return body, nil
 	}
-	// Detect a client-supplied system field (string or block array).
-	systemRaw, hasSystemField := payload["system"]
-	if hasSystemField && !isEmptyJSON(systemRaw) && !appendWithClient {
+	// Detect a client-supplied system field (string or block array). Presence
+	// alone is not enough: a field that carries no instructions must not
+	// suppress the persona, or the request reaches upstream with nothing at all.
+	systemRaw := payload["system"]
+	hasSystemField := hasAnthropicSystemContent(systemRaw)
+	if hasSystemField && !appendWithClient {
 		return body, nil
 	}
-	if hasSystemField && !isEmptyJSON(systemRaw) && appendWithClient {
+	if hasSystemField && appendWithClient {
 		// Append the persona to the existing system block(s).
 		combined, err := appendPersonaToAnthropicSystem(systemRaw, persona)
 		if err != nil {
@@ -366,6 +369,41 @@ func (a *Adapter) injectPersonaIntoMessagesRequest(body []byte) ([]byte, error) 
 	}
 	payload["system"] = mustJSON(persona)
 	return json.Marshal(payload)
+}
+
+// hasAnthropicSystemContent reports whether an Anthropic `system` field carries
+// actual instructions. The field is either a string or a block array, so
+// emptiness has several shapes: absent, null, blank string, empty array, or an
+// array whose text blocks are all blank.
+//
+// Deliberately separate from isEmptyJSON: that helper is shared by ~40 other
+// normalisation call sites where a JSON array carries different meaning (an
+// empty "tools" array is not the same as absent tools), so widening it would
+// change behaviour far outside the persona path.
+func hasAnthropicSystemContent(raw json.RawMessage) bool {
+	if isEmptyJSON(raw) {
+		return false
+	}
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		return strings.TrimSpace(asString) != ""
+	}
+	var blocks []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		// An unrecognised shape is left to the client: treat it as content so
+		// the persona does not silently overwrite something meaningful.
+		return true
+	}
+	for _, block := range blocks {
+		if strings.TrimSpace(stringFieldRaw(block["text"])) != "" {
+			return true
+		}
+		// Non-text blocks carry content this gateway does not introspect.
+		if blockType := strings.TrimSpace(stringFieldRaw(block["type"])); blockType != "" && blockType != "text" {
+			return true
+		}
+	}
+	return false
 }
 
 func appendPersonaToAnthropicSystem(raw json.RawMessage, persona string) (json.RawMessage, error) {
