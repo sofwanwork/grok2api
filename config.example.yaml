@@ -1,132 +1,132 @@
-# 配置标记：
-# - [必须修改] 首次启动前必须替换，否则服务会拒绝启动或存在安全风险。
-# - [按需修改] 仅在部署方式发生变化时调整。
-# - [通常不要修改] 已采用推荐默认值。
+﻿# Configuration markers:
+# - [MUST CHANGE] Must be replaced before first startup, otherwise the service refuses to start or poses a security risk.
+# - [CHANGE AS NEEDED] Adjust only when the deployment topology changes.
+# - [USUALLY DO NOT CHANGE] Recommended defaults are already applied.
 
 server:
-  # [通常不要修改] Docker 镜像会通过启动参数覆盖为 0.0.0.0:8000。
+  # [USUALLY DO NOT CHANGE] The Docker image overrides this to 0.0.0.0:8000 via startup flags.
   listen: "127.0.0.1:8000"
-  # [通常不要修改] 单次请求体上限 32 MiB。
+  # [USUALLY DO NOT CHANGE] Per-request body limit is 32 MiB.
   maxBodyBytes: 33554432
-  # [按需修改] 仅列出会覆盖 X-Forwarded-For / X-Real-IP 的可信反向代理。
-  # 留空时忽略所有转发头并记录直连对端 IP；不要使用 0.0.0.0/0 或 ::/0。
-  # Docker/Nginx 示例：["127.0.0.1", "172.16.0.0/12"]
+  # [CHANGE AS NEEDED] List only trusted reverse proxies allowed to override X-Forwarded-For / X-Real-IP.
+  # When empty, all forwarded headers are ignored and the direct peer IP is recorded; never use 0.0.0.0/0 or ::/0.
+  # Docker/Nginx example:["127.0.0.1", "172.16.0.0/12"]
   trustedProxies: []
-  # [通常不要修改] 仅限制客户端上传完整请求体的时间，不限制推理或流式响应。
+  # [USUALLY DO NOT CHANGE] Limits only the time for the client to upload the full request body; does not limit inference or streaming responses.
   readTimeout: 15m
-  # [通常不要修改] 管理 API 和非流式请求的最长生命周期。
+  # [USUALLY DO NOT CHANGE] Maximum lifetime of admin API and non-streaming requests.
   requestTimeout: 2h
-  # [按需修改] 仅在本地或受信任环境开启，生产环境保持 false。
+  # [CHANGE AS NEEDED] Enable only locally or in trusted environments; keep false in production.
   swaggerEnabled: false
 
 auth:
-  # [通常不要修改] 管理端访问与刷新令牌有效期。
+  # [USUALLY DO NOT CHANGE] Admin access and refresh token lifetimes.
   accessTokenTTL: 15m
   refreshTokenTTL: 720h
-  # [按需修改] 外部地址使用 HTTPS 时必须设为 true。
+  # [CHANGE AS NEEDED] Must be true when the external address uses HTTPS.
   secureCookies: false
 
 secrets:
-  # [必须修改] 至少 32 个字符。快速生成：openssl rand -hex 32
+  # [MUST CHANGE] At least 32 characters. Quick generate: openssl rand -hex 32
   jwtSecret: "replace-with-at-least-32-characters"
-  # [必须修改] Base64 编码的 32 字节密钥。快速生成：openssl rand -base64 32
-  # 首次写入账号后必须长期保留，后续更换会导致已有凭据无法解密。
+  # [MUST CHANGE] Base64-encoded 32-byte key. Quick generate: openssl rand -base64 32
+  # Must be retained long-term after the first account is written; changing it later makes existing credentials undecryptable.
   credentialEncryptionKey: "replace-with-base64-key"
 
 bootstrapAdmin:
-  # [按需修改] 仅在数据库中没有管理员时使用。
+  # [CHANGE AS NEEDED] Used only when no admin exists in the database.
   username: "admin"
-  # [必须修改] 首次启动前替换为强密码；管理员创建成功后建议删除本段。
+  # [MUST CHANGE] Replace with a strong password before first startup; remove this section after the admin is created.
   password: "replace-with-a-strong-password"
 
 frontend:
-  # [通常不要修改] Go 服务同源托管的前端构建目录。
+  # [USUALLY DO NOT CHANGE] Frontend build directory served same-origin by the Go service.
   staticPath: "./frontend/dist"
 
 database:
-  # [按需修改] 单实例使用 sqlite；多实例改为 postgres。
+  # [CHANGE AS NEEDED] Use sqlite for a single instance; switch to postgres for multiple instances.
   driver: sqlite # sqlite | postgres
   sqlite:
-    # [通常不要修改] 相对路径以本配置文件所在目录为基准。
+    # [USUALLY DO NOT CHANGE] Relative paths resolve against this config file directory.
     path: "./data/backend.db"
   postgres:
-    # [必须修改：仅 driver=postgres] 填写真实 DSN，并按需启用 sslmode。
-    # 也可通过 GROK2API_DATABASE_URL 注入；非空环境变量会覆盖本字段并自动启用 postgres。
+    # [MUST CHANGE: only driver=postgres] Provide the real DSN, and enable sslmode as needed.
+    # Can also be injected via GROK2API_DATABASE_URL; a non-empty env var overrides this field and enables postgres automatically.
     dsn: "postgres://user:password@127.0.0.1:5432/grok2api?sslmode=disable"
-    # [按需修改] 根据数据库连接容量调整。
+    # [CHANGE AS NEEDED] Adjust based on database connection capacity.
     maxOpenConns: 50
     maxIdleConns: 10
 
 runtimeStore:
-  # [按需修改] 单实例使用 memory；多实例改为 redis。
+  # [CHANGE AS NEEDED] Use memory for a single instance; switch to redis for multiple instances.
   driver: memory # memory | redis
   redis:
-    # [必须修改：仅 driver=redis] 填写 Redis 连接信息。
+    # [MUST CHANGE: only driver=redis] Provide the Redis connection details.
     address: "127.0.0.1:6379"
     username: ""
     password: ""
     database: 0
-    # [通常不要修改] 同一 Redis 中部署多个实例组时才需要更换。
+    # [USUALLY DO NOT CHANGE] Only change when multiple instance groups share one Redis.
     keyPrefix: "grok2api:"
-    # [按需修改] Redis 使用 TLS 时设为 true。
+    # [CHANGE AS NEEDED] Set true when Redis uses TLS.
     tls: false
 
 deployment:
-  # [通常不要修改] 单实例保持 1；多实例必须同时使用 PostgreSQL、Redis 和共享媒体目录。
+  # [USUALLY DO NOT CHANGE] Keep 1 for a single instance; multiple instances must use PostgreSQL, Redis, and a shared media directory together.
   replicas: 1
-  # [必须修改：仅 replicas>1] 每个实例使用不同的稳定标识。
+  # [MUST CHANGE: only replicas>1] Each instance uses a distinct stable identifier.
   instanceID: ""
-  # [必须修改：仅 replicas>1] 同一实例组和共享媒体目录必须使用相同标识。
+  # [MUST CHANGE: only replicas>1] Instances in the same group sharing a media directory must use the same identifier.
   clusterID: "grok2api"
-  # [必须修改：仅 replicas>1] 确认 media.local.path 已挂载为所有实例共享且可读写的存储。
+  # [MUST CHANGE: only replicas>1] Confirm media.local.path is mounted as shared read-write storage for all instances.
   sharedMedia: false
 
 media:
-  # [通常不要修改] 当前仅支持 local；容量和清理策略在管理端设置。
+  # [USUALLY DO NOT CHANGE] Only local is supported; capacity and cleanup policies are set in the admin UI.
   driver: local
   local:
-    # [按需修改] 图片二进制目录；数据库只保存资源元数据。
+    # [CHANGE AS NEEDED] Image binary directory; the database stores only asset metadata.
     path: "./data/media"
 
 routing:
-  # [按需修改] 服务端推理回放缓存：多轮时自动补回客户端未携带的 encrypted_content。
+  # [CHANGE AS NEEDED] Server-side reasoning replay cache: automatically re-attaches encrypted_content the client did not send on later turns.
   reasoningReplayEnabled: true
   reasoningReplayTTL: 1h
   reasoningReplayMaxEntries: 10240
-  # [按需修改] 按账号隔离上游连接池，适合外部 L4/连接哈希负载均衡；会增加连接数、TLS 握手和文件描述符占用。
+  # [CHANGE AS NEEDED] Isolate upstream connection pools per account, suited for external L4/connection-hash load balancing; increases connections, TLS handshakes, and file descriptor usage.
   accountIsolatedConnections: false
-  # [通常不要修改] 大账号池默认使用有界分段选号；保留完整池回退、额度优先级和原子并发门禁。
+  # [USUALLY DO NOT CHANGE] Large account pools use bounded segmented selection by default; keeps full-pool fallback, quota priority, and atomic concurrency gating.
   segmentedSelectorEnabled: true
   segmentedSelectorMinCandidates: 3000
   segmentedSelectorWindowSize: 64
-  # [按需修改] 大账号池才需要打开。0 保持历史行为：不健康节点上的 auto 账号会一次性迁走。
-  # 0.05–1 表示每个健康节点最多吸收该比例的活跃账号。环境变量
-  # GROK2API_AUTO_ASSIGN_MAX_NODE_SHARE 可覆盖。
+  # [CHANGE AS NEEDED] Only needed for large account pools. 0 keeps historical behavior: auto accounts on unhealthy nodes migrate all at once.
+  # 0.05–1 means each healthy node absorbs at most that fraction of active accounts. Env var
+  # GROK2API_AUTO_ASSIGN_MAX_NODE_SHARE overrides this.
   autoAssignMaxNodeShare: 0
-  # [按需修改] 大账号池才需要打开。0 保持历史行为：首轮疏散不限额，容量/再均衡仍最多 200 次。
-  # 0.05–1 限制单轮已绑定账号迁移比例。环境变量
-  # GROK2API_AUTO_ASSIGN_MAX_MIGRATION_SHARE 可覆盖。
+  # [CHANGE AS NEEDED] Only needed for large account pools. 0 keeps historical behavior: first-round evacuation is uncapped, capacity/rebalance still capped at 200.
+  # 0.05–1 limits the fraction of bound accounts migrated per round. Env var
+  # GROK2API_AUTO_ASSIGN_MAX_MIGRATION_SHARE overrides this.
   autoAssignMaxMigrationShare: 0
 
 audit:
-  # [通常不要修改] 审计批量写入参数；bufferSize 的修改需重启生效。
+  # [USUALLY DO NOT CHANGE] Audit batch-write parameters; bufferSize changes require a restart.
   bufferSize: 16384
   batchSize: 256
   flushInterval: 250ms
-  # [通常不要修改] 需要调用方确认提交的审计最多聚合等待该时长；建议保持 1ms–50ms。
+  # [USUALLY DO NOT CHANGE] Audits needing caller-committed confirmation wait at most this long to aggregate; keep 1ms-50ms.
   commitDelay: 5ms
-  # [通常不要修改] enforce 会在异常持续超过宽限期后暂停新的推理请求；确认发生数据丢失时会立即暂停。
+  # [USUALLY DO NOT CHANGE] enforce pauses new inference requests after anomalies persist past the grace period; pauses immediately when data loss is confirmed.
   ledgerMode: enforce # observe | enforce
   ledgerFailureThreshold: 1
   ledgerUnhealthyGrace: 10s
   ledgerQueueHighWatermarkPercent: 90
 
-# [按需启用] Grok Build 出口质量守护。仅配置后仍不会自动启动 sidecar；
-# 使用 docker compose --profile quality-guard up -d --build 启动。
+# [ENABLE AS NEEDED] Grok Build egress quality guard. Configuration alone does not start the sidecar;
+# start it with docker compose --profile quality-guard up -d --build.
 qualityGuard:
   enabled: false
-  # 主程序会自动创建并复用不可导出的内部探测身份，无需配置 Client Key。
-  # 使用已验证会输出推理 Token 的 Build 模型时，内置恢复探针还会校验 reasoning Token。
+  # The main program automatically creates and reuses a non-exportable internal probe identity; no Client Key needed.
+  # With a Build model verified to emit reasoning tokens, the built-in recovery probe also validates reasoning tokens.
   model: "grok-4.5"
   mode: hybrid # passive | active | hybrid
   activeInterval: 30m
@@ -141,7 +141,7 @@ qualityGuard:
   maxOutputTokens: 384
   failClosed: false
   minimumGenerationWindow: 1s
-  # 可选的受信任换 IP Webhook；启用时同时填写 rotatableNodeIDs。
+  # Optional trusted IP-rotation webhook; when enabled also fill in rotatableNodeIDs.
   rotationURL: ""
   rotationToken: ""
   rotationTimeout: 45s

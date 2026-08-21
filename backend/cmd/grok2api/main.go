@@ -2,12 +2,12 @@ package main
 
 // @title Grok2API
 // @version 1.0
-// @description Grok Build 与 Grok Web 多账号 API 网关。
+// @description Multi-account API gateway for Grok Build and Grok Web.
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description 使用 "Bearer g2a_xxx_xxx"。
+// @description Use "Bearer g2a_xxx_xxx".
 
 import (
 	"fmt"

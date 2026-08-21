@@ -1,4 +1,4 @@
-basePath: /
+﻿basePath: /
 definitions:
   httpserver.SwaggerChatRequest:
     properties:
@@ -165,7 +165,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Grok Build 与 Grok Web 多账号 API 网关。
+  description: Multi-account API gateway for Grok Build and Grok Web.
   title: Grok2API
   version: "1.0"
 paths:
@@ -180,7 +180,7 @@ paths:
             additionalProperties:
               type: boolean
             type: object
-      summary: 存活检查
+      summary: Liveness check
       tags:
       - System
   /readyz:
@@ -200,16 +200,16 @@ paths:
             additionalProperties:
               type: boolean
             type: object
-      summary: 就绪检查
+      summary: Readiness check
       tags:
       - System
   /v1/chat/completions:
     post:
       consumes:
       - application/json
-      description: 支持 JSON 与 SSE、图片输入和函数工具。
+      description: Supports JSON and SSE, image input, and function tools.
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -230,7 +230,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 创建 Chat Completion
+      summary: Create Chat Completion
       tags:
       - Chat
   /v1/images/edits:
@@ -238,7 +238,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -259,7 +259,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 编辑图片
+      summary: Edit image
       tags:
       - Images
   /v1/images/generations:
@@ -267,7 +267,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -288,7 +288,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 生成图片
+      summary: Generate image
       tags:
       - Images
   /v1/media/images/{asset_id}:
@@ -308,7 +308,7 @@ paths:
             type: file
         "404":
           description: Not Found
-      summary: 获取归档图片
+      summary: Get archived image
       tags:
       - Images
   /v1/messages:
@@ -322,7 +322,7 @@ paths:
         name: anthropic-version
         required: true
         type: string
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -343,7 +343,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 创建 Anthropic Message
+      summary: Create Anthropic Message
       tags:
       - Messages
   /v1/models:
@@ -363,16 +363,16 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 获取可用模型
+      summary: List available models
       tags:
       - Models
   /v1/responses:
     post:
       consumes:
       - application/json
-      description: 支持 JSON 与 SSE；stream=true 时返回 text/event-stream。
+      description: Supports JSON and SSE; returns text/event-stream when stream=true.
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -398,7 +398,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 创建 Response
+      summary: Create Response
       tags:
       - Responses
   /v1/responses/{response_id}:
@@ -424,7 +424,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 删除 Response
+      summary: Delete Response
       tags:
       - Responses
     get:
@@ -449,7 +449,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 查询 Response
+      summary: Get Response
       tags:
       - Responses
   /v1/responses/compact:
@@ -457,7 +457,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -473,7 +473,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 压缩 Response 上下文
+      summary: Compact Response context
       tags:
       - Responses
   /v1/videos/{request_id}:
@@ -499,7 +499,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 查询异步视频任务
+      summary: Get async video task
       tags:
       - Videos
   /v1/videos/edits:
@@ -507,7 +507,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -529,7 +529,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 创建异步视频编辑任务
+      summary: Create async video edit task
       tags:
       - Videos
   /v1/videos/extensions:
@@ -537,7 +537,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -559,7 +559,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 创建异步视频延长任务
+      summary: Create async video extend task
       tags:
       - Videos
   /v1/videos/generations:
@@ -567,7 +567,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: 请求
+      - description: Request
         in: body
         name: request
         required: true
@@ -589,12 +589,12 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: 创建异步视频任务
+      summary: Create async video task
       tags:
       - Videos
 securityDefinitions:
   BearerAuth:
-    description: 使用 "Bearer g2a_xxx_xxx"。
+    description: Use "Bearer g2a_xxx_xxx".
     in: header
     name: Authorization
     type: apiKey
