@@ -115,6 +115,8 @@ audit:
   flushInterval: 250ms
   # [USUALLY DO NOT CHANGE] Audits needing caller-committed confirmation wait at most this long to aggregate; keep 1ms-50ms.
   commitDelay: 5ms
+  # [CHANGE AS NEEDED] Automatically prune request audits and attempt diagnostics older than this many days; 0 keeps them forever.
+  retentionDays: 7
   # [USUALLY DO NOT CHANGE] enforce pauses new inference requests after anomalies persist past the grace period; pauses immediately when data loss is confirmed.
   ledgerMode: enforce # observe | enforce
   ledgerFailureThreshold: 1
@@ -127,7 +129,7 @@ qualityGuard:
   enabled: false
   # The main program automatically creates and reuses a non-exportable internal probe identity; no Client Key needed.
   # With a Build model verified to emit reasoning tokens, the built-in recovery probe also validates reasoning tokens.
-  model: "grok-4.5"
+  model: "grok-4.6"
   mode: hybrid # passive | active | hybrid
   activeInterval: 30m
   passivePollInterval: 5s
@@ -147,15 +149,25 @@ qualityGuard:
   rotationTimeout: 45s
   nodeIDs: []
   rotatableNodeIDs: []
-  # Optional request-path withhold/retry for thinking models. Disabled by default.
-  # Missing thinking with enough visible output is not delivered; another account
-  # is tried (up to maxAttempts). fail_closed returns 503 instead of the last body.
+  # Optional request-path withhold/retry for thinking models.
+  # Observe up to 30s for real reasoning evidence. If upstream has announced
+  # a reasoning item and visible output but proof arrives later, the still-open
+  # stream is released at the deadline without penalizing the account. Empty or
+  # terminal no-thinking responses are still retried.
+  # Missing thinking with enough visible output is not delivered; another
+  # account is tried (up to maxAttempts). fail_closed returns 503 instead
+  # of the last body. Sidecar qualityGuard.enabled stays false until you
+  # start the quality-guard profile.
   requestRetry:
-    enabled: false
+    enabled: true
     maxAttempts: 6
-    holdTimeout: 3s
-    minOutputTokens: 32
+    holdTimeout: 30s
+    minOutputTokens: 8
     onExhausted: fail_closed # fail_open | fail_closed
     # First missing-thinking hit cools the account; a later hit after the
     # cooldown expires disables it.
-    accountCooldown: 24h
+    accountCooldown: 12h
+    # Empty SSE / idle-timeout penalty. Independent of accountCooldown.
+    # Single-account pools should set this lower; toggling enabled does not
+    # clear cooldown — use POST /api/admin/v1/accounts/:id/clear-cooldown.
+    idleAccountCooldown: 15m
