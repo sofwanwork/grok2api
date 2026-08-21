@@ -252,6 +252,92 @@ func TestInjectPersonaIntoMessagesRequestAppendModeHandlesContentlessSystem(t *t
 	}
 }
 
+const testAppendPersona = "Speak as AKIF. Defer to the client's format."
+
+// When the client brought its own instructions, the short append variant is
+// used instead of the full persona. A conversational persona mandates tone
+// ("always add emotion") which competes with an IDE mandating format ("reply
+// with a diff only"); the short variant carries voice without that conflict.
+func TestInjectPersonaUsesAppendVariantWhenClientHasSystem(t *testing.T) {
+	adapter := NewAdapter(Config{
+		PersonaSystemPrompt:           testPersona,
+		PersonaAppendSystemPrompt:     testAppendPersona,
+		PersonaAppendWithClientSystem: true,
+	}, nil)
+
+	t.Run("chat completions", func(t *testing.T) {
+		body := []byte(`{"model":"grok-4.6","messages":[` +
+			`{"role":"system","content":"client rules"},` +
+			`{"role":"user","content":"hi"}]}`)
+		injected, err := adapter.injectPersonaIntoChatRequest(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		contents := systemContents(chatMessages(t, injected))
+		want := []string{"client rules", testAppendPersona}
+		if len(contents) != len(want) || contents[0] != want[0] || contents[1] != want[1] {
+			t.Fatalf("system messages = %#v, want %#v", contents, want)
+		}
+		if strings.Contains(string(injected), testPersona) {
+			t.Fatalf("full persona leaked into an agent request: %s", injected)
+		}
+	})
+
+	t.Run("anthropic messages", func(t *testing.T) {
+		body := []byte(`{"model":"grok-4.6","system":"client rules","messages":[]}`)
+		injected, err := adapter.injectPersonaIntoMessagesRequest(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(injected), testAppendPersona) {
+			t.Fatalf("append variant missing: %s", injected)
+		}
+		if strings.Contains(string(injected), testPersona) {
+			t.Fatalf("full persona leaked into an agent request: %s", injected)
+		}
+		if !strings.Contains(string(injected), "client rules") {
+			t.Fatalf("client instructions lost: %s", injected)
+		}
+	})
+}
+
+// A client with no instructions still gets the full persona: the short variant
+// only applies to the append path.
+func TestInjectPersonaUsesFullVariantWhenClientHasNoSystem(t *testing.T) {
+	adapter := NewAdapter(Config{
+		PersonaSystemPrompt:           testPersona,
+		PersonaAppendSystemPrompt:     testAppendPersona,
+		PersonaAppendWithClientSystem: true,
+	}, nil)
+	injected, err := adapter.injectPersonaIntoChatRequest(
+		[]byte(`{"model":"grok-4.6","messages":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := systemContents(chatMessages(t, injected))
+	if len(contents) != 1 || contents[0] != testPersona {
+		t.Fatalf("expected the full persona, got %#v", contents)
+	}
+}
+
+// An unset append variant falls back to the full persona, so existing configs
+// keep their current behaviour after this change.
+func TestInjectPersonaAppendVariantFallsBackToFullPersona(t *testing.T) {
+	adapter := NewAdapter(Config{
+		PersonaSystemPrompt:           testPersona,
+		PersonaAppendWithClientSystem: true,
+	}, nil)
+	injected, err := adapter.injectPersonaIntoChatRequest([]byte(
+		`{"model":"grok-4.6","messages":[{"role":"system","content":"client rules"},{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := systemContents(chatMessages(t, injected))
+	if len(contents) != 2 || contents[1] != testPersona {
+		t.Fatalf("fallback did not use the full persona: %#v", contents)
+	}
+}
+
 // The contentless check must not overreach. A block this gateway does not
 // introspect still counts as client content, so the persona must not overwrite
 // it: a false "empty" verdict would discard real instructions.

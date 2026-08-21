@@ -27,6 +27,67 @@ func TestPersonaEffectiveSystemPromptRespectsEnabledAndTrims(t *testing.T) {
 	}
 }
 
+// The append variant is a separate persona used when the client already sent
+// instructions, and it falls back to the main one when unset so existing
+// configs are unaffected.
+func TestPersonaEffectiveAppendSystemPromptFallsBackAndRespectsEnabled(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		persona PersonaConfig
+		want    string
+	}{
+		{
+			"dedicated variant wins",
+			PersonaConfig{Enabled: true, SystemPrompt: "full", SystemPromptWhenClientHasSystem: "short"},
+			"short",
+		},
+		{
+			"unset falls back to main",
+			PersonaConfig{Enabled: true, SystemPrompt: "full"},
+			"full",
+		},
+		{
+			"blank falls back to main",
+			PersonaConfig{Enabled: true, SystemPrompt: "full", SystemPromptWhenClientHasSystem: "  \n"},
+			"full",
+		},
+		{
+			"disabled stays empty",
+			PersonaConfig{Enabled: false, SystemPrompt: "full", SystemPromptWhenClientHasSystem: "short"},
+			"",
+		},
+		{
+			"variant is trimmed",
+			PersonaConfig{Enabled: true, SystemPrompt: "full", SystemPromptWhenClientHasSystem: "  short  "},
+			"short",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := testCase.persona.EffectiveAppendSystemPrompt(); got != testCase.want {
+				t.Fatalf("EffectiveAppendSystemPrompt() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+// The append variant is subject to the same size cap and rune-boundary rules as
+// the main persona.
+func TestPersonaSizeLimitedAppendSystemPromptSharesTheCap(t *testing.T) {
+	persona := PersonaConfig{
+		Enabled:                         true,
+		SystemPrompt:                    "full",
+		SystemPromptWhenClientHasSystem: strings.Repeat("🙂", 40),
+		MaxSystemPromptBytes:            10,
+	}
+	got := persona.SizeLimitedAppendSystemPrompt()
+	if len(got) > 10 {
+		t.Fatalf("append variant exceeded the cap: %d bytes", len(got))
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("append variant truncated mid-rune: %q", got)
+	}
+}
+
 // An oversized persona is truncated rather than rejected: a misconfigured value
 // must never take down inference.
 func TestPersonaSizeLimitedSystemPromptTruncatesInsteadOfFailing(t *testing.T) {

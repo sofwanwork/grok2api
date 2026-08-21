@@ -46,6 +46,9 @@ type Config struct {
 	// client's own instructions.
 	PersonaSystemPrompt          string
 	PersonaAppendWithClientSystem bool
+	// PersonaAppendSystemPrompt is used instead of PersonaSystemPrompt when the
+	// client sent its own instructions. Empty falls back to PersonaSystemPrompt.
+	PersonaAppendSystemPrompt string
 }
 
 const (
@@ -228,10 +231,25 @@ func (a *Adapter) config() Config {
 
 // personaPrompt returns the gateway-configured persona system prompt.
 // Empty when the persona is disabled or blank.
+// personaPrompt returns the persona used when the client sent no instructions
+// of its own, plus whether appending is enabled at all.
 func (a *Adapter) personaPrompt() (prompt string, appendWithClient bool) {
 	a.cfgMu.RLock()
 	defer a.cfgMu.RUnlock()
 	return strings.TrimSpace(a.cfg.PersonaSystemPrompt), a.cfg.PersonaAppendWithClientSystem
+}
+
+// personaAppendPrompt returns the persona to append when the client already has
+// its own instructions. A dedicated short variant avoids stacking a
+// conversational persona's mandatory-tone rules on top of an IDE's
+// mandatory-format rules; falling back keeps prior behaviour when unset.
+func (a *Adapter) personaAppendPrompt() string {
+	a.cfgMu.RLock()
+	defer a.cfgMu.RUnlock()
+	if value := strings.TrimSpace(a.cfg.PersonaAppendSystemPrompt); value != "" {
+		return value
+	}
+	return strings.TrimSpace(a.cfg.PersonaSystemPrompt)
 }
 
 func hasSystemOrDeveloper(messages []map[string]json.RawMessage) bool {
@@ -272,8 +290,17 @@ func (a *Adapter) injectPersonaIntoChatRequest(body []byte) ([]byte, error) {
 	if err := json.Unmarshal(messagesRaw, &messages); err != nil {
 		return body, nil
 	}
-	if hasSystemOrDeveloper(messages) && !appendWithClient {
+	clientHasSystem := hasSystemOrDeveloper(messages)
+	if clientHasSystem && !appendWithClient {
 		return body, nil
+	}
+	// When the client brought its own instructions, use the short voice-only
+	// variant so the persona does not compete with the client's format rules.
+	if clientHasSystem {
+		persona = a.personaAppendPrompt()
+		if persona == "" {
+			return body, nil
+		}
 	}
 	// Encode persona as a JSON string value so it becomes the "content" field
 	// of the new system message, not a nested object.
@@ -281,7 +308,7 @@ func (a *Adapter) injectPersonaIntoChatRequest(body []byte) ([]byte, error) {
 	if err != nil {
 		return body, err
 	}
-	if hasSystemOrDeveloper(messages) {
+	if clientHasSystem {
 		insertAt := 0
 		for i := len(messages) - 1; i >= 0; i-- {
 			role := strings.ToLower(strings.TrimSpace(stringFieldRaw(messages[i]["role"])))
@@ -359,6 +386,13 @@ func (a *Adapter) injectPersonaIntoMessagesRequest(body []byte) ([]byte, error) 
 		return body, nil
 	}
 	if hasSystemField && appendWithClient {
+		// Use the short voice-only variant so the persona does not compete with
+		// the client's own format and tool rules.
+		if appendPersona := a.personaAppendPrompt(); appendPersona != "" {
+			persona = appendPersona
+		} else {
+			return body, nil
+		}
 		// Append the persona to the existing system block(s).
 		combined, err := appendPersonaToAnthropicSystem(systemRaw, persona)
 		if err != nil {

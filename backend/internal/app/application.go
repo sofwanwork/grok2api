@@ -215,6 +215,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 		StreamIdleTimeout:     cfg.Provider.Build.StreamIdleTimeout.Value(),
 		PersonaSystemPrompt:          cfg.Persona.SizeLimitedSystemPrompt(),
 		PersonaAppendWithClientSystem: cfg.Persona.AppendWhenClientHasSystem,
+		PersonaAppendSystemPrompt:    cfg.Persona.SizeLimitedAppendSystemPrompt(),
 	}, cipher)
 	cliAdapter.SetLogger(logger)
 	cliAdapter.SetEgress(egressManager)
@@ -395,6 +396,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 			StreamIdleTimeout:     next.Provider.Build.StreamIdleTimeout.Value(),
 			PersonaSystemPrompt:          next.Persona.SizeLimitedSystemPrompt(),
 			PersonaAppendWithClientSystem: next.Persona.AppendWhenClientHasSystem,
+			PersonaAppendSystemPrompt:    next.Persona.SizeLimitedAppendSystemPrompt(),
 		})
 		egressManager.UpdateBuildResponseHeaderTimeout(next.Provider.Build.ResponseHeaderTimeout.Value())
 		egressManager.UpdateBuildStreamIdleTimeout(next.Provider.Build.StreamIdleTimeout.Value())

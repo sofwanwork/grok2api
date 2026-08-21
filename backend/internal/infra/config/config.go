@@ -257,6 +257,18 @@ type PersonaConfig struct {
 	Enabled                   bool   `yaml:"enabled"`
 	SystemPrompt              string `yaml:"systemPrompt"`
 	AppendWhenClientHasSystem bool   `yaml:"appendWhenClientHasSystem"`
+	// SystemPromptWhenClientHasSystem is the persona used when the client sent
+	// its own instructions and AppendWhenClientHasSystem is enabled.
+	//
+	// A conversational persona and an agent persona have conflicting needs. A
+	// chat persona typically mandates tone ("always add emotion", "always flag
+	// security"), which fights an IDE system prompt that mandates format ("reply
+	// with a diff only"). The model then has to choose between two instructions.
+	// This field carries a short voice-only variant that defers to the client's
+	// format and tool rules, so appending stays cheap and non-competing.
+	//
+	// Empty means fall back to SystemPrompt, preserving existing behaviour.
+	SystemPromptWhenClientHasSystem string `yaml:"systemPromptWhenClientHasSystem"`
 	// MaxSystemPromptBytes caps the persona size to protect the upstream payload.
 	MaxSystemPromptBytes int `yaml:"maxSystemPromptBytes"`
 }
@@ -277,7 +289,31 @@ func (p PersonaConfig) EffectiveSystemPrompt() string {
 // rune boundary rather than rejected so a misconfigured value cannot take down
 // inference.
 func (p PersonaConfig) SizeLimitedSystemPrompt() string {
-	value := p.EffectiveSystemPrompt()
+	return p.capToLimit(p.EffectiveSystemPrompt())
+}
+
+// EffectiveAppendSystemPrompt returns the persona to append when the client
+// already sent its own instructions. Falls back to the main persona so an
+// unset field keeps the previous behaviour.
+func (p PersonaConfig) EffectiveAppendSystemPrompt() string {
+	if !p.Enabled {
+		return ""
+	}
+	if value := strings.TrimSpace(p.SystemPromptWhenClientHasSystem); value != "" {
+		return value
+	}
+	return strings.TrimSpace(p.SystemPrompt)
+}
+
+// SizeLimitedAppendSystemPrompt is EffectiveAppendSystemPrompt under the same
+// size cap as the main persona.
+func (p PersonaConfig) SizeLimitedAppendSystemPrompt() string {
+	return p.capToLimit(p.EffectiveAppendSystemPrompt())
+}
+
+// capToLimit truncates on a rune boundary rather than rejecting, so a
+// misconfigured persona cannot take down inference.
+func (p PersonaConfig) capToLimit(value string) string {
 	if value == "" {
 		return ""
 	}
