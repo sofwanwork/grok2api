@@ -2307,6 +2307,20 @@ func (s *Service) ClearCooldown(ctx context.Context, id uint64) (View, error) {
 	return s.Get(ctx, id)
 }
 
+// ClearAllCooldowns is the pool-scale incident-recovery counterpart of
+// ClearCooldown. It resets every account whose cooldown has not expired yet.
+// Durable quality markers cannot be preserved per-account in one bulk UPDATE,
+// so the reset is full (failure_count=0, last_error='') — an intentional
+// operator decision, matching the recommended playbook: stop the retrying
+// client first, then clear.
+func (s *Service) ClearAllCooldowns(ctx context.Context) (int64, error) {
+	reset, err := s.accounts.ClearAllCooldowns(ctx)
+	if err != nil {
+		return 0, mapRepositoryError(err)
+	}
+	return reset, nil
+}
+
 // MarkBuildAPIFallback 幂等写入 Build 账号 XAI 推理回退标记；失败不吞掉，调用方可重试。
 func (s *Service) MarkBuildAPIFallback(ctx context.Context, id uint64, enabled bool) error {
 	return mapRepositoryError(s.accounts.MarkBuildAPIFallback(ctx, id, enabled))

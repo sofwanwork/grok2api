@@ -791,6 +791,9 @@ Object.assign(resources.en.translation.settings.egress as unknown as Record<stri
 
 Object.assign(resources.en.translation.accounts as unknown as Record<string, string>, {
   clearCooldown: "Clear cooldown",
+  clearAllCooldowns: "Clear all",
+  clearAllCooldownsHint: "Reset cooldown for every account. Stop retrying clients first — a still-retrying client will just re-cool accounts.",
+  allCooldownsCleared: "{{reset}} account cooldowns cleared",
   cooldownCleared: "Account cooldown cleared; the account can be scheduled again",
   enabledDoesNotClearCooldown: "Enabled state changed, but cooldown is unchanged. Use Clear cooldown to reset cooldownUntil.",
   importAuth: "Import accounts or RTs", quickImportRT: "Quick import RTs",

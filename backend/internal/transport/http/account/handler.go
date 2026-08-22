@@ -166,6 +166,7 @@ func (h *Handler) Register(router *gin.RouterGroup) {
 	router.PATCH("/accounts/:id", h.update)
 	router.DELETE("/accounts/:id", h.delete)
 	router.POST("/accounts/:id/clear-cooldown", h.clearCooldown)
+	router.POST("/accounts/clear-cooldowns", h.clearAllCooldowns)
 	router.POST("/accounts/:id/refresh-token", h.refreshToken)
 	router.POST("/accounts/:id/refresh-billing", h.refreshBilling)
 	router.POST("/accounts/:id/refresh-quota", h.refreshWebQuota)
@@ -1281,6 +1282,17 @@ func (h *Handler) clearCooldown(c *gin.Context) {
 		return
 	}
 	response.Success(c, http.StatusOK, newAccountResponse(value))
+}
+
+// clearAllCooldowns is the bulk incident-recovery endpoint behind the admin
+// UI button. See Service.ClearAllCooldowns for semantics.
+func (h *Handler) clearAllCooldowns(c *gin.Context) {
+	reset, err := h.service.ClearAllCooldowns(c.Request.Context())
+	if err != nil {
+		h.writeServiceError(c, "accountClearAllCooldownsFailed", err, http.StatusInternalServerError, "Gagal membersihkan semua cooldown akaun")
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{"reset": reset})
 }
 
 func (h *Handler) delete(c *gin.Context) {

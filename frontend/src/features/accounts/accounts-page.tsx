@@ -38,6 +38,7 @@ import {
   acceptWebAccountTerms,
   cleanupAccounts,
   clearAccountCooldown,
+  clearAllAccountCooldowns,
   deleteAccount,
   deleteAccounts,
   previewAccountDeletion,
@@ -514,6 +515,15 @@ export function AccountsPage() {
     onSuccess: () => {
       invalidateAccountData();
       toast.success(t("accounts.cooldownCleared"));
+    },
+    onError: showError,
+  });
+
+  const clearAllCooldownsMutation = useMutation({
+    mutationFn: clearAllAccountCooldowns,
+    onSuccess: (result) => {
+      invalidateAccountData();
+      toast.success(t("accounts.allCooldownsCleared", result));
     },
     onError: showError,
   });
@@ -1295,6 +1305,19 @@ export function AccountsPage() {
           value={summaryUnavailable ? "-" : formatNumber(abnormalAccounts, i18n.language, 0)}
           detail={abnormalDetail}
           detailItems={abnormalDetailItems}
+          action={cooldownAccounts > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 px-1.5 text-[11px] text-amber-700 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
+              disabled={clearAllCooldownsMutation.isPending || bulkTaskPending}
+              title={t("accounts.clearAllCooldownsHint")}
+              onClick={() => clearAllCooldownsMutation.mutate()}
+            >
+              {clearAllCooldownsMutation.isPending ? <Spinner /> : <TimerOff />}
+              {t("accounts.clearAllCooldowns")}
+            </Button>
+          ) : null}
         />
       </section>
       <div className="space-y-5">
@@ -2287,7 +2310,7 @@ function accountProviderPrimaryEgressScope(provider: AccountProvider): EgressSco
   return provider;
 }
 
-function AccountMetricPanel({ icon, label, value, detail, detailItems, loading, tone }: {
+function AccountMetricPanel({ icon, label, value, detail, detailItems, loading, tone, action }: {
   icon: ReactNode;
   label: string;
   value: string;
@@ -2295,12 +2318,16 @@ function AccountMetricPanel({ icon, label, value, detail, detailItems, loading, 
   detailItems?: Array<{ label: string; value: string; tone?: string }>;
   loading: boolean;
   tone: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="min-h-28 rounded-lg bg-card p-4" aria-busy={loading}>
       <div className="flex min-h-5 items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">{label}</span>
-        <span className={cn("flex size-5 items-center justify-center [&_svg]:size-4", tone)}>{icon}</span>
+        <span className="flex items-center gap-1.5">
+          {action}
+          <span className={cn("flex size-5 items-center justify-center [&_svg]:size-4", tone)}>{icon}</span>
+        </span>
       </div>
       <div className="mt-3 flex min-h-8 items-center text-2xl font-medium tracking-tight tabular-nums">{loading ? <Spinner /> : value}</div>
       {detailItems ? (

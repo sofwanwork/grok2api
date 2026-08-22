@@ -149,6 +149,11 @@ type AccountRepository interface {
 	UpdateCredentialRefreshFailure(ctx context.Context, id uint64, failure CredentialRefreshFailure) error
 	UpdateObservedModel(ctx context.Context, id uint64, model string, observedAt time.Time) error
 	UpdateHealth(ctx context.Context, id uint64, provider account.Provider, failureCount int, cooldownUntil *time.Time, lastError string, success bool) error
+	// ClearAllCooldowns resets cooldown/failure state for every account whose
+	// cooldown has not already expired, returning the number of accounts reset.
+	// It mirrors the per-account ClearCooldown semantics (full health reset) at
+	// pool scale for operator-driven incident recovery.
+	ClearAllCooldowns(ctx context.Context) (int64, error)
 	// TouchLastUsed persists request activity without changing routing health or
 	// invalidating candidate snapshots.
 	TouchLastUsed(ctx context.Context, id uint64, usedAt time.Time) error

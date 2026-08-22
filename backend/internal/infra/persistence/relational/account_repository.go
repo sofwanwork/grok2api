@@ -2192,6 +2192,29 @@ func (r *AccountRepository) UpdateHealth(ctx context.Context, id uint64, provide
 	return nil
 }
 
+// ClearAllCooldowns resets the health columns for every account whose cooldown
+// has not yet expired. Stale (already-expired) rows are left untouched so the
+// operator's action stays scoped to real cooldowns; the scheduler already
+// treats expired cooldowns as available. Mirrors ClearCooldown's full reset:
+// failure_count = 0, cooldown_until = NULL, last_error cleared.
+func (r *AccountRepository) ClearAllCooldowns(ctx context.Context) (int64, error) {
+	now := time.Now().UTC()
+	result := r.db.db.WithContext(ctx).Model(&accountModel{}).
+		Where("cooldown_until IS NOT NULL AND cooldown_until > ?", now).
+		Updates(map[string]any{"failure_count": 0, "cooldown_until": nil, "last_error": ""})
+	if result.Error != nil {
+		return 0, mapError(result.Error)
+	}
+	if result.RowsAffected > 0 {
+		// Health snapshots (selector candidates) must drop their cached cooldown
+		// state, otherwise scheduling keeps avoiding these accounts until the
+		// next snapshot rebuild. One broadcast per provider covers the pool.
+		r.notifyInvalidation(ctx, repository.InvalidationEvent{Kind: repository.InvalidationAccountHealthChanged, Provider: account.ProviderBuild})
+		r.notifyInvalidation(ctx, repository.InvalidationEvent{Kind: repository.InvalidationAccountHealthChanged, Provider: account.ProviderWeb})
+	}
+	return result.RowsAffected, nil
+}
+
 func (r *AccountRepository) TouchLastUsed(ctx context.Context, id uint64, usedAt time.Time) error {
 	if id == 0 || usedAt.IsZero() {
 		return repository.ErrNotFound
