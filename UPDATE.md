@@ -171,6 +171,31 @@ semua dah masuk melalui merge 22 Ogos.
 - **`make verify` / `tools/verify-patches.ps1`** — satu command verify semua patch selepas merge.
   Key disimpan dalam `tools/.verify-key.txt` (gitignored). Reveal semula kat admin UI kalau hilang:
   Client Keys → reveal secret.
+- **`make clear-cooldown` / `tools/clear-cooldown.ps1`** — bulk clear cooldown seluruh pool.
+  Lahir dari insiden 22 Ogos (client 185k-token retry storm bakar 116 akaun cooldown 12 jam).
+  **Order penting: STOP client yang retry dulu, baru clear** — kalau tidak, setiap retry
+  bakar 6 akaun baru setiap 30 saat dan kau kejar baldi bawah paip mengalir.
+  Script ada warning automatik kalau ada trafik gagal dalam 2 minit terakhir.
+
+### Playbook insiden "Respons upstream tiada penaakulan" (503)
+
+Punca lazim: guard anti-降智 sejukkan akaun yang bagi jawapan tanpa reasoning.
+Tiga punca biasa, ikut kekerapan:
+
+1. **Client auto-retry storm** — client besar (context ~185k+) gagal → 503 retryable →
+   auto-retry setiap 30 saat → setiap retry cuba 6 akaun → semuanya cooldown 12 jam.
+   Gejala: cooldown naik cepat (16 → 116 dalam ~5 jam). **Fix: stop client, lepas tu
+   `make clear-cooldown`.**
+2. **Sesi client terlalu besar untuk free tier** — input 185k + xhigh = upstream balas kosong.
+   Fix: sesi baru / compact. xhigh untuk tugas fokus (<50k context), high/medium untuk sesi panjang.
+3. **Degradation upstream sebenar** — jika 503 berterusan walaupun tiada client besar, tunggu
+   dan monitor; cooldown 12 jam akan expire sendiri.
+
+Bukan-bukan yang patut kau tahu:
+- Clear-cooldown UI admin hanya **per-akaun** (klik satu-satu) — guna script untuk mass.
+- Query admin API: **scan SEMUA page** (pool boleh tumbuh melebihi pageSize — insiden 22 Ogos:
+  13 akaun tersembunyi kat page 2 sebab pool 297→339 sambil kita clear).
+- Summary endpoint (`/accounts/summary`) ialah sumber betul untuk kiraan dashboard.
 
 ## Senarai semak bila ada update upstream
 
