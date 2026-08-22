@@ -192,7 +192,9 @@ Tiga punca biasa, ikut kekerapan:
    dan monitor; cooldown 12 jam akan expire sendiri.
 
 Bukan-bukan yang patut kau tahu:
-- Clear-cooldown UI admin hanya **per-akaun** (klik satu-satu) — guna script untuk mass.
+- Clear-cooldown UI admin kini ada **"Clear all" button** pada card Abnormal (muncul bila ada cooldown) —
+  backend `POST /api/admin/v1/accounts/clear-cooldowns` (commit `40c88071`). `tools/clear-cooldown.ps1`
+  masih berguna untuk CLI/scripting. Kedua-dua sama fungsi.
 - Query admin API: **scan SEMUA page** (pool boleh tumbuh melebihi pageSize — insiden 22 Ogos:
   13 akaun tersembunyi kat page 2 sebab pool 297→339 sambil kita clear).
 - Summary endpoint (`/accounts/summary`) ialah sumber betul untuk kiraan dashboard.
