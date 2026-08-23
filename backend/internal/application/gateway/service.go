@@ -1662,6 +1662,23 @@ attemptLoop:
 				// readable answer.
 				degradedDeliver := false
 				if verdict == QualityToolDegraded {
+					// Salvage first: a fenced XML narration already carries the
+					// full arguments, so reconstruct the structured call instead
+					// of billing a second generation. salvageToolCallStream always
+					// returns a usable body — on failure it replays the original
+					// bytes so the deliver-last path below stays intact.
+					if operation == audit.OperationChat || operation == "" {
+						salvagedBody, salvaged := salvageToolCallStream(response.Body, holdCfg.DeclaredClientTools, input.PublicModel, peekUsage)
+						response.Body = salvagedBody
+						if salvaged {
+							toolDegradedAttempts++
+							discardFallback(true)
+							s.logger.Info("tool_call_salvaged", "request_id", input.RequestID, "account_id", credential.ID, "attempt", toolDegradedAttempts, "tools", strings.Join(holdCfg.DeclaredClientTools, ","))
+							degradedDeliver = true
+						}
+					}
+				}
+				if verdict == QualityToolDegraded && !degradedDeliver {
 					toolDegradedAttempts++
 					if DecideToolDegradationRetry(toolDegradedAttempts-1, holdCfg.ToolDegradationMaxAttempts, hasNextAccount) == QualityActionRetry {
 						_ = response.Body.Close()

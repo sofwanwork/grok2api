@@ -64,7 +64,7 @@ Confirm dengan `gofmt -d <fail>` kalau ragu.
 | 8 | reasoning_opaque replay multi-turn | `conversation/chat_request.go` | Chain-of-thought hilang antara turns |
 | 9 | Buang persona generik, **tambah** `system_fingerprint` | `conversation/chat_request.go`, `chat_response.go`, `chat_stream.go` | Persona kosmetik override suara model; client OpenAI hilang `system_fingerprint` |
 | 10 | Diagnostik hosted-tool tak dijalankan (trailer + audit) | `inference/hosted_tools.go`, `inference/handler.go`, `gateway/service.go`, `domain/audit/audit.go`, `relational/models.go` | Model claim "dah search web" tapi tak pernah search — halusinasi senyap tanpa amaran |
-| 11 | Auto-retry tool-call degradasi (prosa/XML bukan structured call) | `gateway/tool_degradation.go` (baru), `gateway/quality_retry.go`, `gateway/quality_retry_scan.go`, `gateway/service.go`, `config/config.go` | ~50% request dengan argumen tool besar (400+ aksara) balik narasi prosa "run tool X with..." — client terima teks sampah, tool tak pernah jalan |
+| 11 | Auto-retry tool-call degradasi + salvage XML | `gateway/tool_degradation.go` (baru), `gateway/tool_salvage.go` (baru), `gateway/quality_retry.go`, `gateway/quality_retry_scan.go`, `gateway/service.go`, `config/config.go` | ~50% request dengan argumen tool besar (400+ aksara) balik narasi prosa/XML bukan structured call — client terima teks sampah, tool tak pernah jalan |
 | 12 | Placeholder reasoning bila CoT disorok | `conversation/chat_stream.go`, `conversation/messages_stream.go`, `conversation/stream.go` | Client nampak trace kosong sedangkan model fikir (reasoning_tokens > 0) — tiada beza dari model tak fikir langsung |
 
 **Nota:** Persona AKIF settings hidup dalam `config.yaml` (gitignored — **tak ikut git**). Backup ada kat `../backups/config.yaml.persona_*.bak`.
@@ -166,6 +166,36 @@ regresi stub-only hold, dan `DecideToolDegradationRetry` bounds.
 
 **Bukti live:** `tool_degraded → retry (account 4) → retry (account 16) → deliver_last
 (account 18)` — rotate akaun tanpa penalti. Kadar TOOL naik 2/6 → 4/6 pada tangkapan.
+
+### Salvage XML → structured call (fasa 2, 23 Ogos)
+
+Setelah retry berjalan, majoriti degradasi dilihat berbentuk **XML berpagar** yang
+membawa argumen penuh — hanya formatnya salah. Daripada retry (kos generasi kedua),
+gateway kini **parse narasi itu dan emit `tool_calls` berstruktur sintetik** terus.
+
+**Reka bentuk (`gateway/tool_salvage.go`):**
+- Hanya blok **berpagar** ` ```xml ... ``` ` (atau ditamatkan penutup tag berulang,
+  corak degraded sebenar: `</parameter></parameter></parameter>`) — prosa biasa
+  tiada sempadan boleh dipercayai, kekal pada laluan retry.
+- Nama tool dari atribut wrapper (`<tool name=`, `<invoke tool=`, `<tool_call name=`),
+  atau fallback ke tool tunggal yang dideklarasi. Nama tak dideklarasi = ditolak
+  (tolak "delete_everything" halusinasi).
+- Argumen dari pasangan `<parameter name="X">V</parameter>` (yang terakhir boleh tak
+  tertutup — nilai lari ke fence) dan tag telanjang (`<path>V</path>` — mesti tertutup).
+  Fence penutup guna `LastIndex` supaya ` ``` ` bersarang dalam kandungan tak dipotong.
+- Nilai argumen **verbatim** (tiada unescape) — kandungan dengan `&&`, `%%s`, `{%}`
+  kekal seperti asal.
+- Keluaran: satu delta `tool_calls` penuh + bingkai `finish_reason=tool_calls` +
+  `data: [DONE]`, dengan id `chatcmpl-salvage-*` / `call-salvage-*`.
+- `salvageToolCallStream` sentiasa pulangkan reader yang boleh guna: gagal = replay
+  byte asal, supaya `deliver_last` masih hantar narasi prosa.
+
+**Perbezaan dari retry:** salvage **tiada kos token tambahan** dan lebih pantas
+(tunggu narasi selesai, bukan jana semula). Retry kekal sandaran untuk degradasi prosa.
+
+**Bukti live:** `native=12 salvaged=2 text=1` — gateway reconstruct 2 panggilan dari
+narasi XML secara senyap. Kadar TOOL 10/10 → kekal; degrade prosa (tiada fence)
+masih dapat dipulihkan oleh retry.
 
 **Nota:** XML salvage (parse narasi jadi `tool_calls` sintetik) dicadangkan sebagai
 fasa 2 — majoriti bentuk degradasi bawa argumen penuh, cuma format salah. Belum dibina.
