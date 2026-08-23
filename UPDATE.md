@@ -65,6 +65,7 @@ Confirm dengan `gofmt -d <fail>` kalau ragu.
 | 9 | Buang persona generik, **tambah** `system_fingerprint` | `conversation/chat_request.go`, `chat_response.go`, `chat_stream.go` | Persona kosmetik override suara model; client OpenAI hilang `system_fingerprint` |
 | 10 | Diagnostik hosted-tool tak dijalankan (trailer + audit) | `inference/hosted_tools.go`, `inference/handler.go`, `gateway/service.go`, `domain/audit/audit.go`, `relational/models.go` | Model claim "dah search web" tapi tak pernah search — halusinasi senyap tanpa amaran |
 | 11 | Auto-retry tool-call degradasi (prosa/XML bukan structured call) | `gateway/tool_degradation.go` (baru), `gateway/quality_retry.go`, `gateway/quality_retry_scan.go`, `gateway/service.go`, `config/config.go` | ~50% request dengan argumen tool besar (400+ aksara) balik narasi prosa "run tool X with..." — client terima teks sampah, tool tak pernah jalan |
+| 12 | Placeholder reasoning bila CoT disorok | `conversation/chat_stream.go`, `conversation/messages_stream.go`, `conversation/stream.go` | Client nampak trace kosong sedangkan model fikir (reasoning_tokens > 0) — tiada beza dari model tak fikir langsung |
 
 **Nota:** Persona AKIF settings hidup dalam `config.yaml` (gitignored — **tak ikut git**). Backup ada kat `../backups/config.yaml.persona_*.bak`.
 
@@ -168,6 +169,27 @@ regresi stub-only hold, dan `DecideToolDegradationRetry` bounds.
 
 **Nota:** XML salvage (parse narasi jadi `tool_calls` sintetik) dicadangkan sebagai
 fasa 2 — majoriti bentuk degradasi bawa argumen penuh, cuma format salah. Belum dibina.
+
+### Placeholder reasoning bila CoT disorok (patch #12, 23 Ogos)
+
+**Punca:** upstream (anti-distillation xAI) berhenti hantar teks CoT plaintext — hanya
+`encrypted_content`. `usage.completion_tokens_details.reasoning_tokens` kekal tepat,
+jadi kita tahu model fikir, tapi client nampak trace kosong.
+
+**Fix:** bila `done*` tiba dengan `ReasoningTokens > 0` dan **tiada** trace pernah
+sampai ke client (`reasoningEmitted` false, tiada blok thinking):
+- Chat: delta `reasoning_content` `[thinking: N tokens — trace withheld by upstream]`
+  sebelum frame finish
+- Messages: blok thinking sintetik (start → thinking_delta → stop) sebelum `message_delta`
+
+**Guard:** placeholder takkan keluar bila (a) trace sebenar pernah stream, (b) blok
+thinking dah ada (walaupun signature-only), atau (c) `reasoning_tokens == 0`.
+Quality-guard scanner tak terganggu — placeholder hanya dipancarkan pada `done*`,
+selepas verdict peek; bukti encrypted_content sudah diterima scanner sebagai thinking.
+
+**Status upstream berubah-ubah:** semasa ujian 23 Ogos, `grok-4.6-high` mula hantar
+semula CoT plaintext. Placeholder hanya muncul bila upstream menyorok semula —
+ia fallback, bukan override.
 
 ### ✅ DIBAIKI: persona dilangkau bila `system` ada tapi kosong
 

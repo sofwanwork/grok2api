@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -266,6 +267,29 @@ func (c *streamConverter) doneMessages(status string) error {
 		if err := c.writeEvent("content_block_stop", map[string]any{"type": "content_block_stop", "index": tool.Index}); err != nil {
 			return err
 		}
+	}
+	// Upstream withheld the CoT (anti-distillation) while usage proves the model
+	// thought. Give Anthropic clients a visible thinking block instead of an
+	// empty trace, mirroring the Chat protocol placeholder. Skipped when a
+	// thinking block already streamed (even signature-only).
+	if !c.thinkingStarted && !c.reasoningEmitted && c.usage.OutputTokensDetails.ReasoningTokens > 0 {
+		if err := c.writeEvent("content_block_start", map[string]any{
+			"type": "content_block_start", "index": c.nextIndex,
+			"content_block": map[string]any{"type": "thinking", "thinking": ""},
+		}); err != nil {
+			return err
+		}
+		placeholder := fmt.Sprintf("[thinking: %d tokens — trace withheld by upstream]", c.usage.OutputTokensDetails.ReasoningTokens)
+		if err := c.writeEvent("content_block_delta", map[string]any{
+			"type": "content_block_delta", "index": c.nextIndex,
+			"delta": map[string]any{"type": "thinking_delta", "thinking": placeholder},
+		}); err != nil {
+			return err
+		}
+		if err := c.writeEvent("content_block_stop", map[string]any{"type": "content_block_stop", "index": c.nextIndex}); err != nil {
+			return err
+		}
+		c.nextIndex++
 	}
 	stopReason := "end_turn"
 	// Only client function tools force tool_use stop. Hosted web_search is end_turn.

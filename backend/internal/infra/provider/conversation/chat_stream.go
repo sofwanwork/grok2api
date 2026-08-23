@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"fmt"
 	"io"
 	"strings"
 )
@@ -101,6 +102,14 @@ func (c *streamConverter) doneChat(status string) error {
 			if err := c.chatDelta(map[string]any{"content": pending}); err != nil {
 				return err
 			}
+		}
+	}
+	// Upstream withheld the CoT (anti-distillation) but usage proves the model
+	// thought: give clients a visible marker instead of a silent empty trace.
+	if !c.reasoningEmitted && c.usage.OutputTokensDetails.ReasoningTokens > 0 {
+		placeholder := fmt.Sprintf("[thinking: %d tokens — trace withheld by upstream]", c.usage.OutputTokensDetails.ReasoningTokens)
+		if err := c.chatDelta(map[string]any{"reasoning_content": placeholder}); err != nil {
+			return err
 		}
 	}
 	finishReason := "stop"

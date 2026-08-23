@@ -69,6 +69,10 @@ type streamConverter struct {
 	thinkingItemID    string
 	chatReasoningMark bool
 	evidenceMarked    bool
+	// reasoningEmitted records that any reasoning trace reached the client.
+	// Upstream may withhold CoT text (anti-distillation) while still reporting
+	// reasoning tokens; usage alone must not double-emit a placeholder.
+	reasoningEmitted bool
 	reasoningItems    map[string]*reasoningStreamState
 	reasoningOrder    []string
 	activeReasoningID string
@@ -513,6 +517,7 @@ func (c *streamConverter) emitReasoningDelta(delta string) error {
 		c.lastReasonDelta = delta
 		c.reasonRepeatCount = 0
 	}
+	c.reasoningEmitted = true
 	if c.operation == OperationChat {
 		return c.chatDelta(map[string]any{"reasoning_content": delta})
 	}
