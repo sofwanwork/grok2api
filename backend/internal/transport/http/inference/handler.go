@@ -457,6 +457,9 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
 	requestIDValue, _ := requestID.(string)
+	if hosted := declaredHostedTools(body); len(hosted) > 0 {
+		c.Set(hostedToolsContextKey, hosted)
+	}
 	result, err := h.gateway.CreateChatCompletion(c.Request.Context(), gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
 		Body: body, Streaming: request.Stream, PromptCacheKey: request.PromptCacheKey,
@@ -502,6 +505,9 @@ func (h *Handler) createMessage(c *gin.Context) {
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
 	requestIDValue, _ := requestID.(string)
+	if hosted := declaredHostedTools(body); len(hosted) > 0 {
+		c.Set(hostedToolsContextKey, hosted)
+	}
 	result, err := h.gateway.CreateMessage(c.Request.Context(), gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
 		Body: body, Streaming: request.Stream, PromptCacheKey: request.PromptCacheKey,
@@ -1290,6 +1296,9 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
 	requestIDValue, _ := requestID.(string)
+	if hosted := declaredHostedTools(body); len(hosted) > 0 {
+		c.Set(hostedToolsContextKey, hosted)
+	}
 	input := gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
 		Body: body, Streaming: request.Stream, PromptCacheKey: request.PromptCacheKey,
@@ -1407,9 +1416,30 @@ func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, st
 		return
 	}
 	copyHeaders(c.Writer.Header(), result.Header)
+	// Hosted-tool execution is only provable from end-of-response usage, so the
+	// diagnostic must be announced as a trailer before any bytes are written.
+	declaredHosted, _ := c.Get(hostedToolsContextKey)
+	hostedTools, _ := declaredHosted.([]string)
+	if len(hostedTools) > 0 {
+		c.Writer.Header().Add("Trailer", hostedToolWarningTrailer)
+	}
 	c.Status(result.StatusCode)
 	if result.StatusCode >= 400 {
 		errorCode = "upstream_error"
+	}
+	if len(hostedTools) > 0 {
+		// Deferred functions run last-in-first-out, so this executes before the
+		// Finalize defer registered above and the audit record still sees it.
+		defer func() {
+			if !hostedToolsUnexecuted(hostedTools, usage) {
+				return
+			}
+			joined := strings.Join(hostedTools, ",")
+			c.Writer.Header().Set(hostedToolWarningTrailer, hostedToolNotExecutedWarning+"; tools="+joined)
+			if result.RecordHostedToolWarning != nil {
+				result.RecordHostedToolWarning(joined)
+			}
+		}()
 	}
 	var err error
 	if stream {

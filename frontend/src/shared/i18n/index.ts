@@ -382,6 +382,9 @@ const resources = {
         sources: "Sources {{count}}",
         sourcesLabel: "Search sources",
         serverTools: "Tool calls {{count}} times",
+        hostedToolNotExecuted: "Hosted tool not run",
+        hostedToolNotExecutedHint:
+          "The request declared {{tools}}, but the upstream never ran it. Facts in this reply are unverified — do not trust current information.",
         detailTitle: "Request Diagnostics",
         requestOverview: "Overview",
         requestMetadata: "Request Metadata",

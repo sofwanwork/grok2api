@@ -382,6 +382,7 @@ func toAuditModels(value audit.Record) (requestAuditModel, []requestAuditAttempt
 		NumSourcesUsed: nonNegative(value.NumSourcesUsed), NumServerSideToolsUsed: nonNegative(value.NumServerSideToolsUsed),
 		ContextInputTokens: nonNegative(value.ContextInputTokens), ContextOutputTokens: nonNegative(value.ContextOutputTokens), FirstTokenMS: normalizedFirstToken(value), DurationMS: nonNegative(value.DurationMS),
 		ErrorCode:          truncate(value.ErrorCode, 100),
+		HostedToolWarning:  truncate(value.HostedToolWarning, 200),
 		RequestMethod:      truncate(value.RequestMethod, 16),
 		RequestPath:        truncate(value.RequestPath, 2048),
 		RequestHeadersJSON: truncate(requestHeadersJSON, 65536),

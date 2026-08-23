@@ -416,6 +416,18 @@ function BillingValue({ audit }: { audit: AuditDTO }) {
           {t("audits.serverTools", { count: audit.numServerSideToolsUsed })}
         </span>
       ) : null}
+      {audit.hostedToolWarning ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="mt-0.5 block cursor-help whitespace-nowrap text-[10px] font-medium text-amber-600 dark:text-amber-500" tabIndex={0}>
+              {t("audits.hostedToolNotExecuted")}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-72" side="top" align="start">
+            {t("audits.hostedToolNotExecutedHint", { tools: audit.hostedToolWarning })}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }

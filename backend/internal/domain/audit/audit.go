@@ -111,6 +111,12 @@ type Record struct {
 	FirstTokenMS            *int64
 	DurationMS              int64
 	ErrorCode               string
+	// HostedToolWarning records that the caller declared server-executed tools
+	// (web_search, code_interpreter, ...) that the upstream accepted but never
+	// ran. It is deliberately separate from ErrorCode: the request succeeded at
+	// the protocol level, so success accounting must stay unaffected while the
+	// answer is still flagged as untrustworthy for current facts.
+	HostedToolWarning string
 	RequestMethod           string
 	RequestPath             string
 	RequestHeaders          map[string][]string

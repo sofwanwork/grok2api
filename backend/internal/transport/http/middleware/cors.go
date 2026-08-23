@@ -27,7 +27,7 @@ func DefaultCORSConfig() CORSConfig {
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Authorization", "Content-Type", "X-API-Key", "X-Requested-With", "anthropic-version", "x-grok-turn-idx"},
-		ExposedHeaders: []string{"Content-Type", "X-Request-Id", "X-Grok2API-Compatibility-Warnings", "X-Grok2API-Transfer-Error", "Retry-After"},
+		ExposedHeaders: []string{"Content-Type", "X-Request-Id", "X-Grok2API-Compatibility-Warnings", "X-Grok2API-Transfer-Error", "X-Grok2API-Warning", "Retry-After"},
 		MaxAgeSeconds:  86400,
 	}
 }
