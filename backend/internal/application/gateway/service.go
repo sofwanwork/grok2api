@@ -162,7 +162,12 @@ type Result struct {
 	Body                io.ReadCloser
 	MarkFirstToken      func()
 	RecordStreamFailure func(StreamFailureDiagnostic)
-	Finalize            func(usage Usage, responseID, errorCode string)
+	// RecordHostedToolWarning attaches a declared-but-unexecuted hosted tool
+	// diagnostic to the audit record. The transport can only reach this verdict
+	// once end-of-response usage is parsed, so it must be called before
+	// Finalize. It may be nil for paths without audit recording.
+	RecordHostedToolWarning func(string)
+	Finalize                func(usage Usage, responseID, errorCode string)
 }
 
 // StreamFailureDiagnostic safely projects a failure termination event returned in-stream after downstream 2xx headers.
@@ -1046,10 +1051,31 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	failureFingerprints := make(map[string]int)
 	authRecoveryAttempted := make(map[uint64]bool)
 	holdCfg := s.qualityRetryConfig()
-	qualityHoldEnabled := shouldHoldQualityStream(input, ownership, route, operation, holdCfg)
+	missingThinkingHold := shouldHoldQualityStream(input, ownership, route, operation, holdCfg)
+	// Tool-call degradation is detected on the same peek but retried under its
+	// own budget and without account penalties.
+	if shouldHoldForToolDegradation(input, ownership, operation, holdCfg) {
+		holdCfg.DeclaredClientTools = declaredClientToolNames(input.Body)
+	}
+	if !missingThinkingHold && len(holdCfg.DeclaredClientTools) > 0 {
+		// Degradation-only peek: disable the withhold verdict so it cannot
+		// penalise the account or drop a usable body.
+		off := true
+		holdCfg.MissingThinkingDisabled = &off
+	}
+	toolDegradationHold := len(holdCfg.DeclaredClientTools) > 0
+	qualityHoldEnabled := missingThinkingHold || toolDegradationHold
+	// Attempt ceiling for the loop guard. Degradation-only requests use the
+	// smaller degradation budget so a narrating model cannot consume the whole
+	// missing-thinking allowance.
+	qualityAttemptCeiling := holdCfg.MaxAttempts
+	if !missingThinkingHold {
+		qualityAttemptCeiling = holdCfg.ToolDegradationMaxAttempts
+	}
 	// Count accounts that actually reached the upstream. Credential-only skips
 	// do not consume the quality retry budget; refreshes stay on the same account.
 	qualityAccountAttempts := 0
+	toolDegradedAttempts := 0
 	quotaMode := s.providers.QuotaMode(route.Provider, route.UpstreamModel)
 	quotaProbeAttempted := false
 	selection := preselectedSession
@@ -1078,6 +1104,16 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	handoffResponse := func(response *provider.Response, lease *accountLease, credential accountdomain.Credential, upstreamStartedAt time.Time) *Result {
 		accountID := credential.ID
 		var once sync.Once
+		// hostedToolWarning is written by the transport before Finalize runs and
+		// read inside it. Both happen on the request goroutine, and the mutex
+		// only guards against a stream teardown racing the writer.
+		var hostedToolMu sync.Mutex
+		hostedToolWarning := ""
+		recordHostedToolWarning := func(warning string) {
+			hostedToolMu.Lock()
+			hostedToolWarning = warning
+			hostedToolMu.Unlock()
+		}
 		finalize := func(usage Usage, responseID, errorCode string) {
 			once.Do(func() {
 				// HTTP 状态码保留线上真实值；流在 2xx 响应头之后失败时由 errorCode
@@ -1131,6 +1167,17 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 				}
 				record.DurationMS = time.Since(startedAt).Milliseconds()
 				record.ErrorCode = errorCode
+				hostedToolMu.Lock()
+				record.HostedToolWarning = hostedToolWarning
+				hostedToolMu.Unlock()
+				if record.HostedToolWarning != "" {
+					s.logger.Warn("hosted_tool_not_executed",
+						"request_id", input.RequestID, "model", route.PublicID,
+						"operation", string(operation), "account_id", accountID,
+						"tools", record.HostedToolWarning,
+						"num_server_side_tools_used", usage.NumServerSideToolsUsed,
+						"num_sources_used", usage.NumSourcesUsed)
+				}
 				attempts := failureAttempts.snapshot()
 				if !successful && len(attempts) == 0 {
 					statusCode := response.StatusCode
@@ -1211,7 +1258,7 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 			markFirstToken = firstToken.mark
 		}
 		timingHandedOff = true
-		return &Result{StatusCode: response.StatusCode, Status: response.Status, Header: response.Header, Body: &finalizingBody{ReadCloser: response.Body, finalize: func() { finalize(Usage{}, "", "stream_closed") }}, MarkFirstToken: markFirstToken, RecordStreamFailure: recordStreamFailure, Finalize: finalize}
+		return &Result{StatusCode: response.StatusCode, Status: response.Status, Header: response.Header, Body: &finalizingBody{ReadCloser: response.Body, finalize: func() { finalize(Usage{}, "", "stream_closed") }}, MarkFirstToken: markFirstToken, RecordStreamFailure: recordStreamFailure, RecordHostedToolWarning: recordHostedToolWarning, Finalize: finalize}
 	}
 	// fail_open retains at most one successful no-thinking stream. The account
 	// lease is released immediately; the read pump applies upstream backpressure
@@ -1237,7 +1284,7 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	}
 attemptLoop:
 	for attempt := 0; attemptPolicy.allows(attempt); attempt++ {
-		if qualityHoldEnabled && qualityAccountAttempts >= holdCfg.MaxAttempts {
+		if qualityHoldEnabled && qualityAccountAttempts >= qualityAttemptCeiling {
 			break
 		}
 		var lease *accountLease
@@ -1425,9 +1472,9 @@ attemptLoop:
 				if lastFailure.AccountScoped && !failureHandled {
 					s.selector.MarkFailure(ctx, credential, response.StatusCode, retryAfter)
 				}
-			lease.Release()
-			lastErr = fmt.Errorf("Upstream memulangkan %d", response.StatusCode)
-			s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped, "account_blocked", true)
+				lease.Release()
+				lastErr = fmt.Errorf("Upstream memulangkan %d", response.StatusCode)
+				s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped, "account_blocked", true)
 				continue
 			} else if egressForbidden && !finalEgressForbidden {
 				// A non-blocking 403 is an egress/browser-session failure and must not penalize the account.
@@ -1435,9 +1482,9 @@ attemptLoop:
 				if selection != nil {
 					selection.RetryAccount(credential.ID)
 				}
-			lease.Release()
-			lastErr = fmt.Errorf("Sesi egress upstream ditolak")
-			continue
+				lease.Release()
+				lastErr = fmt.Errorf("Sesi egress upstream ditolak")
+				continue
 			} else {
 				// Restore the consumed final non-blocking 403 body for the common response path.
 				response.Body = io.NopCloser(bytes.NewReader(body))
@@ -1471,9 +1518,9 @@ attemptLoop:
 				lastFailure.AccountScoped = false
 				lastFailure.Fingerprint = "429:team_model_rate_limit"
 				lastFailure.RetryAfter = time.Until(limited.Until)
-			lease.Release()
-			lastErr = fmt.Errorf("Frekuensi permintaan Team dan model upstream terhad")
-			s.logger.Warn("upstream_team_model_rate_limited", "request_id", input.RequestID, "provider", credential.Provider, "model", route.UpstreamModel, "team_fingerprint", limited.TeamFingerprint, "scope", rateLimitMeta.Scope, "actual", rateLimitMeta.Actual, "limit", rateLimitMeta.Limit, "retry_after", lastFailure.RetryAfter)
+				lease.Release()
+				lastErr = fmt.Errorf("Frekuensi permintaan Team dan model upstream terhad")
+				s.logger.Warn("upstream_team_model_rate_limited", "request_id", input.RequestID, "provider", credential.Provider, "model", route.UpstreamModel, "team_fingerprint", limited.TeamFingerprint, "scope", rateLimitMeta.Scope, "actual", rateLimitMeta.Actual, "limit", rateLimitMeta.Limit, "retry_after", lastFailure.RetryAfter)
 				continue
 			}
 		afterTeamRateLimit:
@@ -1562,9 +1609,9 @@ attemptLoop:
 				// 5xx 短冷却：本请求已 excluded，跨请求避免立刻再打同一坏号。
 				s.selector.MarkFailure(ctx, credential, response.StatusCode, retryAfter)
 			}
-		lease.Release()
-		lastErr = fmt.Errorf("Upstream memulangkan %d", response.StatusCode)
-		s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped)
+			lease.Release()
+			lastErr = fmt.Errorf("Upstream memulangkan %d", response.StatusCode)
+			s.logger.Warn("upstream_request_failed", "request_id", input.RequestID, "account_id", credential.ID, "provider", credential.Provider, "status", response.StatusCode, "upstream_code", lastFailure.UpstreamCode, "account_scoped", lastFailure.AccountScoped)
 			if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
 				break
 			}
@@ -1607,8 +1654,35 @@ attemptLoop:
 				}
 				response.Body = replay
 				hasNextAccount := attemptPolicy.hasNext(attempt) && selection.hasAvailableCandidate(excluded, !quotaProbeAttempted)
-				hasNextAccount = hasNextAccount && qualityAccountAttempts < holdCfg.MaxAttempts
-				commit := CommitQualityHold(verdict, qualityAccountAttempts-1, holdCfg.MaxAttempts, hasNextAccount, holdCfg.OnExhausted)
+				hasNextAccount = hasNextAccount && qualityAccountAttempts < qualityAttemptCeiling
+				// Upstream narrated the tool call instead of emitting one. This
+				// is stochastic upstream behaviour, not an account fault, so the
+				// account is never cooled or disabled. When retries run out the
+				// body is delivered instead of failing closed: prose is still a
+				// readable answer.
+				degradedDeliver := false
+				if verdict == QualityToolDegraded {
+					toolDegradedAttempts++
+					if DecideToolDegradationRetry(toolDegradedAttempts-1, holdCfg.ToolDegradationMaxAttempts, hasNextAccount) == QualityActionRetry {
+						_ = response.Body.Close()
+						lease.Release()
+						lastErr = errToolCallDegraded
+						lastFailure = &UpstreamFailure{
+							HTTPStatus: http.StatusServiceUnavailable, Code: ErrorToolCallDegraded,
+							PublicMessage: "Upstream menghuraikan panggilan alat sebagai teks", AccountID: credential.ID, AccountName: credential.Name,
+							Cause: errToolCallDegraded,
+						}
+						s.logger.Info("tool_call_degraded_retry", "request_id", input.RequestID, "account_id", credential.ID, "attempt", toolDegradedAttempts, "tools", strings.Join(holdCfg.DeclaredClientTools, ","))
+						continue
+					}
+					discardFallback(true)
+					s.logger.Warn("tool_call_degraded_deliver_last", "request_id", input.RequestID, "account_id", credential.ID, "attempts", toolDegradedAttempts, "tools", strings.Join(holdCfg.DeclaredClientTools, ","))
+					degradedDeliver = true
+				}
+				commit := QualityCommit{Action: QualityActionDeliverLast, KeepBody: true}
+				if !degradedDeliver {
+					commit = CommitQualityHold(verdict, qualityAccountAttempts-1, holdCfg.MaxAttempts, hasNextAccount, holdCfg.OnExhausted)
+				}
 				if verdict == QualityWithhold {
 					s.applyMissingThinkingPenalty(ctx, input.RequestID, credential, holdCfg.AccountCooldown)
 				}

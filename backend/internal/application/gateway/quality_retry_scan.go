@@ -35,6 +35,38 @@ type qualityScanState struct {
 	usage            Usage
 	responseID       string
 	terminal         bool
+	// sawToolCall records a structured tool/function call. semanticOutput is
+	// not a substitute: plain assistant text also sets that flag, and this must
+	// stay false for a prose-only stream so tool degradation can be detected.
+	sawToolCall bool
+	// visibleText is the leading visible text, capped at
+	// maxToolNarrationCapture. Only the beginning matters: every observed
+	// degradation starts narrating immediately.
+	visibleText []byte
+}
+
+// maxToolNarrationCapture bounds retained visible text. It must exceed
+// toolNarrationWindow plus the longest realistic tool name so a marker near the
+// window edge is still followed by enough text to match.
+const maxToolNarrationCapture = 512
+
+func (s *qualityScanState) noteToolCall() {
+	if s == nil {
+		return
+	}
+	s.sawToolCall = true
+	s.semanticOutput = true
+}
+
+func (s *qualityScanState) captureVisibleText(text string) {
+	if s == nil || text == "" || len(s.visibleText) >= maxToolNarrationCapture {
+		return
+	}
+	remaining := maxToolNarrationCapture - len(s.visibleText)
+	if len(text) > remaining {
+		text = text[:remaining]
+	}
+	s.visibleText = append(s.visibleText, text...)
 }
 
 type qualityReadResult struct {
@@ -151,6 +183,8 @@ func (s *qualityScanState) signals() QualityStreamSignals {
 		ReasoningTokens:  max(s.reasoningTokens, s.usage.ReasoningTokens),
 		OutputTokens:     output,
 		Terminal:         s.terminal,
+		SawToolCall:      s.sawToolCall,
+		VisibleText:      string(s.visibleText),
 	}
 }
 
@@ -258,7 +292,7 @@ func observeQualityChat(state *qualityScanState, payload []byte) {
 			noteVisibleContent(state, delta.Content)
 		}
 		if len(delta.ToolCalls) > 0 || delta.FunctionCall != nil {
-			state.semanticOutput = true
+			state.noteToolCall()
 		}
 		if choice.FinishReason != "" {
 			state.terminal = true
@@ -327,7 +361,7 @@ func observeQualityResponses(state *qualityScanState, payload []byte) {
 		}
 	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta", "response.mcp_call_arguments.delta":
 		if event.Delta != "" {
-			state.semanticOutput = true
+			state.noteToolCall()
 		}
 	}
 	if event.Response != nil {
@@ -381,7 +415,7 @@ func observeQualityResponsesOutputItem(state *qualityScanState, item qualityResp
 	default:
 		// Function, shell, MCP and other call items are meaningful output even
 		// when the provider omits usage and argument-delta events.
-		state.semanticOutput = true
+		state.noteToolCall()
 	}
 	return visibleRunes
 }
@@ -430,7 +464,9 @@ func observeQualityAnthropic(state *qualityScanState, payload []byte) {
 			}
 		case "":
 		default:
-			state.semanticOutput = true
+			// tool_use / server_tool_use / mcp_tool_use blocks open here, and
+			// input_json_delta may never follow for a zero-argument call.
+			state.noteToolCall()
 		}
 	case "content_block_delta":
 		if event.Delta.Type == "thinking_delta" && strings.TrimSpace(event.Delta.Thinking) != "" {
@@ -446,7 +482,7 @@ func observeQualityAnthropic(state *qualityScanState, payload []byte) {
 			noteVisibleContent(state, event.Delta.Text)
 		}
 		if event.Delta.Type == "input_json_delta" && event.Delta.PartialJSON != "" {
-			state.semanticOutput = true
+			state.noteToolCall()
 		}
 	}
 	if event.Usage != nil {
@@ -463,6 +499,7 @@ func noteVisibleContent(state *qualityScanState, text string) {
 		return
 	}
 	state.visibleRunes += utf8.RuneCountInString(text)
+	state.captureVisibleText(text)
 }
 
 func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string, cfg QualityRetryRuntime) (io.ReadCloser, QualityVerdict, Usage, string, error) {
@@ -477,8 +514,28 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 	defer holdTimer.Stop()
 	for {
 		sig := state.signals()
-		if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
-			return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, nil
+		// Degradation is checked first, but only WINS when it actually fires.
+		// When it does not fire we must not return Deliver: that would bypass
+		// the missing-thinking classifier. Fall through to it instead.
+		if len(cfg.DeclaredClientTools) > 0 {
+			if _, degraded := toolCallDegraded(cfg.DeclaredClientTools, sig.VisibleText, sig.SawToolCall); degraded {
+				return newPrefixReplay(&held, pump), QualityToolDegraded, state.usage, state.responseID, nil
+			}
+		}
+		if cfg.missingThinkingEnabled() {
+			// When degradation detection is active, a thinking stub alone must not
+			// deliver: Grok announces reasoning before narrating a call in prose,
+			// and delivering here would skip that check. Hold until the text is
+			// conclusive (degraded above, or a real call / terminal below).
+			if len(cfg.DeclaredClientTools) > 0 && !sig.SawToolCall && !sig.Terminal {
+				// keep waiting for text that proves or disproves degradation
+			} else if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
+				return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, nil
+			}
+		} else if sig.SawToolCall || sig.HasThinking || (sig.Terminal && sig.OutputTokens > 0) {
+			// Degradation-only peek: release as soon as the stream proves it is
+			// not degraded, so latency is not tied to the hold timeout.
+			return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, nil
 		}
 		// A completed empty stream must rotate immediately. Waiting for idle
 		// timeout after response.completed / [DONE] surfaces HTTP 200 with 0
@@ -493,7 +550,17 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 			return io.NopCloser(bytes.NewReader(held.Bytes())), QualityWait, state.usage, state.responseID, qualityPeekAbortError(ctx, ctx.Err())
 		case <-holdTimer.C:
 			sig.HoldExpired = true
-			if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
+			if !cfg.missingThinkingEnabled() {
+				// Degradation-only peek. A stream that already carries evidence
+				// (text, a tool call, thinking) cannot become degraded by waiting
+				// longer, so release it. A stub-only empty stream can still gain
+				// the evidence a later verdict needs, so keep waiting instead of
+				// flushing an empty HTTP 200 — same as the original behaviour.
+				if sig.SawToolCall || sig.HasThinking || sig.VisibleTokens > 0 || sig.OutputTokens > 0 || sig.Terminal {
+					return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, nil
+				}
+				// otherwise keep waiting
+			} else if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
 				return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, nil
 			}
 		case result, ok := <-pump.results:
@@ -530,11 +597,23 @@ func finishQualityPeek(held *bytes.Buffer, pump *qualityReadPump, state *quality
 	}
 	state.terminal = true
 	signals := state.signals()
+	// A stream can finish before the peek loop observes the narration, so the
+	// degradation check is repeated here on the complete sample.
+	if len(cfg.DeclaredClientTools) > 0 {
+		if _, degraded := toolCallDegraded(cfg.DeclaredClientTools, signals.VisibleText, signals.SawToolCall); degraded {
+			return newPrefixReplay(held, pump), QualityToolDegraded, state.usage, state.responseID, nil
+		}
+	}
 	if !signals.HasThinking && signals.ReasoningTokens <= 0 && signals.OutputTokens <= 0 && signals.VisibleTokens <= 0 {
 		if state.semanticOutput {
 			return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, nil
 		}
 		return newPrefixReplay(held, pump), QualityWait, state.usage, state.responseID, errQualityEmptyStream
+	}
+	// Without the missing-thinking policy a completed stream is always
+	// delivered: withholding here would drop a usable body.
+	if !cfg.missingThinkingEnabled() {
+		return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, nil
 	}
 	return newPrefixReplay(held, pump), ClassifyQualityHold(signals, cfg.MinOutputTokens), state.usage, state.responseID, nil
 }

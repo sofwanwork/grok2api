@@ -63,6 +63,8 @@ Confirm dengan `gofmt -d <fail>` kalau ragu.
 | 7 | Persona hot-reload | `app/application.go` | Tukar persona kena restart container |
 | 8 | reasoning_opaque replay multi-turn | `conversation/chat_request.go` | Chain-of-thought hilang antara turns |
 | 9 | Buang persona generik, **tambah** `system_fingerprint` | `conversation/chat_request.go`, `chat_response.go`, `chat_stream.go` | Persona kosmetik override suara model; client OpenAI hilang `system_fingerprint` |
+| 10 | Diagnostik hosted-tool tak dijalankan (trailer + audit) | `inference/hosted_tools.go`, `inference/handler.go`, `gateway/service.go`, `domain/audit/audit.go`, `relational/models.go` | Model claim "dah search web" tapi tak pernah search — halusinasi senyap tanpa amaran |
+| 11 | Auto-retry tool-call degradasi (prosa/XML bukan structured call) | `gateway/tool_degradation.go` (baru), `gateway/quality_retry.go`, `gateway/quality_retry_scan.go`, `gateway/service.go`, `config/config.go` | ~50% request dengan argumen tool besar (400+ aksara) balik narasi prosa "run tool X with..." — client terima teks sampah, tool tak pernah jalan |
 
 **Nota:** Persona AKIF settings hidup dalam `config.yaml` (gitignored — **tak ikut git**). Backup ada kat `../backups/config.yaml.persona_*.bak`.
 
@@ -78,6 +80,94 @@ Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **62 pake
 | 4+5. max_output 65536 | `inference/max_output_tokens_test.go`, `cli/max_output_tokens_test.go` |
 | 6+7. Persona (+ berlapis) | `cli/persona_inject_test.go`, `config/persona_test.go` |
 | 8. reasoning_opaque replay | `conversation/reasoning_replay_test.go` |
+| 10. Hosted-tool diagnostic | `inference/hosted_tools_test.go` (12 ujian) |
+
+### Diagnostik hosted-tool (patch #10, 22 Ogos)
+
+**Punca:** akaun Grok Build Free tiada entitlement untuk server-side tools. Upstream **terima**
+`web_search` / `code_interpreter` tanpa error, tapi **tak pernah jalankan** — kemudian model
+karang jawapan sambil claim "aku dah search web". Disahkan live: `num_server_side_tools_used: 0`,
+`num_sources_used: 0`, tiada `annotations`, dan jawapan tak konsisten antara panggilan.
+
+**Kesan:** halusinasi senyap. Berbeza dengan reasoning-text yang hilang (upstream tutup CoT untuk
+anti-distillation — model tetap fikir, cuma trace encrypted), ini **jawapan salah** tanpa amaran.
+
+Bila request declare hosted tool tapi upstream tak jalankan:
+- **Trailer HTTP:** `X-Grok2API-Warning: hosted_tool_not_executed; tools=web_search,x_search`
+  (trailer, bukan header — buktinya hanya ada dalam `usage` di hujung response)
+- **Log berstruktur:** `WARN hosted_tool_not_executed` + request_id, model, account_id, tools
+- **Audit:** kolum `hosted_tool_warning`, nampak di admin UI (lencana amber) dan
+  `GET /api/admin/v1/request-audits` (`hostedToolWarning`)
+
+**Reka bentuk penting:**
+- Hanya **7 tool server-side** dipantau (`web_search`, `x_search`, `code_interpreter`,
+  `code_execution`, `image_generation`, `collections_search`, `file_search`).
+  `function` / `shell` / `local_shell` / `mcp` / `bash_*` Anthropic **dikecualikan** — tools tu
+  memang client execute, jadi `num_server_side_tools_used: 0` adalah **betul**. Kalau dimasukkan,
+  setiap request Codex/Claude Code kena warning palsu.
+- **`hosted_tool_warning` BUKAN `error_code`.** Request tu 2xx yang sah; guna `error_code` akan
+  rosakkan `auditSuccessPredicate` dan kadar kejayaan dashboard. Disahkan pada DB: request
+  yang diberi warning masih dikira `successful`.
+- Empat syarat wajib elak false positive: ada tool declared, `usage.Reported` (response
+  gagal/terputus takkan tuduh tools), `num_server_side_tools_used` **dan** `num_sources_used`
+  dua-dua sifar, dan `OutputTokens > 0`.
+- Alias berversi dinormalkan: `web_search_20250305` (Anthropic) dan
+  `web_search_preview_2025_03_11` (OpenAI) → famili `web_search`.
+
+**Jangan percaya `web_search` pada setup ni.** Untuk maklumat semasa, guna function calling dan
+biar client fetch sendiri — itu jalan dan boleh dipercayai.
+
+Migrasi DB automatik (AutoMigrate tambah kolum, default `''`). Sandaran pra-migrasi:
+`../backups/backend.db.pre_hostedtool_*.bak`.
+
+### Auto-retry tool-call degradasi (patch #11, 23 Ogos)
+
+**Punca:** bukan bug gateway. Tingkah laku stokastik upstream — bila model kena hasilkan
+argumen tool yang besar (dari ujian: ~400+ aksara), ~50% masa dia **rosot jadi narasi**
+dan bukannya emit `tool_calls` berstruktur. Disahkan gateway 100% fidelity (hantar 2590
+aksara argumen dalam history — model baca balik tepat). Punca ialah model, bukan pipe.
+
+Bentuk degradasi yang diperhatikan (semua dari tangkapan live):
+1. Prosa biasa: `run tool write_file with path is /tmp/x.md content is ...`
+2. Kata kerja kosong: `call write_file with path is ...`, `invoke write_file ...`
+3. Pseudo-XML berpagar: ` ```xml <tool_call name="write_file">... `, `<invoke tool="X">`,
+   `<function call>`, `<parameter name="path">`
+
+**Kesan sebelum patch:** log hermes penuh `Unrepairable tool_call arguments — replaced
+with empty object`; command pendek (`pwd`) jalan, tapi `write_file`/`skill_manage patch`
+dengan `new_string` panjang kerap gagal senyap.
+
+**Reka bentuk — verdict berasingan `QualityToolDegraded`:**
+- **Akaun TIDAK PERNAK dihukum.** Degradasi stokastik, bukan salah akaun. Tiada cooldown,
+  tiada disable. (Berbeza dari `QualityWithhold` missing-thinking yang cool 12 jam.)
+- **Sentiasa `deliver_last` bila retry habis** — jangan 503; narasi masih jawapan boleh baca.
+- Bajet sendiri `toolDegradation.maxAttempts: 3` (default; 1-6). Kadar degradasi ~50%,
+  3 percubaan ≈ pulihkan ~87%.
+- Hanya request **streaming** yang declare **client-side tools** (`function`/`custom`).
+  Hosted tools dikecualikan — replay boleh ulang search/sandbox upstream.
+- Pengesanan dalam peek loop — narasi nampak awal (~40 aksara), tak tunggu stream tamat.
+  Semakan degradasi mesti datang **sebelum** classifier missing-thinking `Deliver`
+  (stub reasoning Grok datang dulu sebelum narasi — ini bug pertama kita semasa build).
+- Dikesan semula dalam `finishQualityPeek` untuk stream yang tamat sebelum loop nampak.
+
+**Config (`config.yaml`):**
+```yaml
+qualityGuard:
+  requestRetry:
+    toolDegradation:
+      enabled: true   # matikan untuk off sepenuhnya
+      maxAttempts: 3  # 5 untuk kadar pulih lebih tinggi (kos token naik)
+```
+
+**Ujian:** 20+ ujian termasuk semua bentuk live, hostile false-positive suite
+("You can run bash yourself" mesti TIDAK dikesan), real tool call tak di-retry,
+regresi stub-only hold, dan `DecideToolDegradationRetry` bounds.
+
+**Bukti live:** `tool_degraded → retry (account 4) → retry (account 16) → deliver_last
+(account 18)` — rotate akaun tanpa penalti. Kadar TOOL naik 2/6 → 4/6 pada tangkapan.
+
+**Nota:** XML salvage (parse narasi jadi `tool_calls` sintetik) dicadangkan sebagai
+fasa 2 — majoriti bentuk degradasi bawa argumen penuh, cuma format salah. Belum dibina.
 
 ### ✅ DIBAIKI: persona dilangkau bila `system` ada tapi kosong
 

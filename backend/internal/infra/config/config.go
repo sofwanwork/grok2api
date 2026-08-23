@@ -386,6 +386,15 @@ type QualityGuardRequestRetryConfig struct {
 	// IdleAccountCooldown cools an account after a truly empty upstream
 	// stream. Independent of accountCooldown (missing-thinking). Zero uses 15m.
 	IdleAccountCooldown Duration `yaml:"idleAccountCooldown"`
+	// ToolDegradation retries streams where upstream narrates a tool call as
+	// prose instead of emitting a structured call. Never penalises accounts.
+	ToolDegradation QualityGuardToolDegradationConfig `yaml:"toolDegradation"`
+}
+
+// QualityGuardToolDegradationConfig holds the prose-narration retry policy.
+type QualityGuardToolDegradationConfig struct {
+	Enabled     bool `yaml:"enabled"`
+	MaxAttempts int  `yaml:"maxAttempts"`
 }
 
 type ClientKeyDefaultsConfig struct {
@@ -909,6 +918,9 @@ func validateQualityGuardRequestRetry(value QualityGuardRequestRetryConfig) erro
 	if d := value.IdleAccountCooldown.Value(); d != 0 && (d < time.Minute || d > 168*time.Hour) {
 		return errors.New("qualityGuard.requestRetry.idleAccountCooldown 必须在 1m 到 168h 之间")
 	}
+	if n := value.ToolDegradation.MaxAttempts; n != 0 && (n < 1 || n > 6) {
+		return errors.New("qualityGuard.requestRetry.toolDegradation.maxAttempts mesti antara 1 hingga 6")
+	}
 	return nil
 }
 
@@ -1044,6 +1056,7 @@ func defaultConfig() Config {
 			RequestRetry: QualityGuardRequestRetryConfig{
 				MaxAttempts: 6, HoldTimeout: Duration(30 * time.Second), MinOutputTokens: 8, OnExhausted: "fail_closed",
 				AccountCooldown: Duration(12 * time.Hour), IdleAccountCooldown: Duration(15 * time.Minute),
+				ToolDegradation: QualityGuardToolDegradationConfig{Enabled: false, MaxAttempts: 3},
 			},
 		},
 		ClientKeyDefaults: ClientKeyDefaultsConfig{RPMLimit: clientkeydomain.DefaultRPMLimit, MaxConcurrent: clientkeydomain.DefaultMaxConcurrent},

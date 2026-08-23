@@ -18,6 +18,7 @@ import (
 
 const (
 	ErrorQualityDegraded             = "quality_degraded"
+	ErrorToolCallDegraded            = "tool_call_degraded"
 	qualityRetryFailOpen             = "fail_open"
 	qualityRetryFailClosed           = "fail_closed"
 	defaultQualityMaxAttempts        = 6
@@ -29,11 +30,18 @@ const (
 	// An empty stream that idles while held is treated as an account-quality
 	// failure: the request can still rotate before any bytes reach the client.
 	qualityIdleAccountCooldown = 15 * time.Minute
+	// Tool-call degradation was measured at roughly a 50% rate, so three
+	// attempts recover about 87% of requests. Higher values mostly multiply
+	// token spend for diminishing returns.
+	defaultToolDegradationMaxAttempts = 3
 )
 
 var (
 	errQualityDegraded    = errors.New("Respons upstream tiada penaakulan")
 	errQualityEmptyStream = errors.New("Respons berstrim upstream kosong")
+	// errToolCallDegraded drives a retry only. It is never surfaced to the
+	// client, because an exhausted degradation budget delivers the body.
+	errToolCallDegraded = errors.New("Upstream menghuraikan panggilan alat sebagai teks")
 )
 
 // QualityRetryRuntime is the isolated request-path withhold/retry policy.
@@ -48,6 +56,23 @@ type QualityRetryRuntime struct {
 	// IdleAccountCooldown is applied to truly empty upstream streams
 	// (idle timeout / empty peek). Missing-thinking still uses AccountCooldown.
 	IdleAccountCooldown time.Duration
+	// ToolDegradationEnabled retries streams where the model narrates a tool
+	// call in prose instead of emitting one. Independent of the missing-thinking
+	// policy: degradation is stochastic upstream behaviour, not an account
+	// fault, so it never cools or disables an account.
+	ToolDegradationEnabled bool
+	// ToolDegradationMaxAttempts bounds those retries. Measured degradation is
+	// roughly one in two requests, so a small number already recovers most of
+	// them without multiplying token spend.
+	ToolDegradationMaxAttempts int
+	// MissingThinkingDisabled turns off the withhold verdict when the peek runs
+	// only for tool degradation. It is an opt-out (pointer) so existing callers
+	// that construct the struct literally keep the original missing-thinking
+	// behaviour; the production loop sets it only for degradation-only holds.
+	MissingThinkingDisabled *bool
+	// DeclaredClientTools is the per-request set of client-executed tool names.
+	// Empty disables degradation detection.
+	DeclaredClientTools []string
 }
 
 // QualityStreamSignals is the hold classifier input. Tests drive this
@@ -63,6 +88,11 @@ type QualityStreamSignals struct {
 	OutputTokens     int64
 	Terminal         bool
 	HoldExpired      bool
+	// SawToolCall reports a structured tool/function call in the stream.
+	SawToolCall bool
+	// VisibleText is the leading visible text, used only to detect tool-call
+	// degradation (prose narration instead of a structured call).
+	VisibleText string
 }
 
 // QualityVerdict is the hold decision for one upstream stream.
@@ -72,6 +102,9 @@ const (
 	QualityWait     QualityVerdict = "wait"
 	QualityDeliver  QualityVerdict = "deliver"
 	QualityWithhold QualityVerdict = "withhold"
+	// QualityToolDegraded is a prose-narrated tool call. Kept separate from
+	// QualityWithhold so it never reaches applyMissingThinkingPenalty.
+	QualityToolDegraded QualityVerdict = "tool_degraded"
 )
 
 // QualityRetryAction is what the attempt loop does with a withhold verdict.
@@ -100,8 +133,16 @@ func normalizeQualityRetry(cfg QualityRetryRuntime) QualityRetryRuntime {
 	if cfg.IdleAccountCooldown <= 0 {
 		cfg.IdleAccountCooldown = qualityIdleAccountCooldown
 	}
+	if cfg.ToolDegradationMaxAttempts <= 0 {
+		cfg.ToolDegradationMaxAttempts = defaultToolDegradationMaxAttempts
+	}
 	cfg.OnExhausted = normalizeQualityExhaustionPolicy(cfg.OnExhausted)
 	return cfg
+}
+
+// missingThinkingEnabled resolves the opt-out to the effective verdict switch.
+func (cfg QualityRetryRuntime) missingThinkingEnabled() bool {
+	return cfg.MissingThinkingDisabled == nil || !*cfg.MissingThinkingDisabled
 }
 
 func (s *Service) UpdateQualityRetry(cfg QualityRetryRuntime) {
@@ -321,6 +362,44 @@ func shouldHoldQualityStream(input Input, ownership *inferencedomain.ResponseOwn
 		return true
 	}
 	return modeldomain.SupportsReasoningForProvider(route.Provider, route.UpstreamModel)
+}
+
+// shouldHoldForToolDegradation gates degradation retries. Unlike the
+// missing-thinking gate it does not require a reasoning-capable model, because
+// degradation was observed on ordinary tool requests. Hosted tools are still
+// excluded: replaying them can repeat an upstream search or sandbox run.
+func shouldHoldForToolDegradation(input Input, ownership *inferencedomain.ResponseOwnership, operation audit.Operation, cfg QualityRetryRuntime) bool {
+	if !cfg.Enabled || !cfg.ToolDegradationEnabled || !input.Streaming {
+		return false
+	}
+	if input.ForcedEgressNodeID != 0 || ownership != nil || input.skipQualityHold {
+		return false
+	}
+	switch operation {
+	case audit.OperationChat, audit.OperationResponses, audit.OperationMessages, "":
+	default:
+		return false
+	}
+	if isResponsesCompactionRequest(input.Body) {
+		return false
+	}
+	return !qualityRequestHasReplayUnsafeHostedTools(input.Body)
+}
+
+// DecideToolDegradationRetry retries while attempts remain and otherwise
+// delivers the last body. It never rejects: the prose answer is still readable,
+// so failing closed here would replace a usable response with an error.
+func DecideToolDegradationRetry(attemptIndex, maxAttempts int, hasNextRouting bool) QualityRetryAction {
+	if maxAttempts <= 0 {
+		maxAttempts = defaultToolDegradationMaxAttempts
+	}
+	if attemptIndex < 0 {
+		attemptIndex = 0
+	}
+	if attemptIndex < maxAttempts-1 && hasNextRouting {
+		return QualityActionRetry
+	}
+	return QualityActionDeliverLast
 }
 
 func qualityRequestHasReplayUnsafeHostedTools(body []byte) bool {
