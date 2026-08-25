@@ -12,7 +12,7 @@
 | Bookmark patches | `local-patches` (kini sejajar dengan merge `bed7232d` — di-refresh 22 Ogos, jangan biar stale lagi) |
 | Tag fallback | `backup-pre-merge-v315` (keadaan pra-merge v3.1.5, patch #14); `backup-pre-merge-20260822` |
 | Base upstream terakhir | `62d2775c` = tag `v3.1.5` (25 Ogos 2026) — **merged 25 Ogos 2026** |
-| Image Docker | `grok2api:local-v315` (v3.1.5 + patch #1-14); fallback: `grok2api:local-ttft`, `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
+| Image Docker | `grok2api:local-keepalive` (v3.1.5 + patch #1-15); fallback: `grok2api:local-v315`, `grok2api:local-ttft`, `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
 | Container | `grok2api` (docker compose) |
 | Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` |
 
@@ -49,6 +49,35 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (honest TTFT via `firstEvidenceAt`/`markAt`), #11 (tool salvage), #12
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
+
+### Keepalive semasa quality hold (patch #15, 25 Ogos)
+
+**Gejala:** dalam OpenCode, jawapan muncul dua kali dengan kandungan hampir
+serupa (seolah model mengulang). Audit menunjukkan pasangan request dengan
+`input_tokens` sama persis beberapa saat antara satu sama lain — OpenCode
+menghantar semula request yang sama kerana ia menganggap yang pertama gagal.
+
+**Punca:** semasa quality hold, gateway menahan semua bait sambil menunggu
+bukti thinking (fasa senyap 12–135s). Bagi client dengan idle timeout pendek
+(OpenCode), senyap sebegini kelihatan seperti sambungan mati → client abort
+dan retry → gateway memproses kedua-dua request → jawapan berganda.
+
+**Fix:** `startHoldKeepalive` menyuntik komen SSE dalaman
+(`: grok2api-keepalive`) ke dalam pump pada selang `requestRetry.holdKeepalive`
+(default 0/mati; 5s dalam config kita). Komen itu melalui scanner tanpa kesan,
+ditapis oleh `internalSSEMarkerFilter` sebelum client, dan memberitahu client
+bahawa sambungan masih hidup — OpenCode tidak lagi abort & retry.
+
+**Bukti live:** sebelum patch — 13 pasangan duplikat `input_tokens` dalam
+sehari; selepas patch — **tiada satu pun** dalam 32 request berturut,
+streaming esei panjang 3656 event/102s kekal sempurna.
+
+**Test:** `TestPeekQualityStreamHoldKeepaliveInjectsComments` (komen sampai
+dalam replay + verdict tidak terjejas) dan
+`TestPeekQualityStreamHoldKeepaliveDisabledByDefault` (tiada suntikan bila 0) —
+lulus, full suite 63 pakej 0 gagal.
+
+**Image:** `grok2api:local-keepalive` (= local-v315 + patch #15).
 
 ## Merge 22 Ogos 2026 — apa yang berlaku
 
