@@ -43,6 +43,11 @@ type qualityScanState struct {
 	// maxToolNarrationCapture. Only the beginning matters: every observed
 	// degradation starts narrating immediately.
 	visibleText []byte
+	// firstEvidenceAt records when the upstream first showed generation
+	// evidence (reasoning marker, thinking delta, visible text, or a tool
+	// call). The audit first-token timestamp must use this moment — not the
+	// later replay time — so a held stream reports honest TTFT.
+	firstEvidenceAt time.Time
 }
 
 // maxToolNarrationCapture bounds retained visible text. It must exceed
@@ -56,6 +61,19 @@ func (s *qualityScanState) noteToolCall() {
 	}
 	s.sawToolCall = true
 	s.semanticOutput = true
+}
+
+// noteFirstEvidence latches the wall-clock moment the upstream first proved it
+// was generating: a reasoning marker, a thinking delta, visible text, or a
+// structured tool call. Called via defer from ObserveQualityChunk so the
+// timestamp reflects chunk arrival, not a later classification decision.
+func (s *qualityScanState) noteFirstEvidence() {
+	if s == nil || !s.firstEvidenceAt.IsZero() {
+		return
+	}
+	if s.reasoningStarted || s.hasThinking || s.visibleRunes > 0 || s.sawToolCall || s.semanticOutput {
+		s.firstEvidenceAt = time.Now()
+	}
 }
 
 func (s *qualityScanState) captureVisibleText(text string) {
@@ -179,6 +197,7 @@ func (s *qualityScanState) signals() QualityStreamSignals {
 	return QualityStreamSignals{
 		HasThinking:      s.hasThinking,
 		ReasoningStarted: s.reasoningStarted || s.hasThinking,
+		VisibleRunes:     int64(visibleRunes),
 		VisibleTokens:    visible,
 		ReasoningTokens:  max(s.reasoningTokens, s.usage.ReasoningTokens),
 		OutputTokens:     output,
@@ -194,6 +213,7 @@ func ObserveQualityChunk(state *qualityScanState, chunk []byte) {
 	if state == nil || len(chunk) == 0 {
 		return
 	}
+	defer state.noteFirstEvidence()
 	state.pending = append(state.pending, chunk...)
 	for {
 		index := bytes.IndexByte(state.pending, '\n')
@@ -502,16 +522,21 @@ func noteVisibleContent(state *qualityScanState, text string) {
 	state.captureVisibleText(text)
 }
 
-func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string, cfg QualityRetryRuntime) (io.ReadCloser, QualityVerdict, Usage, string, error) {
+func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string, cfg QualityRetryRuntime) (io.ReadCloser, QualityVerdict, Usage, string, time.Time, error) {
 	cfg = normalizeQualityRetry(cfg)
 	if body == nil {
-		return io.NopCloser(bytes.NewReader(nil)), QualityWait, Usage{}, "", errQualityEmptyStream
+		return io.NopCloser(bytes.NewReader(nil)), QualityWait, Usage{}, "", time.Time{}, errQualityEmptyStream
 	}
 	pump := newQualityReadPump(body)
 	state := qualityScanState{protocol: protocol}
 	var held bytes.Buffer
 	holdTimer := time.NewTimer(cfg.HoldTimeout)
 	defer holdTimer.Stop()
+	// holdExpired latches the one-shot hold deadline. Once the deadline has
+	// fired, evidence that arrives later (the common shape for grok-4.6: a
+	// long silent thinking phase pushes the reasoning-evidence marker past
+	// the timer) still gets a chance to release the hold. Patch #13.
+	holdExpired := false
 	for {
 		sig := state.signals()
 		// Degradation is checked first, but only WINS when it actually fires.
@@ -519,7 +544,7 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 		// the missing-thinking classifier. Fall through to it instead.
 		if len(cfg.DeclaredClientTools) > 0 {
 			if _, degraded := toolCallDegraded(cfg.DeclaredClientTools, sig.VisibleText, sig.SawToolCall); degraded {
-				return newPrefixReplay(&held, pump), QualityToolDegraded, state.usage, state.responseID, nil
+				return newPrefixReplay(&held, pump), QualityToolDegraded, state.usage, state.responseID, state.firstEvidenceAt, nil
 			}
 		}
 		if cfg.missingThinkingEnabled() {
@@ -527,15 +552,26 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 			// deliver: Grok announces reasoning before narrating a call in prose,
 			// and delivering here would skip that check. Hold until the text is
 			// conclusive (degraded above, or a real call / terminal below).
+			// Patch #13: after the hold deadline has fired, real thinking
+			// evidence plus a fully observed clean narration window releases the
+			// hold. The rune guard is load-bearing: degraded narrations start at
+			// visible-text offset 0, so once the first toolNarrationWindow runes
+			// are clean the stream can no longer match the degradation window —
+			// releasing only then keeps late narrations catchable. Without this
+			// release path, late evidence leaves the loop waiting for EOF, so
+			// the whole answer is buffered and pasted once instead of streaming.
+			if sig.HasThinking && holdExpired && sig.VisibleRunes >= toolNarrationWindow {
+				return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
+			}
 			if len(cfg.DeclaredClientTools) > 0 && !sig.SawToolCall && !sig.Terminal {
 				// keep waiting for text that proves or disproves degradation
 			} else if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
-				return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, nil
+				return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, state.firstEvidenceAt, nil
 			}
 		} else if sig.SawToolCall || sig.HasThinking || (sig.Terminal && sig.OutputTokens > 0) {
 			// Degradation-only peek: release as soon as the stream proves it is
 			// not degraded, so latency is not tied to the hold timeout.
-			return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, nil
+			return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 		}
 		// A completed empty stream must rotate immediately. Waiting for idle
 		// timeout after response.completed / [DONE] surfaces HTTP 200 with 0
@@ -547,9 +583,10 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 		select {
 		case <-ctx.Done():
 			_ = pump.Close()
-			return io.NopCloser(bytes.NewReader(held.Bytes())), QualityWait, state.usage, state.responseID, qualityPeekAbortError(ctx, ctx.Err())
+			return io.NopCloser(bytes.NewReader(held.Bytes())), QualityWait, state.usage, state.responseID, state.firstEvidenceAt, qualityPeekAbortError(ctx, ctx.Err())
 		case <-holdTimer.C:
 			sig.HoldExpired = true
+			holdExpired = true // Patch #13: latch so late evidence can still release.
 			if !cfg.missingThinkingEnabled() {
 				// Degradation-only peek. A stream that already carries evidence
 				// (text, a tool call, thinking) cannot become degraded by waiting
@@ -557,11 +594,11 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 				// the evidence a later verdict needs, so keep waiting instead of
 				// flushing an empty HTTP 200 — same as the original behaviour.
 				if sig.SawToolCall || sig.HasThinking || sig.VisibleTokens > 0 || sig.OutputTokens > 0 || sig.Terminal {
-					return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, nil
+					return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 				}
 				// otherwise keep waiting
 			} else if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
-				return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, nil
+				return newPrefixReplay(&held, pump), verdict, state.usage, state.responseID, state.firstEvidenceAt, nil
 			}
 		case result, ok := <-pump.results:
 			if !ok {
@@ -570,7 +607,7 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 			if len(result.data) > 0 {
 				if held.Len()+len(result.data) > qualityHoldMaxBufferBytes {
 					_, _ = held.Write(result.data)
-					return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, nil
+					return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 				}
 				_, _ = held.Write(result.data)
 				ObserveQualityChunk(&state, result.data)
@@ -580,15 +617,15 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 			}
 			if result.err != nil {
 				_ = pump.Close()
-				return io.NopCloser(bytes.NewReader(held.Bytes())), QualityWait, state.usage, state.responseID, qualityPeekAbortError(ctx, result.err)
+				return io.NopCloser(bytes.NewReader(held.Bytes())), QualityWait, state.usage, state.responseID, state.firstEvidenceAt, qualityPeekAbortError(ctx, result.err)
 			}
 		}
 	}
 }
 
-func finishQualityPeek(held *bytes.Buffer, pump *qualityReadPump, state *qualityScanState, cfg QualityRetryRuntime) (io.ReadCloser, QualityVerdict, Usage, string, error) {
+func finishQualityPeek(held *bytes.Buffer, pump *qualityReadPump, state *qualityScanState, cfg QualityRetryRuntime) (io.ReadCloser, QualityVerdict, Usage, string, time.Time, error) {
 	if state == nil {
-		return io.NopCloser(bytes.NewReader(nil)), QualityWait, Usage{}, "", errQualityEmptyStream
+		return io.NopCloser(bytes.NewReader(nil)), QualityWait, Usage{}, "", time.Time{}, errQualityEmptyStream
 	}
 	if len(state.pending) > 0 {
 		// Process a final valid SSE data line even when the upstream omitted its
@@ -601,21 +638,21 @@ func finishQualityPeek(held *bytes.Buffer, pump *qualityReadPump, state *quality
 	// degradation check is repeated here on the complete sample.
 	if len(cfg.DeclaredClientTools) > 0 {
 		if _, degraded := toolCallDegraded(cfg.DeclaredClientTools, signals.VisibleText, signals.SawToolCall); degraded {
-			return newPrefixReplay(held, pump), QualityToolDegraded, state.usage, state.responseID, nil
+			return newPrefixReplay(held, pump), QualityToolDegraded, state.usage, state.responseID, state.firstEvidenceAt, nil
 		}
 	}
 	if !signals.HasThinking && signals.ReasoningTokens <= 0 && signals.OutputTokens <= 0 && signals.VisibleTokens <= 0 {
 		if state.semanticOutput {
-			return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, nil
+			return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 		}
-		return newPrefixReplay(held, pump), QualityWait, state.usage, state.responseID, errQualityEmptyStream
+		return newPrefixReplay(held, pump), QualityWait, state.usage, state.responseID, state.firstEvidenceAt, errQualityEmptyStream
 	}
 	// Without the missing-thinking policy a completed stream is always
 	// delivered: withholding here would drop a usable body.
 	if !cfg.missingThinkingEnabled() {
-		return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, nil
+		return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 	}
-	return newPrefixReplay(held, pump), ClassifyQualityHold(signals, cfg.MinOutputTokens), state.usage, state.responseID, nil
+	return newPrefixReplay(held, pump), ClassifyQualityHold(signals, cfg.MinOutputTokens), state.usage, state.responseID, state.firstEvidenceAt, nil
 }
 
 func newPrefixReplay(held *bytes.Buffer, rest io.ReadCloser) io.ReadCloser {

@@ -464,7 +464,7 @@ func TestPeekQualityStreamThinkingDeliversRemainder(t *testing.T) {
 		`data: {"choices":[{"delta":{"content":"answer after think"}}]}`,
 		"data: [DONE]",
 	)))
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, QualityRetryRuntime{MinOutputTokens: 32, HoldTimeout: time.Second})
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, QualityRetryRuntime{MinOutputTokens: 32, HoldTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +487,7 @@ func TestPeekQualityStreamWithholdsNoThinkEnough(t *testing.T) {
 		`data: {"usage":{"completion_tokens":40,"completion_tokens_details":{"reasoning_tokens":0}}}`,
 		"data: [DONE]",
 	)))
-	replay, verdict, usage, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, QualityRetryRuntime{MinOutputTokens: 32, HoldTimeout: time.Second})
+	replay, verdict, usage, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, QualityRetryRuntime{MinOutputTokens: 32, HoldTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +510,7 @@ func TestPeekThenDecideQualityRetryBounded(t *testing.T) {
 	)
 	cfg := QualityRetryRuntime{MinOutputTokens: 32, MaxAttempts: 2, OnExhausted: qualityRetryFailOpen, HoldTimeout: time.Second}
 
-	replay, verdict, usage, _, err := peekQualityStream(context.Background(), io.NopCloser(strings.NewReader(fixture)), qualityProtocolChat, cfg)
+	replay, verdict, usage, _, _, err := peekQualityStream(context.Background(), io.NopCloser(strings.NewReader(fixture)), qualityProtocolChat, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +522,7 @@ func TestPeekThenDecideQualityRetryBounded(t *testing.T) {
 		t.Fatalf("first withhold action=%s", got)
 	}
 
-	replay2, verdict2, _, _, err := peekQualityStream(context.Background(), io.NopCloser(strings.NewReader(fixture)), qualityProtocolChat, cfg)
+	replay2, verdict2, _, _, _, err := peekQualityStream(context.Background(), io.NopCloser(strings.NewReader(fixture)), qualityProtocolChat, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +547,7 @@ func TestPeekQualityStreamShortDelivers(t *testing.T) {
 		`data: {"choices":[{"delta":{"content":"hi"}}]}`,
 		"data: [DONE]",
 	)))
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, QualityRetryRuntime{MinOutputTokens: 32})
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, QualityRetryRuntime{MinOutputTokens: 32})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +581,7 @@ func TestPeekQualityStreamHoldTimeoutInterruptsBlockedReadAndPreservesRemainder(
 	}()
 
 	started := time.Now()
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
 		MinOutputTokens: 32,
 		HoldTimeout:     30 * time.Millisecond,
 	})
@@ -639,7 +639,7 @@ func TestPeekQualityStreamHoldTimeoutDeliversStartedReasoningAndPreservesLateEvi
 	}()
 
 	started := time.Now()
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolResponses, QualityRetryRuntime{
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolResponses, QualityRetryRuntime{
 		MinOutputTokens: 8,
 		HoldTimeout:     30 * time.Millisecond,
 	})
@@ -676,7 +676,7 @@ func TestPeekQualityStreamHoldTimeoutEmptyDoesNotFailOpen(t *testing.T) {
 	var peekErr error
 	go func() {
 		defer close(done)
-		_, verdict, _, _, peekErr = peekQualityStream(ctx, reader, qualityProtocolChat, QualityRetryRuntime{
+		_, verdict, _, _, _, peekErr = peekQualityStream(ctx, reader, qualityProtocolChat, QualityRetryRuntime{
 			MinOutputTokens: 32,
 			HoldTimeout:     20 * time.Millisecond,
 		})
@@ -715,7 +715,7 @@ func TestPeekQualityStreamHoldTimeoutStubOnlyDoesNotFailOpen(t *testing.T) {
 	var peekErr error
 	go func() {
 		defer close(done)
-		_, verdict, _, _, peekErr = peekQualityStream(ctx, reader, qualityProtocolChat, QualityRetryRuntime{
+		_, verdict, _, _, _, peekErr = peekQualityStream(ctx, reader, qualityProtocolChat, QualityRetryRuntime{
 			MinOutputTokens: 8,
 			HoldTimeout:     20 * time.Millisecond,
 		})
@@ -753,7 +753,7 @@ func peekOpenQualityStreamForTest(t *testing.T, protocol, stream string) quality
 	reader, writer := io.Pipe()
 	done := make(chan qualityOpenPeekResult, 1)
 	go func() {
-		replay, verdict, _, _, err := peekQualityStream(
+		replay, verdict, _, _, _, err := peekQualityStream(
 			context.Background(), reader, protocol,
 			QualityRetryRuntime{MinOutputTokens: 32, HoldTimeout: 2 * time.Second},
 		)
@@ -901,7 +901,7 @@ func TestPeekQualityStreamTerminalSemanticOutputIsNotEmpty(t *testing.T) {
 
 func TestPeekQualityStreamEmptyEOFRequestsAnotherAccount(t *testing.T) {
 	t.Parallel()
-	replay, verdict, _, _, err := peekQualityStream(
+	replay, verdict, _, _, _, err := peekQualityStream(
 		context.Background(),
 		io.NopCloser(strings.NewReader("")),
 		qualityProtocolResponses,
@@ -921,7 +921,7 @@ func TestPeekQualityStreamEmptyEOFRequestsAnotherAccount(t *testing.T) {
 func TestPeekQualityStreamProcessesUnterminatedFinalEvent(t *testing.T) {
 	t.Parallel()
 	body := io.NopCloser(strings.NewReader(`data: {"type":"response.output_text.delta","delta":"ok"}`))
-	replay, verdict, _, _, err := peekQualityStream(
+	replay, verdict, _, _, _, err := peekQualityStream(
 		context.Background(), body, qualityProtocolResponses,
 		QualityRetryRuntime{MinOutputTokens: 32, HoldTimeout: time.Second},
 	)
@@ -1411,5 +1411,288 @@ func TestNormalizeQualityRetryDefaults(t *testing.T) {
 	got := normalizeQualityRetry(QualityRetryRuntime{Enabled: true})
 	if !got.Enabled || got.MaxAttempts != 6 || got.MinOutputTokens != 8 || got.OnExhausted != qualityRetryFailClosed || got.HoldTimeout != 30*time.Second || got.AccountCooldown != 12*time.Hour || got.IdleAccountCooldown != 15*time.Minute {
 		t.Fatalf("defaults = %#v", got)
+	}
+}
+
+// Patch #13: bukti thinking yang sampai SELEPAS hold deadline mesti release
+// stream ber-tools — bukan tunggu EOF dan tampal sekali harung. Ini bentuk
+// normal grok-4.6: fasa thinking senyap menolak marker reasoning-evidence
+// melepasi 10s timer.
+func TestPeekQualityStreamLateThinkingEvidenceReleasesToolStream(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	// Fasa 1: hanya thinking stub — senyap, tiada teks.
+	first := sse(": grok2api-reasoning-start")
+	// Fasa 2 (lewat, selepas deadline): bukti encrypted reasoning + teks.
+	// >160 rune supaya window narration bersih sepenuhnya diperhatikan.
+	second := sse(
+		": grok2api-reasoning-evidence",
+		`data: {"choices":[{"delta":{"content":"`+strings.Repeat("word ", 40)+`"}}]}`,
+	)
+	writeErr := make(chan error, 1)
+	evidenceWritten := make(chan struct{})
+	evidenceRead := make(chan struct{})
+	go func() {
+		if _, err := io.WriteString(writer, first); err != nil {
+			writeErr <- err
+			return
+		}
+		// Biar hold timer (50ms) mati dulu — evidence sampai selepasnya.
+		time.Sleep(150 * time.Millisecond)
+		if _, err := io.WriteString(writer, second); err != nil {
+			writeErr <- err
+			return
+		}
+		close(evidenceWritten)
+		// Stream kekal terbuka: peek mesti keluar TANPA menunggu EOF.
+		if _, err := io.WriteString(writer, sse(`data: {"choices":[{"delta":{"content":" tail"}}]}`)); err != nil {
+			writeErr <- err
+			return
+		}
+		// Jangan tutup writer — jika peek masih menunggu EOF ia akan hang dan
+		// test timeout gagal; kalau patch betul peek dah keluar.
+		<-evidenceRead
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+
+	started := time.Now()
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens:     32,
+		HoldTimeout:         50 * time.Millisecond,
+		DeclaredClientTools: []string{"read_file"},
+	})
+	elapsed := time.Since(started)
+	close(evidenceRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	// Mesti keluar SELEPAS deadline (50ms) tapi SEBELUM 2s — bila teks
+	// bersih >160 rune sampai, bukan bila EOF.
+	if elapsed < 100*time.Millisecond || elapsed > 2*time.Second {
+		t.Fatalf("peek returned after %s — mesti release bila window bersih siap, bukan tunggu EOF (patch #13 tak berfungsi)", elapsed)
+	}
+	if verdict != QualityDeliver {
+		t.Fatalf("late-evidence verdict = %s, want deliver", verdict)
+	}
+	// Pastikan bytes fasa-1 (stub) tidak hilang semasa replay.
+	body, err := io.ReadAll(replay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "reasoning-start") || !strings.Contains(string(body), "word") {
+		t.Fatalf("replay hilang bytes: %s", body)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Patch #13 perlindungan mesti kekal: stream benak (tiada bukti thinking)
+// selepas deadline TIDAK boleh deliver — mesti terus menunggu/withhold.
+func TestPeekQualityStreamExpiredHoldWithoutThinkingStillWaits(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	// Prosa sahaja, tiada thinking — tapi kita jangan biar ia jadi terminal
+	// cepat supaya cabang keep-waiting kekal aktif.
+	content := strings.Repeat("word ", 40) // ~50 tokens
+	writeErr := make(chan error, 1)
+	continueWrite := make(chan struct{})
+	go func() {
+		if _, err := io.WriteString(writer, sse(`data: {"choices":[{"delta":{"content":"`+content+`"}}]}`)); err != nil {
+			writeErr <- err
+			return
+		}
+		// Tinggalkan stream terbuka: peek mesti TIDAK deliver sebelum ada
+		// bukti thinking (benak tak boleh lulus walaupun timer dah mati).
+		time.Sleep(150 * time.Millisecond)
+		close(continueWrite)
+		if _, err := io.WriteString(writer, "data: [DONE]\n\n"); err != nil {
+			writeErr <- err
+			return
+		}
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+
+	started := time.Now()
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens:     32,
+		HoldTimeout:         50 * time.Millisecond,
+		DeclaredClientTools: []string{"read_file"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	// Kelakuan betul: benak (tiada bukti thinking, output cukup) mesti
+	// di-rotate SEGERA pada deadline — Withhold, bukan deliver. Elastik
+	// ~50-100ms membuktikan ia keluar di timer, bukan menunggu EOF.
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("peek keluar selepas %s — sepatutnya rotate pada deadline (~50ms)", elapsed)
+	}
+	if verdict != QualityWithhold {
+		t.Fatalf("no-thinking verdict = %s, want withhold (rotate akaun lain)", verdict)
+	}
+	body, err := io.ReadAll(replay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "word") {
+		t.Fatalf("replay hilang bytes: %s", body)
+	}
+	// Writer akan tersekat/gagal selepas peek menutup body (Withhold =
+	// stream dibuang) — pipe-closed adalah OK.
+	if err := <-writeErr; err != nil && err != io.ErrClosedPipe {
+		t.Fatal(err)
+	}
+}
+
+// Patch #13: degradation check mesti TETAP menang walaupun deadline dah
+// mati — XML narration sampai lewat tidak boleh deliver sebagai prose.
+func TestPeekQualityStreamLateEvidenceDoesNotReleaseDegradedNarration(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	// Bentuk paling mencabar: evidence marker sampai SEBELUM narasi (urutan
+	// biasa — thinking selesai, terus narrate). Guard rune (≥160) mesti
+	// tahan release sampai window narration siap diperhatikan, dan bila
+	// marker degradation muncul dalam window tu → tool_degraded, bukan deliver.
+	// Nota: tiada newline literal dalam narasi (pecahkan payload JSON test) —
+	// guna ruang; marker + argument dictation masih match.
+	narration := "I'll read the file now. <invoke tool=\x27read_file\x27> <parameter name=\x27path\x27>C:/x.txt</parameter> </invoke>"
+	writeErr := make(chan error, 1)
+	go func() {
+		// Stub dulu, biar timer 50ms mati semasa fasa senyap.
+		if _, err := io.WriteString(writer, sse(": grok2api-reasoning-start")); err != nil {
+			writeErr <- err
+			return
+		}
+		time.Sleep(150 * time.Millisecond)
+		// Bukti thinking + narasi degraded dalam satu burst.
+		if _, err := io.WriteString(writer, sse(
+			": grok2api-reasoning-evidence",
+			`data: {"choices":[{"delta":{"content":"`+narration+`"}}]}`,
+		)); err != nil {
+			writeErr <- err
+			return
+		}
+		// Stream terbuka: mesti TIDAK deliver.
+		time.Sleep(300 * time.Millisecond)
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens:     32,
+		HoldTimeout:         50 * time.Millisecond,
+		DeclaredClientTools: []string{"read_file"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	if verdict != QualityToolDegraded {
+		t.Fatalf("late-evidence degraded narration verdict = %s, want tool_degraded", verdict)
+	}
+	// Tutup replay supaya writer tersekat boleh selesai.
+	_ = replay.Close()
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Patch #14: audit TTFT mesti guna masa bukti upstream (bukan masa replay
+// di-forward). Stream yang di-hold sehingga EOF dan kemudian di-replay
+// sekaligus pernah mencatat first_token ≈ duration — TPS terbit jadi sampah.
+// Di sini evidence marker tiba awal, kemudian stream senyap lama sebelum
+// teks; firstEvidenceAt mesti kekal di masa evidence, jauh sebelum EOF.
+func TestPeekQualityStreamFirstEvidenceAtIsUpstreamTime(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	start := time.Now()
+	writeErr := make(chan error, 1)
+	go func() {
+		// Bukti generation tiba serta-merta (marker reasoning-start).
+		if _, err := io.WriteString(writer, sse(": grok2api-reasoning-start")); err != nil {
+			writeErr <- err
+			return
+		}
+		// Fasa senyap panjang — thinking berjalan tanpa delta kelihatan.
+		time.Sleep(350 * time.Millisecond)
+		if _, err := io.WriteString(writer, sse(
+			": grok2api-reasoning-evidence",
+			`data: {"choices":[{"delta":{"content":"Jawapan selepas diam yang panjang sekali."}}]}`,
+			"data: [DONE]",
+		)); err != nil {
+			writeErr <- err
+			return
+		}
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+
+	replay, verdict, _, _, firstEvidenceAt, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens: 8,
+		HoldTimeout:     50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	if verdict != QualityDeliver {
+		t.Fatalf("verdict = %s, want deliver", verdict)
+	}
+	if firstEvidenceAt.IsZero() {
+		t.Fatal("firstEvidenceAt not stamped despite reasoning marker")
+	}
+	// Evidence sampai pada permulaan stream; EOF hanya ~350ms kemudian.
+	// Stamp mesti berhampiran permulaan, bukan hujung.
+	if elapsed := firstEvidenceAt.Sub(start); elapsed > 150*time.Millisecond {
+		t.Fatalf("firstEvidenceAt = %v after start, want <= 150ms (evidence time, bukan EOF)", elapsed)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Patch #14: stream tanpa sebarang bukti generation (kosong sampai EOF)
+// tidak men-stamp firstEvidenceAt — timer forward biasa yang mengambil alih.
+func TestPeekQualityStreamFirstEvidenceAtZeroWithoutEvidence(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	writeErr := make(chan error, 1)
+	go func() {
+		time.Sleep(60 * time.Millisecond)
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+	_, _, _, _, firstEvidenceAt, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens: 8,
+		HoldTimeout:     20 * time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("empty stream should surface errQualityEmptyStream")
+	}
+	if !firstEvidenceAt.IsZero() {
+		t.Fatalf("empty stream stamped firstEvidenceAt = %v", firstEvidenceAt)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
 	}
 }

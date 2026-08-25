@@ -88,6 +88,11 @@ type QualityStreamSignals struct {
 	OutputTokens     int64
 	Terminal         bool
 	HoldExpired      bool
+	// VisibleRunes is the raw visible rune count before the /4 token
+	// estimate. Patch #13 uses it to know when the tool-narration window has
+	// been fully observed, so a post-deadline release cannot outrun the
+	// degradation detector.
+	VisibleRunes int64
 	// SawToolCall reports a structured tool/function call in the stream.
 	SawToolCall bool
 	// VisibleText is the leading visible text, used only to detect tool-call

@@ -12,7 +12,7 @@
 | Bookmark patches | `local-patches` (kini sejajar dengan merge `bed7232d` — di-refresh 22 Ogos, jangan biar stale lagi) |
 | Tag fallback | `backup-pre-merge-20260822` (keadaan pra-merge, 12 commit) |
 | Base upstream terakhir | `d6f6e9f5` (19 Ogos 2026) — **merged 22 Ogos 2026** |
-| Image Docker | `grok2api:local-nltools` (post-merge); fallback: `grok2api:backup-20260822`, `grok2api:local-layered` (pra-merge) |
+| Image Docker | `grok2api:local-ttft` (patch #14, 24 Ogos — TTFT audit jujur untuk stream ber-hold); fallback: `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
 | Container | `grok2api` (docker compose) |
 | Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` |
 
@@ -199,6 +199,92 @@ masih dapat dipulihkan oleh retry.
 
 **Nota:** XML salvage (parse narasi jadi `tool_calls` sintetik) dicadangkan sebagai
 fasa 2 — majoriti bentuk degradasi bawa argumen penuh, cuma format salah. Belum dibina.
+
+### Release awal stream ber-tools selepas hold deadline (patch #13, 23 Ogos)
+
+**Gejala:** dengan `qualityGuard.requestRetry` aktif + request yang declare tools
+(semua request OpenCode), jawapan prose ditampal sekali harung pada hujung — tiada
+streaming langsung, walaupun `holdTimeout` pendek (10s). Ujian: 2701 content event
+tiba dalam 0.7s selepas tunggu 74.8s.
+
+**Punca (bug, bukan trade-off):** dalam `peekQualityStream` (`quality_retry_scan.go`),
+branch keep-waiting degradation (`DeclaredClientTools > 0 && !SawToolCall && !Terminal`)
+tiada jalan keluar bila hold timer dah mati — timer hanya fire sekali, dan bukti
+thinking (`: grok2api-reasoning-evidence`) bagi grok-4.6 biasanya sampai **selepas**
+deadline (fasa thinking senyap 12–75s) → loop terus tunggu EOF → splat.
+
+**Fix:**
+- `holdExpired` latch: deadline direkod persisten selepas timer fire
+- Release path baharu: `HasThinking && holdExpired && VisibleRunes >= toolNarrationWindow (160)`
+  → Deliver segera, tiada penalti akaun. Guard rune wajib: setiap narasi degradation
+  bermula pada offset 0, jadi window bersih ≥160 rune membuktikan stream bukan
+  narasi — guard inilah yang halang release menewaskan detector degradation.
+- Degradation check kekal LAGI dulu dalam loop setiap iterasi — narasi degraded
+  tidak boleh deliver walaupun lewat (ada test khas).
+
+**Kesan:** benak auto-retry + tool-degradation retry/salvage + fail_closed semua
+kekal aktif, sambil teks stream live. Semua perlindungan = mod B asal; kelajuan =
+mod A. Ujian selepas patch (grok-4.6 ber-tools): nisbah 0.60 (dulu 1.00), sebaran
+teks 9.5s berterusan; esei panjang: 30.9s berterusan (dulu 0.7s splat); xhigh+tools:
+nisbah 0.58, sebaran 18.0s.
+
+**Test:** 3 unit test baharu dalam `quality_retry_test.go`
+(`TestPeekQualityStreamLateThinkingEvidenceReleasesToolStream`,
+`TestPeekQualityStreamExpiredHoldWithoutThinkingStillWaits`,
+`TestPeekQualityStreamLateEvidenceDoesNotReleaseDegradedNarration`) —
+lulus `-count=2`, full suite 62 pakej 0 gagal.
+
+**Image:** `grok2api:local-earlythink` (= local-salvage + patch #13).
+Config: `requestRetry.enabled: true`, `holdTimeout: 10s` — teks live dikeluarkan
+bukan oleh timeout ringkas tapi oleh bukti thinking lewat; `holdTimeout` kekal
+sebagai deadline rotate untuk benak.
+
+### TTFT audit jujur untuk stream ber-hold (patch #14, 24 Ogos)
+
+**Gejala:** audit `first_token_ms` untuk stream yang melalui quality hold ≈
+`duration_ms` (contoh sebenar: request esei 74.7s mencatat TTFT **74702ms** —
+1ms sebelum tamat). TPS terbit jadi `output / 0.021s ≈ 282k token/s` — sampah;
+panel hanya selamat kerana degrade-guard `GenerationWindowMS` yang fallback ke
+duration penuh apabila tinggal <1000ms.
+
+**Punca:** first-token di-stamp oleh `responseInspector` semasa delta pertama
+**di-forward ke client** (`markFirstTokenForwarded`, handler.go). Stream yang
+di-hold sampai EOF kemudian di-replay sekaligus men-forward semua byte pada
+hujung → stamp jatuh pada masa replay, bukan masa model mula menjana.
+
+**Nota sampingan:** baris audit dengan `first_token_ms = NULL` +
+`error_code='quality_degraded'` + status 200 **bukan bug** — ia baris audit
+per-attempt untuk percubaan yang di-withhold sebelum retry
+(`recordQualityDegraded` tidak menetapkan first_token). By design.
+
+**Fix (punca, bukan penampang):**
+- `qualityScanState.firstEvidenceAt`: scanner peek merakam masa bukti
+  generation pertama dari upstream — marker reasoning-start, delta thinking,
+  teks kelihatan, atau tool call — semasa stream masih di-hold
+  (`noteFirstEvidence`, dipanggil via defer dari `ObserveQualityChunk`).
+- `peekQualityStream` memulangkan timestamp itu; laluan deliver men-stamp
+  `firstToken.markAt(t)` (kaedah baharu dalam `timing.go`, `sync.Once` —
+  forward-mark kemudian jadi no-op) sebelum `handoffResponse`. Laluan retry /
+  withhold TIDAK men-stamp (stream dibuang); laluan fail-open fallback membawa
+  timestamp attempt masing-masing dalam `qualityFallback.firstEvidenceAt`.
+- Laluan tanpa hold tidak berubah (inspector forward-stamp ≈ masa upstream
+  memang, sebab tiada buffer).
+
+**Kesan:** TTFT kini = masa model mula menjana (latensi upstream sebenar),
+bebas daripada dasar hold. `GenerationWindowMS`/`OutputTokensPerSecond`
+mengira window sebenar; degrade-guard <1000ms kekal sebagai pelindung baris
+lama.
+
+**Bukti live (request esei 52.4s, client nampak teks mula 25.0s):**
+audit `first_token_ms = 24738` ≈ masa bukti upstream — sebelum patch:
+74702/74723. Request tools ringkas (1.6s, client 1.6s): `first_token_ms = 818`.
+
+**Test:** `TestFirstTokenTimerMarkAtStampsObservedTime` (timing_test.go),
+`TestPeekQualityStreamFirstEvidenceAtIsUpstreamTime`,
+`TestPeekQualityStreamFirstEvidenceAtZeroWithoutEvidence`
+(quality_retry_test.go) — lulus `-count=2`, full suite 62 pakej 0 gagal.
+
+**Image:** `grok2api:local-ttft` (= local-earlythink + patch #14).
 
 ### Placeholder reasoning bila CoT disorok (patch #12, 23 Ogos)
 

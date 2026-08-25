@@ -49,3 +49,30 @@ func TestFirstTokenTimerMarksOnce(t *testing.T) {
 		t.Fatalf("timer changed after second mark: first=%v second=%v", first, second)
 	}
 }
+
+func TestFirstTokenTimerMarkAtStampsObservedTime(t *testing.T) {
+	started := time.Now().Add(-5 * time.Second)
+	timer := newFirstTokenTimer(started)
+	timer.markAt(started.Add(1200 * time.Millisecond))
+	got := timer.milliseconds()
+	if got == nil || *got != 1200 {
+		t.Fatalf("markAt milliseconds = %v, want 1200", got)
+	}
+	// A later forward-time mark must not override the earlier evidence stamp.
+	timer.mark()
+	if got := timer.milliseconds(); got == nil || *got != 1200 {
+		t.Fatalf("mark overrode markAt stamp: %v", got)
+	}
+	// Zero time never stamps.
+	blank := newFirstTokenTimer(started)
+	blank.markAt(time.Time{})
+	if blank.milliseconds() != nil {
+		t.Fatal("zero-time markAt stamped the timer")
+	}
+	// A timestamp before the request start clamps to zero instead of going negative.
+	early := newFirstTokenTimer(started)
+	early.markAt(started.Add(-time.Second))
+	if got := early.milliseconds(); got == nil || *got != 0 {
+		t.Fatalf("pre-start markAt milliseconds = %v, want 0", got)
+	}
+}

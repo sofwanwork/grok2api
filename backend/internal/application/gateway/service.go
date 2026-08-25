@@ -1269,6 +1269,10 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 		credential        accountdomain.Credential
 		usage             Usage
 		upstreamStartedAt time.Time
+		// firstEvidenceAt carries the withheld stream's upstream
+		// generation-start timestamp so a fail-open delivery records an
+		// honest first-token time instead of the replay moment.
+		firstEvidenceAt time.Time
 	}
 	var fallback *qualityFallback
 	discardFallback := func(recordDegraded bool) {
@@ -1364,6 +1368,12 @@ attemptLoop:
 		if qualityHoldEnabled {
 			qualityAccountAttempts++
 		}
+		// peekFirstEvidenceAt carries the current attempt's upstream
+		// generation-start timestamp out of the quality hold so the audit
+		// first-token value reflects when the model started generating, not
+		// when the held prefix was later replayed downstream. Zero for
+		// attempts that never reach the peek.
+		var peekFirstEvidenceAt time.Time
 		response, err := forwardResponse(lease, credential, lease.Billing)
 		if err != nil {
 			lease.Release()
@@ -1620,7 +1630,8 @@ attemptLoop:
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
 			s.selector.markSuccess(ctx, credential, lease.QuotaProbe)
 			if qualityHoldEnabled {
-				replay, verdict, peekUsage, _, peekErr := peekQualityStream(ctx, response.Body, qualityProtocolForOperation(operation), holdCfg)
+				replay, verdict, peekUsage, _, firstEvidenceAt, peekErr := peekQualityStream(ctx, response.Body, qualityProtocolForOperation(operation), holdCfg)
+				peekFirstEvidenceAt = firstEvidenceAt
 				if peekErr != nil {
 					if replay != nil {
 						_ = replay.Close()
@@ -1710,9 +1721,9 @@ attemptLoop:
 				}
 				switch commit.Action {
 				case QualityActionRetry:
-					if deferFailOpenAudit {
-						discardFallback(true)
-						fallback = &qualityFallback{response: response, lease: lease, credential: credential, usage: peekUsage, upstreamStartedAt: responseStartedAt}
+				if deferFailOpenAudit {
+					discardFallback(true)
+					fallback = &qualityFallback{response: response, lease: lease, credential: credential, usage: peekUsage, upstreamStartedAt: responseStartedAt, firstEvidenceAt: peekFirstEvidenceAt}
 						lease.completeSelectorObservation(true)
 						lease.Release()
 					} else {
@@ -1767,7 +1778,13 @@ attemptLoop:
 			selected := fallback
 			fallback = nil
 			s.logger.Info("quality_degraded_fallback", "request_id", input.RequestID, "account_id", selected.credential.ID, "quality_attempts", qualityAccountAttempts)
+			if !selected.firstEvidenceAt.IsZero() {
+				firstToken.markAt(selected.firstEvidenceAt)
+			}
 			return handoffResponse(selected.response, selected.lease, selected.credential, selected.upstreamStartedAt), nil
+		}
+		if !peekFirstEvidenceAt.IsZero() {
+			firstToken.markAt(peekFirstEvidenceAt)
 		}
 		return handoffResponse(response, lease, credential, responseStartedAt), nil
 	}
@@ -1776,6 +1793,9 @@ attemptLoop:
 			selected := fallback
 			fallback = nil
 			s.logger.Info("quality_degraded_fallback", "request_id", input.RequestID, "account_id", selected.credential.ID, "quality_attempts", qualityAccountAttempts)
+			if !selected.firstEvidenceAt.IsZero() {
+				firstToken.markAt(selected.firstEvidenceAt)
+			}
 			return handoffResponse(selected.response, selected.lease, selected.credential, selected.upstreamStartedAt), nil
 		}
 		discardFallback(true)

@@ -25,7 +25,12 @@ $patches = @(
     @{ f = "backend/internal/application/gateway/prompt_cache.go"; m = "identity";         d = "Patch 3: soft-session identity" },
     @{ f = "backend/internal/infra/provider/conversation/stream.go"; m = "reasoning_opaque";  d = "Patch 8: reasoning_opaque replay" },
     @{ f = "backend/internal/transport/http/inference/handler.go";   m = "65536";             d = "Patch 4: max_output_tokens 65536" },
-    @{ f = "backend/internal/infra/provider/cli/adapter.go";         m = "systemPromptWhenClientHasSystem|hasAnthropicSystemContent"; d = "Patch 6/9: persona gateway"; regex = $true }
+    @{ f = "backend/internal/infra/provider/cli/adapter.go";         m = "systemPromptWhenClientHasSystem|hasAnthropicSystemContent"; d = "Patch 6/9: persona gateway"; regex = $true },
+    @{ f = "backend/internal/transport/http/inference/handler.go";   m = "grok2api-reasoning-evidence"; d = "Patch 10: reasoning evidence marker (thinking detection)" },
+    @{ f = "backend/internal/application/gateway/tool_salvage.go";   m = "salvageToolCallStream"; d = "Patch 11: tool-call salvage" },
+    @{ f = "backend/internal/infra/provider/conversation/chat_stream.go"; m = "trace withheld by upstream"; d = "Patch 12: thinking placeholder for withheld CoT" },
+    @{ f = "backend/internal/application/gateway/quality_retry_scan.go"; m = "holdExpired";       d = "Patch 13: early release after hold deadline" },
+    @{ f = "backend/internal/application/gateway/quality_retry_scan.go"; m = "firstEvidenceAt";   d = "Patch 14: honest upstream TTFT for held streams" }
 )
 foreach ($p in $patches) {
     if (-not (Test-Path $p.f)) { Fail "$($p.d) — file missing: $($p.f)"; continue }

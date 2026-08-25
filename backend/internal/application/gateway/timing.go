@@ -122,6 +122,20 @@ func (t *firstTokenTimer) mark() {
 	})
 }
 
+// markAt stamps an externally observed generation-start time. The quality peek
+// observes upstream tokens in real time while the response is still buffered,
+// so the delivered attempt can record when the model actually started
+// generating instead of when the held prefix was later replayed downstream.
+func (t *firstTokenTimer) markAt(ts time.Time) {
+	if t == nil || ts.IsZero() {
+		return
+	}
+	t.once.Do(func() {
+		elapsedMS := max(int64(0), ts.Sub(t.started).Milliseconds())
+		t.encoded.Store(elapsedMS + 1)
+	})
+}
+
 func (t *firstTokenTimer) milliseconds() *int64 {
 	if t == nil {
 		return nil

@@ -156,7 +156,7 @@ func TestPeekQualityStreamDetectsDegradationEarly(t *testing.T) {
 		MinOutputTokens: 32, HoldTimeout: time.Second,
 		DeclaredClientTools: []string{"write_file"},
 	}
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, cfg)
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestPeekQualityStreamDoesNotRetryRealToolCall(t *testing.T) {
 		MinOutputTokens: 8, HoldTimeout: time.Second,
 		DeclaredClientTools: []string{"write_file"},
 	}
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, cfg)
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestPeekQualityStreamIgnoresPlainAnswer(t *testing.T) {
 		MinOutputTokens: 8, HoldTimeout: time.Second,
 		DeclaredClientTools: []string{"bash"},
 	}
-	replay, verdict, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, cfg)
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), body, qualityProtocolChat, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
