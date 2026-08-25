@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -38,11 +39,12 @@ func ConvertResponseStream(source io.ReadCloser, operation string) io.ReadCloser
 // ConvertResponseStreamWithOptions 按下游协议选项生成 Chat 或 Anthropic SSE。
 func ConvertResponseStreamWithOptions(source io.ReadCloser, operation string, options ResponseOptions) io.ReadCloser {
 	if operation == OperationResponses {
-		return source
+		return guardResponseStream(source)
 	}
 	reader, writer := io.Pipe()
+	stream := newStreamPipeReadCloser(reader, source)
 	go func() {
-		defer source.Close()
+		defer stream.closeSource()
 		converter := newStreamConverter(writer, operation, options)
 		err := consumeSSE(source, converter.handle)
 		if err == nil {
@@ -50,7 +52,7 @@ func ConvertResponseStreamWithOptions(source io.ReadCloser, operation string, op
 		}
 		_ = writer.CloseWithError(err)
 	}()
-	return reader
+	return stream
 }
 
 type streamConverter struct {
@@ -87,16 +89,48 @@ type streamConverter struct {
 	stopFilter        *anthropicStreamStopFilter
 	stopSequence      string
 	refused           bool
-	// doomLoop detection: track repeated identical deltas to detect model
-	// output loops before they exhaust the response budget. Content and
-	// reasoning keep separate counters because high/xhigh effort models
-	// legitimately repeat similar reasoning tokens ("so", "hmm", "wait")
-	// many times during deep thinking; a single shared counter killed valid
-	// xhigh responses prematurely.
+	repeatTracker     streamRepeatTracker
+}
+
+// streamRepeatTracker tracks upstream deltas before protocol conversion,
+// buffering, and stop filters so no downstream path can bypass loop protection.
+// Content and reasoning keep separate counters because high/xhigh effort models
+// legitimately repeat similar reasoning tokens ("so", "hmm", "wait") many times
+// during deep thinking; a single shared counter killed valid xhigh responses.
+type streamRepeatTracker struct {
 	lastContentDelta   string
 	contentRepeatCount int
 	lastReasonDelta    string
 	reasonRepeatCount  int
+}
+
+// streamPipeReadCloser ensures a downstream cancellation immediately closes the
+// upstream body, including while the forwarding goroutine is blocked in Read.
+type streamPipeReadCloser struct {
+	*io.PipeReader
+	source    io.ReadCloser
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func newStreamPipeReadCloser(reader *io.PipeReader, source io.ReadCloser) *streamPipeReadCloser {
+	return &streamPipeReadCloser{PipeReader: reader, source: source}
+}
+
+func (r *streamPipeReadCloser) Close() error {
+	readerErr := r.PipeReader.Close()
+	sourceErr := r.closeSource()
+	if readerErr != nil {
+		return readerErr
+	}
+	return sourceErr
+}
+
+func (r *streamPipeReadCloser) closeSource() error {
+	r.closeOnce.Do(func() {
+		r.closeErr = r.source.Close()
+	})
+	return r.closeErr
 }
 
 type streamTool struct {
@@ -258,16 +292,16 @@ func (c *streamConverter) handle(event string, data []byte) error {
 	if c.finished {
 		return nil
 	}
-	if bytes.Equal(bytes.TrimSpace(data), []byte("[DONE]")) {
+	typeName, root, ok := parseSSEEvent(event, data)
+	if !ok {
 		return nil
 	}
-	var root map[string]json.RawMessage
-	if json.Unmarshal(data, &root) != nil {
-		return nil
-	}
-	typeName := event
-	if raw := root["type"]; typeName == "" {
-		_ = json.Unmarshal(raw, &typeName)
+	// Loop protection lives at the raw-event layer so it also covers deltas
+	// that are later dropped by buffering, stop-sequence filtering, deferred
+	// web-search text, or suppressed reasoning. The channel emitters do NOT
+	// re-track; counting twice would trip the threshold on legitimate runs.
+	if err := c.repeatTracker.trackEvent(typeName, root); err != nil {
+		return err
 	}
 	if c.stopSequence != "" && typeName != "response.completed" && typeName != "response.incomplete" && typeName != "response.failed" && typeName != "error" {
 		return nil
@@ -463,17 +497,8 @@ func (c *streamConverter) reasoningSummaryDelta(itemID, delta string) error {
 	if delta == "" || !c.reasoningOutputEnabled() {
 		return nil
 	}
-	// Doom loop detection for buffered reasoning summaries. Threshold is higher
-	// than the content one because reasoning legitimately repeats tokens.
-	if delta == c.lastReasonDelta {
-		c.reasonRepeatCount++
-		if c.reasonRepeatCount >= reasoningDoomLoopThreshold {
-			return fmt.Errorf("model reasoning summary loop detected (repeated delta %d times)", c.reasonRepeatCount)
-		}
-	} else {
-		c.lastReasonDelta = delta
-		c.reasonRepeatCount = 0
-	}
+	// Loop protection is applied at the raw-event layer (handle → trackEvent),
+	// which covers dropped/suppressed deltas too; no re-counting here.
 	_, state := c.ensureReasoningState(itemID)
 	if state.done || state.rawSeen {
 		return nil
@@ -505,18 +530,8 @@ func (c *streamConverter) reasoningTextDelta(itemID, delta string) error {
 }
 
 func (c *streamConverter) emitReasoningDelta(delta string) error {
-	// Doom loop detection for reasoning content too. Same elevated threshold
-	// as summaries: high-effort reasoning reuses tokens far more often than
-	// visible output does.
-	if delta != "" && delta == c.lastReasonDelta {
-		c.reasonRepeatCount++
-		if c.reasonRepeatCount >= reasoningDoomLoopThreshold {
-			return fmt.Errorf("model reasoning loop detected (repeated delta %d times)", c.reasonRepeatCount)
-		}
-	} else {
-		c.lastReasonDelta = delta
-		c.reasonRepeatCount = 0
-	}
+	// Loop protection is applied at the raw-event layer (handle → trackEvent);
+	// no re-counting here or legitimate deep-thinking runs would trip early.
 	c.reasoningEmitted = true
 	if c.operation == OperationChat {
 		return c.chatDelta(map[string]any{"reasoning_content": delta})
@@ -637,20 +652,9 @@ func (c *streamConverter) start() error {
 }
 
 func (c *streamConverter) textDelta(delta string) error {
-	// Doom loop detection: if the model repeats the exact same content delta
-	// more than a threshold of times, terminate the stream with an error
-	// instead of letting the loop exhaust the account quota and the client
-	// context window. Reasoning deltas have their own counter because deep
-	// thinking legitimately reuses tokens.
-	if delta != "" && delta == c.lastContentDelta {
-		c.contentRepeatCount++
-		if c.contentRepeatCount >= contentDoomLoopThreshold {
-			return fmt.Errorf("model output loop detected (repeated content delta %d times)", c.contentRepeatCount)
-		}
-	} else {
-		c.lastContentDelta = delta
-		c.contentRepeatCount = 0
-	}
+	// Loop protection is applied at the raw-event layer (handle → trackEvent),
+	// which also covers deltas dropped by the stop filter or deferred search;
+	// no re-counting here.
 	if c.operation == OperationChat {
 		return c.textDeltaChat(delta)
 	}
@@ -785,4 +789,88 @@ func consumeSSE(source io.Reader, handle func(string, []byte) error) error {
 			return err
 		}
 	}
+}
+
+func parseSSEEvent(event string, data []byte) (string, map[string]json.RawMessage, bool) {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("[DONE]")) {
+		return "", nil, false
+	}
+	var root map[string]json.RawMessage
+	if json.Unmarshal(data, &root) != nil {
+		return "", nil, false
+	}
+	typeName := event
+	if typeName == "" {
+		_ = json.Unmarshal(root["type"], &typeName)
+	}
+	return typeName, root, true
+}
+
+func (t *streamRepeatTracker) trackEvent(typeName string, root map[string]json.RawMessage) error {
+	var delta string
+	switch typeName {
+	case "response.output_text.delta":
+		_ = json.Unmarshal(root["delta"], &delta)
+		return t.trackContent(delta)
+	case "response.reasoning_summary_text.delta":
+		_ = json.Unmarshal(root["delta"], &delta)
+		return t.trackReasoning(delta, "model reasoning summary loop detected")
+	case "response.reasoning_text.delta":
+		_ = json.Unmarshal(root["delta"], &delta)
+		return t.trackReasoning(delta, "model reasoning loop detected")
+	default:
+		return nil
+	}
+}
+
+func (t *streamRepeatTracker) trackContent(delta string) error {
+	if delta == "" {
+		return nil
+	}
+	if delta != t.lastContentDelta {
+		t.lastContentDelta = delta
+		t.contentRepeatCount = 1
+		return nil
+	}
+	t.contentRepeatCount++
+	if t.contentRepeatCount > contentDoomLoopThreshold {
+		return fmt.Errorf("model output loop detected (repeated content delta %d times)", t.contentRepeatCount)
+	}
+	return nil
+}
+
+func (t *streamRepeatTracker) trackReasoning(delta, message string) error {
+	if delta == "" {
+		return nil
+	}
+	if delta != t.lastReasonDelta {
+		t.lastReasonDelta = delta
+		t.reasonRepeatCount = 1
+		return nil
+	}
+	t.reasonRepeatCount++
+	if t.reasonRepeatCount > reasoningDoomLoopThreshold {
+		return fmt.Errorf("%s (repeated delta %d times)", message, t.reasonRepeatCount)
+	}
+	return nil
+}
+
+// guardResponseStream 保持 native Responses SSE 的原始字节不变，同时在读取时
+// 解析事件并在检测到循环时关闭上游。
+func guardResponseStream(source io.ReadCloser) io.ReadCloser {
+	reader, writer := io.Pipe()
+	stream := newStreamPipeReadCloser(reader, source)
+	go func() {
+		defer stream.closeSource()
+		tracker := streamRepeatTracker{}
+		err := consumeSSE(io.TeeReader(source, writer), func(event string, data []byte) error {
+			typeName, root, ok := parseSSEEvent(event, data)
+			if !ok {
+				return nil
+			}
+			return tracker.trackEvent(typeName, root)
+		})
+		_ = writer.CloseWithError(err)
+	}()
+	return stream
 }

@@ -181,6 +181,8 @@ func newTransportUpstreamFailure(err error, accountID uint64, accountName string
 		status, code, message = http.StatusGatewayTimeout, "upstream_header_timeout", "Tamat masa menunggu pengepala respons upstream"
 	} else if neterrorpkg.IsUpstreamStreamIdleTimeout(err) {
 		status, code, message = http.StatusGatewayTimeout, "upstream_stream_idle_timeout", "Respons berstrim upstream tiada data terlalu lama"
+	} else if neterrorpkg.IsUpstreamResponseEmpty(err) {
+		status, code, message = http.StatusBadGateway, "upstream_response_empty", "Respons upstream kosong"
 	} else if errors.Is(err, errQualityEmptyStream) {
 		status, code, message = http.StatusBadGateway, "upstream_stream_empty", "Respons berstrim upstream kosong"
 	} else if errors.Is(err, context.DeadlineExceeded) {
