@@ -73,6 +73,12 @@ type QualityRetryRuntime struct {
 	// DeclaredClientTools is the per-request set of client-executed tool names.
 	// Empty disables degradation detection.
 	DeclaredClientTools []string
+	// HoldKeepalive is the interval between SSE keepalive comments injected
+	// while a quality hold is buffering the stream. Long silent thinking phases
+	// (12–135s on grok-4.6) otherwise look like a dead connection to clients
+	// with short idle timeouts (OpenCode retries and the user sees duplicate
+	// answers). Zero disables keepalives.
+	HoldKeepalive time.Duration
 }
 
 // QualityStreamSignals is the hold classifier input. Tests drive this
@@ -142,6 +148,9 @@ func normalizeQualityRetry(cfg QualityRetryRuntime) QualityRetryRuntime {
 		cfg.ToolDegradationMaxAttempts = defaultToolDegradationMaxAttempts
 	}
 	cfg.OnExhausted = normalizeQualityExhaustionPolicy(cfg.OnExhausted)
+	if cfg.HoldKeepalive < 0 {
+		cfg.HoldKeepalive = 0
+	}
 	return cfg
 }
 

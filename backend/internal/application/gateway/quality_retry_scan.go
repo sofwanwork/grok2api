@@ -19,6 +19,7 @@ const (
 	qualityProtocolAnthropic           = "anthropic"
 	qualityReasoningSSEComment         = ": grok2api-reasoning-start"
 	qualityReasoningEvidenceSSEComment = ": grok2api-reasoning-evidence"
+	qualityKeepaliveSSEComment         = ": grok2api-keepalive"
 	qualityHoldMaxBufferBytes          = 4 << 20
 )
 
@@ -112,6 +113,42 @@ func newQualityReadPump(source io.ReadCloser) *qualityReadPump {
 	}
 	go pump.run()
 	return pump
+}
+
+// startHoldKeepalive injects periodic SSE comment chunks into the pump while a
+// hold is buffering, so clients with short idle timeouts (OpenCode aborts and
+// retries a silent long-thinking stream, surfacing duplicate answers) see the
+// connection as alive. The comment is an internal marker filtered before the
+// client and ignored by the quality scanner. The returned stop function must
+// be called when the peek finishes.
+func startHoldKeepalive(pump *qualityReadPump, interval time.Duration) func() {
+	if pump == nil || interval <= 0 {
+		return func() {}
+	}
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		payload := []byte(qualityKeepaliveSSEComment + "\n\n")
+		for {
+			select {
+			case <-stop:
+				return
+			case <-pump.done:
+				return
+			case <-ticker.C:
+				select {
+				case pump.results <- qualityReadResult{data: append([]byte(nil), payload...)}:
+				case <-stop:
+					return
+				case <-pump.done:
+					return
+				}
+			}
+		}
+	}()
+	var once sync.Once
+	return func() { once.Do(func() { close(stop) }) }
 }
 
 func (p *qualityReadPump) run() {
@@ -528,6 +565,8 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 		return io.NopCloser(bytes.NewReader(nil)), QualityWait, Usage{}, "", time.Time{}, errQualityEmptyStream
 	}
 	pump := newQualityReadPump(body)
+	stopKeepalive := startHoldKeepalive(pump, cfg.HoldKeepalive)
+	defer stopKeepalive()
 	state := qualityScanState{protocol: protocol}
 	var held bytes.Buffer
 	holdTimer := time.NewTimer(cfg.HoldTimeout)

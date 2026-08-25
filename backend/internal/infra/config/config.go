@@ -386,6 +386,11 @@ type QualityGuardRequestRetryConfig struct {
 	// IdleAccountCooldown cools an account after a truly empty upstream
 	// stream. Independent of accountCooldown (missing-thinking). Zero uses 15m.
 	IdleAccountCooldown Duration `yaml:"idleAccountCooldown"`
+	// HoldKeepalive injects an SSE keepalive comment at this interval while a
+	// quality hold is buffering, so clients with short idle timeouts do not
+	// abort and retry a silent long-thinking stream (which surfaces duplicate
+	// answers). Zero disables keepalives.
+	HoldKeepalive Duration `yaml:"holdKeepalive"`
 	// ToolDegradation retries streams where upstream narrates a tool call as
 	// prose instead of emitting a structured call. Never penalises accounts.
 	ToolDegradation QualityGuardToolDegradationConfig `yaml:"toolDegradation"`

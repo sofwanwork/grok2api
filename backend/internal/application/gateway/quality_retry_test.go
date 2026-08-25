@@ -1696,3 +1696,99 @@ func TestPeekQualityStreamFirstEvidenceAtZeroWithoutEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Patch #15: keepalive mesti disuntik ke dalam aliran semasa hold supaya
+// client dengan idle timeout pendek tidak abort & retry. Komen mesti (a)
+// sampai dalam replay yang dihantar, dan (b) tidak menjejaskan verdict.
+func TestPeekQualityStreamHoldKeepaliveInjectsComments(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	writeErr := make(chan error, 1)
+	go func() {
+		// Stub reasoning — fasa senyap panjang supaya keepalive sempat fire.
+		if _, err := io.WriteString(writer, sse(": grok2api-reasoning-start")); err != nil {
+			writeErr <- err
+			return
+		}
+		time.Sleep(220 * time.Millisecond)
+		if _, err := io.WriteString(writer, sse(
+			`data: {"choices":[{"delta":{"content":"Jawapan selepas senyap."}}]}`,
+			"data: [DONE]",
+		)); err != nil {
+			writeErr <- err
+			return
+		}
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+
+	replay, verdict, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens: 8,
+		HoldTimeout:     50 * time.Millisecond,
+		HoldKeepalive:   30 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	if verdict != QualityDeliver {
+		t.Fatalf("verdict = %s, want deliver", verdict)
+	}
+	body, err := io.ReadAll(replay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), ": grok2api-keepalive") {
+		t.Fatalf("keepalive comment missing from held replay: %q", body)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Patch #15: dengan HoldKeepalive=0, tiada komen disuntik (tingkah laku asal).
+func TestPeekQualityStreamHoldKeepaliveDisabledByDefault(t *testing.T) {
+	t.Parallel()
+	reader, writer := io.Pipe()
+	writeErr := make(chan error, 1)
+	go func() {
+		if _, err := io.WriteString(writer, sse(": grok2api-reasoning-start")); err != nil {
+			writeErr <- err
+			return
+		}
+		time.Sleep(150 * time.Millisecond)
+		if _, err := io.WriteString(writer, sse(
+			`data: {"choices":[{"delta":{"content":"Tanpa keepalive."}}]}`,
+			"data: [DONE]",
+		)); err != nil {
+			writeErr <- err
+			return
+		}
+		if err := writer.Close(); err != nil {
+			writeErr <- err
+			return
+		}
+		writeErr <- nil
+	}()
+	replay, _, _, _, _, err := peekQualityStream(context.Background(), reader, qualityProtocolChat, QualityRetryRuntime{
+		MinOutputTokens: 8,
+		HoldTimeout:     50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	body, err := io.ReadAll(replay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), ": grok2api-keepalive") {
+		t.Fatalf("keepalive comment must not be injected when disabled: %q", body)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}

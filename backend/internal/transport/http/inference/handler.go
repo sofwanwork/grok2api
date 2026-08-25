@@ -1811,11 +1811,13 @@ type responseInspector struct {
 const (
 	reasoningStartSSEComment    = ": grok2api-reasoning-start"
 	reasoningEvidenceSSEComment = ": grok2api-reasoning-evidence"
+	reasoningKeepaliveComment   = ": grok2api-keepalive"
 )
 
 var internalSSEMarkers = [][]byte{
 	[]byte(reasoningStartSSEComment + "\n\n"),
 	[]byte(reasoningEvidenceSSEComment + "\n\n"),
+	[]byte(reasoningKeepaliveComment + "\n\n"),
 }
 
 func (i *responseInspector) Inspect(chunk []byte) {
