@@ -1,6 +1,6 @@
 # UPDATE.md — Panduan Update grok2api (dengan local patches)
 
-> Repo ni ada **local patches di atas upstream `chenyme/grok2api`** (merge terakhir: 22 Ogos 2026).
+> Repo ni ada **local patches di atas upstream `chenyme/grok2api`** (merge terakhir: 25 Ogos 2026, v3.1.5).
 > Fail ni sebagai rujukan bila nak update ke versi baru.
 > **Amalan: bagitahu agent AI check dulu sebelum merge.**
 
@@ -10,11 +10,45 @@
 |---|---|
 | Branch aktif | `main` |
 | Bookmark patches | `local-patches` (kini sejajar dengan merge `bed7232d` — di-refresh 22 Ogos, jangan biar stale lagi) |
-| Tag fallback | `backup-pre-merge-20260822` (keadaan pra-merge, 12 commit) |
-| Base upstream terakhir | `d6f6e9f5` (19 Ogos 2026) — **merged 22 Ogos 2026** |
-| Image Docker | `grok2api:local-ttft` (patch #14, 24 Ogos — TTFT audit jujur untuk stream ber-hold); fallback: `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
+| Tag fallback | `backup-pre-merge-v315` (keadaan pra-merge v3.1.5, patch #14); `backup-pre-merge-20260822` |
+| Base upstream terakhir | `62d2775c` = tag `v3.1.5` (25 Ogos 2026) — **merged 25 Ogos 2026** |
+| Image Docker | `grok2api:local-v315` (v3.1.5 + patch #1-14); fallback: `grok2api:local-ttft`, `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
 | Container | `grok2api` (docker compose) |
 | Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` |
+
+## Merge 25 Ogos 2026 (v3.1.5) — apa yang berlaku
+
+Merge upstream v3.1.5 dengan 8 konflik diselesaikan; semua patch #1-14 terselamat
+(verify: 11/11 marker PASS, 63 pakej ujian lulus, live checks PASS).
+
+**Konflik diselesaikan:**
+- `frontend/i18n` — kekal English-only (upstream menambah semula blok zh-CN)
+- `middleware/auth.go` — gabung import `strconv` (kita) + `net/url` (upstream)
+- `gateway/failure.go` — kekalkan mesej awam Bahasa Melayu + terima branch baharu upstream `IsUpstreamResponseEmpty`
+- `gateway/selector.go` — kekalkan `circuitBreaker.RecordFailure` (kita) + flag soft-fail upstream
+- `web/quota.go` — terima logik paid-tier weekly pool upstream, mesej ralat diterjemah
+- `account/service.go` — terima `resolveRefreshedQuotaWindow` upstream
+- `conversation/stream.go` + `stream_doomloop_test.go` — gabung struktur `streamRepeatTracker` upstream
+
+**Pembetulan penting selepas merge:** regresi double-count pada doom-loop detection —
+`trackEvent` di lapisan raw-event dan kaedah emisi (`textDelta`/`emitReasoningDelta`/
+`reasoningSummaryDelta`) kedua-duanya menambah kaunter yang sama, menyebabkan
+ambang 128 dilepasi pada ulangan ke-64 sebenar. Diselesaikan dengan mengekalkan
+pengesanan di lapisan raw-event sahaja (merangkumi delta yang digugurkan oleh
+buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
+
+**Apa yang upstream sumbang (dan melengkapkan patch kita):**
+- `HasThinking` kini hanya benar bila ada bukti *streamed* (delta reasoning /
+  encrypted_content), bukan `reasoning_tokens` sahaja — menapis whitespace,
+  mengesan stub palsu, dan mengiktiraf `signature_delta` Anthropic
+- Empty-stream siap → retry serta-merta; pengesanan `semanticOutput` (tool calls,
+  teks agregat Responses/Anthropic) untuk tool degradation yang lebih meluas
+- Marker `: grok2api-reasoning-evidence` turut ditapis dalam `internalSSEMarkerFilter`
+
+**Kekal milik kita (upstream tiada):** patch #13 (early-release latch), #14
+(honest TTFT via `firstEvidenceAt`/`markAt`), #11 (tool salvage), #12
+(placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
+default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
 ## Merge 22 Ogos 2026 — apa yang berlaku
 
