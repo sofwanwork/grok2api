@@ -391,6 +391,14 @@ type QualityGuardRequestRetryConfig struct {
 	// abort and retry a silent long-thinking stream (which surfaces duplicate
 	// answers). Zero disables keepalives.
 	HoldKeepalive Duration `yaml:"holdKeepalive"`
+	// EarlyHeaderAbort (patch #20) bounds the wait for upstream response
+	// headers on each streaming attempt while the quality hold is armed.
+	// Healthy thinking streams return headers in seconds; degraded (benak)
+	// paths hold headers back until generation completes. Zero (default)
+	// is instrument-only: header arrival times are logged for every attempt
+	// so the signal can be validated on real traffic before arming a budget.
+	// 5s is the upstream-fork-measured recommendation once validated.
+	EarlyHeaderAbort Duration `yaml:"earlyHeaderAbort"`
 	// ToolDegradation retries streams where upstream narrates a tool call as
 	// prose instead of emitting a structured call. Never penalises accounts.
 	ToolDegradation QualityGuardToolDegradationConfig `yaml:"toolDegradation"`

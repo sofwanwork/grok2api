@@ -50,6 +50,53 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
+### Early header abort — instrument-first (patch #20, 27 Ogos)
+
+**Latar:** fork hardened `gnayhz/grok2api` mengukur bahawa stream sihat
+menghantar response header dalam 0.7–2.2s berbanding 3.0–15.6s untuk path
+degraded (benak) — zero overlap — dan membina `earlyHeaderAbort` untuk
+menangkap benak pada peringkat header, sebelum satu bait content dijana.
+
+**Validasi kita sendiri (data audit 48h+, 1020 sihat vs 565 benak):** kita
+TIADA rekod masa header (gateway tak pernah log benda tu), jadi signal tu
+tak boleh disahkan terus pada trafik kita. Yang pasti dari data kita:
+benak attempt membakar median 10.5s setiap satu (mati pada holdTimeout
+expiry) dan ada yang hidup 86–109s; rotate 3-6 attempt = 30-60s terbuang
+(itulah "sangkut"). Stream sihat first-evidence median ~10s (fasa thinking
+xhigh) — jadi menurunkan holdTimeout ke 3s seperti gnayhz TIDAK selamat
+untuk pool kita.
+
+**Reka bentuk (instrument-first):**
+- `EarlyHeaderAbort time.Duration` dalam `QualityRetryRuntime` + config
+  `requestRetry.earlyHeaderAbort`. **Default 0 = log sahaja** — setiap
+  attempt ber-hold stream log `quality_header_arrival` dengan `header_ms`,
+  jadi signal sihat-vs-benak boleh disahkan dari trafik sebenar kita
+  sebelum sebarang budget di-arm.
+- Budget > 0: timer cancel context semasa tunggu header; header belum tiba
+  selepas budget → sentinel `errQualityHeaderBudget` → rotate akaun,
+  `NoteThinking(false)` (soft penalty, bukan cooldown keras), tiada
+  penalti transport biasa. Race header/budget ditutup (body di-tutup,
+  sent error).
+- Exempt: non-streaming (header dia memang tiba bila generation habis)
+  dan request tanpa quality hold.
+- Per-attempt budget (bukan sekali), ikut semantic gnayhz selepas dia
+  jumpa single-shot hang 300s.
+- Ujian: `quality_header_budget_test.go` — abort+rotate (tak tunggu delay
+  penuh), budget 0 tak abort (instrument-neutral), helper exempt matrix.
+  Full suite 63 pakej 0 gagal.
+
+**Kaedah pengesanan punca data:** audit 48h dianalisis — benak attempts
+duration median 10.5s (n=565), sihat first-evidence median 9.9s (n=1020);
+multi-attempt rotate chains 6 attempt × ~10s setiap satu. `first_token_ms`
+sedia ada (patch #14) direkod hanya untuk attempt yang deliver — attempt
+yang di-withhold tiada rekod, itulah sebab data header perlu dikumpul
+sebelum arm.
+
+**Seterusnya:** biarkan trafik 24-48h dengan instrument-only, kemudian
+bandingkan `header_ms` pada attempt sihat vs benak (join dengan
+`quality_degraded` audit rows). Kalau separation jelas (contoh: sihat <3s,
+benak >5s), arm `earlyHeaderAbort: 5s` dalam config.yaml dan restart.
+
 ### Preemptive benak avoidance + adaptive hold (patch #19, 26 Ogos)
 
 **Masalah (data live):** daripada 800 request audit, **44.5%** ialah retry
@@ -210,6 +257,43 @@ arahan npm secara melulu.
 
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
 `backups/config.yaml.windows-shell.bak`.
+
+### Persona: `&&` ParseError guard + OpenCode shell pwsh (26 Ogos, malam)
+
+**Gejala (website ubat kurus):** model (grok2api/grok-4.6-xhigh) cuba
+`npm install` 3 kali, semua gagal dalam <1s, kemudian menyerah dan tulis
+`install.bat` sebagai fallback. User tanya "kenapa model tak nak npm install,
+buat bat file je".
+
+**Punca sebenar (dipastikan dari OpenCode session DB, table `part`):** command
+yang di-generate ialah `cd "..." && npm install` — `&&` **bukan operator
+sah dalam PowerShell 5.1** (`InvalidEndOfLine` ParseError, "The token '&&' is
+not a valid statement separator in this version"). npm tak pernah start.
+Bukan gateway, bukan upstream, bukan OpenCode kill. Guard Windows shell
+sedia ada (sama hari) tak cover operator chaining.
+
+**Fix (tiga lapisan):**
+1. `opencode.json` global: tambah `"shell": "pwsh"` — OpenCode sekarang guna
+   PowerShell 7 (7.6.5) untuk tool calls, di mana `&&` sah. Ini fix punca
+   sebenar untuk SEMUA model, bukan hanya Grok.
+2. Persona `config.yaml` kedua-dua lapisan: tambah "NEVER use `&&` to chain
+   commands — PowerShell 5.1 rejects it with a ParseError; chain with `;` or
+   `if ($?) { ... }`, or avoid chaining by setting the working directory
+   first." (persona lapisan IDE terus sebut PS 5.1 sebab shell boleh berubah
+   mengikut config; guard kekal benar untuk kedua-duanya).
+3. `AGENTS.md` (global `~/.config/opencode/` + `Desktop\grokapi\`): tambah
+   section "Windows Shell Guard (WAJIB)" dengan arahan sama — versi lama
+   kedua-dua fail (21 Ogos) tiada bahagian shell langsung.
+
+**Nota deployment:** persona patch #7 hot-reload — tiada restart diperlukan;
+verify 19/19 marker kekal PASS selepas edit. Backup:
+`backups/config.yaml.pre-andand.20260826_234229.bak`,
+`backups/opencode.json.pre-shell-pwsh.20260826_234229.bak`,
+`backups/AGENTS.md.opencode_global.pre-andand.20260826_234229.bak`,
+`backups/AGENTS.md.grokapi.pre-andand.20260826_234229.bak`.
+
+**Nota sampingan:** `shell: pwsh` hanya berkesan untuk sesi OpenCode BAHARU —
+sesi lama yang masih hidup kekal dengan shell lama sampai ditutup.
 
 **Gejala:** OpenCode menolak edit dengan `Could not find oldString in the
 file` — model menghantar `old_string` yang tidak wujud sama sekali dalam

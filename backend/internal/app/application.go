@@ -527,6 +527,9 @@ func qualityRetryRuntime(value config.QualityGuardRequestRetryConfig) gateway.Qu
 		AccountCooldown:     value.AccountCooldown.Value(),
 		IdleAccountCooldown: value.IdleAccountCooldown.Value(),
 		HoldKeepalive:       value.HoldKeepalive.Value(),
+		// Patch #20: response-header budget early abort. Default 0 keeps
+		// instrument-only behavior (header arrival logging).
+		EarlyHeaderAbort: value.EarlyHeaderAbort.Value(),
 		// Tool-degradation retries are independent of the missing-thinking
 		// policy and never cool or disable an account.
 		ToolDegradationEnabled:     value.ToolDegradation.Enabled,

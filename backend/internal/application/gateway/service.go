@@ -1125,7 +1125,75 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 		started := time.Now()
 		responseStartedAt = started
 		lease.markSelectorUpstreamStarted()
-		response, err := adapter.ForwardResponse(physicalCallCtx, provider.ResponseResourceRequest{Credential: credential, ForcedEgressNodeID: input.ForcedEgressNodeID, Billing: billing, Method: http.MethodPost, Path: path, Model: route.UpstreamModel, PromptCacheKey: input.PromptCacheKey, ReasoningReplayKey: reasoningReplayKey, AllowClientToolCacheRoute: input.AllowClientToolCacheRoute, GrokTurnIndex: input.GrokTurnIndex, IdempotencyID: idempotencyID, Body: input.Body, Streaming: input.Streaming, NormalizeBody: true, Operation: string(operation), NormalizedMetadata: normalizedMetadata})
+		request := provider.ResponseResourceRequest{Credential: credential, ForcedEgressNodeID: input.ForcedEgressNodeID, Billing: billing, Method: http.MethodPost, Path: path, Model: route.UpstreamModel, PromptCacheKey: input.PromptCacheKey, ReasoningReplayKey: reasoningReplayKey, AllowClientToolCacheRoute: input.AllowClientToolCacheRoute, GrokTurnIndex: input.GrokTurnIndex, IdempotencyID: idempotencyID, Body: input.Body, Streaming: input.Streaming, NormalizeBody: true, Operation: string(operation), NormalizedMetadata: normalizedMetadata}
+		var response *provider.Response
+		var err error
+		// Patch #20: response-header budget. Healthy thinking streams return
+		// headers in seconds regardless of generation length; degraded (benak)
+		// paths hold headers back until the whole generation completes. When a
+		// budget is armed, headers still missing after it aborts this attempt
+		// and rotates early. Budget 0 (default) is instrument-only: we log the
+		// header arrival time so the signal can be validated on our own pool
+		// before arming a real budget.
+		if budget := qualityHeaderBudget(holdCfg, qualityHoldEnabled, input.Streaming); budget > 0 {
+			callCtx, cancel := context.WithCancel(physicalCallCtx)
+			fired := &atomic.Bool{}
+			timerDone := make(chan struct{})
+			timer := time.AfterFunc(budget, func() {
+				// defer close guarantees the channel is closed only after
+				// fired is set and cancel has run — the main goroutine then
+				// observes the final state.
+				defer close(timerDone)
+				fired.Store(true)
+				cancel()
+			})
+			response, err = adapter.ForwardResponse(callCtx, request)
+			if !timer.Stop() {
+				// Stop()==false only means the callback has triggered, not
+				// that it has finished. Wait for the callback to complete so
+				// we never hand back a response body that is about to be
+				// cancelled.
+				<-timerDone
+			}
+			if err != nil {
+				// Go convention: response may be non-nil with err != nil —
+				// leave it unclosed and the connection leaks.
+				if response != nil && response.Body != nil {
+					_ = response.Body.Close()
+				}
+				cancel()
+				if fired.Load() {
+					s.logger.Warn("quality_header_budget_abort", "request_id", input.RequestID, "account_id", credential.ID, "budget", budget.String(), "elapsed", time.Since(started).String())
+					err = errQualityHeaderBudget
+				}
+			} else if fired.Load() {
+				// Header/budget race: the header arrived right at the edge but
+				// the timer already cancelled callCtx, so body reads would fail
+				// immediately. Treat it as a budget abort — close the raced
+				// body and rotate via the sentinel error.
+				cancel()
+				if response != nil && response.Body != nil {
+					_ = response.Body.Close()
+				}
+				response = nil
+				s.logger.Warn("quality_header_budget_abort", "request_id", input.RequestID, "account_id", credential.ID, "budget", budget.String(), "elapsed", time.Since(started).String(), "race", true)
+				err = errQualityHeaderBudget
+			} else {
+				// Headers arrived inside the budget and the timer never fired:
+				// the body must outlive callCtx (peek/client reads happen after
+				// forwardResponse returns), so do NOT cancel here. The child
+				// context is released when the parent physicalCallCtx is —
+				// WithCancel children are freed by their parent, no leak.
+			}
+		} else {
+			response, err = adapter.ForwardResponse(physicalCallCtx, request)
+			// Instrument-only path (budget 0): record header arrival so the
+			// sihat-vs-benak header signal can be validated from real traffic
+			// before any budget is armed.
+			if qualityHoldEnabled && input.Streaming && err == nil {
+				s.logger.Info("quality_header_arrival", "request_id", input.RequestID, "account_id", credential.ID, "header_ms", time.Since(started).Milliseconds())
+			}
+		}
 		auditBase.ReasoningEffort = normalizedMetadata.ReasoningEffort
 		err = failureAttempts.captureResponse(credential, started, response, err)
 		timing.markUpstream(time.Since(started))
@@ -1438,10 +1506,19 @@ attemptLoop:
 				lastFailure = newHTTPUpstreamFailure(http.StatusUnauthorized, nil, credential.ID, credential.Name)
 				continue
 			}
-			lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
-			if !isRetryableTransportFailure(credential.Provider, err) {
-				break
-			}
+		lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
+		if errors.Is(err, errQualityHeaderBudget) {
+			// Patch #20: header-budget abort is a degraded-path signal, not a
+			// transport failure. Rotate to the next account without the
+			// generic failure penalty — the benak classifier downstream of a
+			// delivered stream will apply the right penalty when the retry
+			// actually sees a full stream.
+			s.selector.NoteThinking(credential.ID, false)
+			continue
+		}
+		if !isRetryableTransportFailure(credential.Provider, err) {
+			break
+		}
 			responseFailure := false
 			if status, retryAfter, classified := upstreamResponseErrorHealthPenalty(err, holdCfg.IdleAccountCooldown); classified {
 				responseFailure = true
@@ -1502,11 +1579,17 @@ attemptLoop:
 				} else if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 					lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
 					break
-				} else {
-					lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
-					if !isRetryableTransportFailure(credential.Provider, err) {
-						break attemptLoop
-					}
+			} else {
+				lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
+				if errors.Is(err, errQualityHeaderBudget) {
+					// Patch #20: degraded-path signal — rotate without the
+					// generic transport penalty (see attemptLoop head).
+					s.selector.NoteThinking(credential.ID, false)
+					continue
+				}
+				if !isRetryableTransportFailure(credential.Provider, err) {
+					break attemptLoop
+				}
 					if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
 						break attemptLoop
 					}
@@ -1622,16 +1705,22 @@ attemptLoop:
 						lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), err)}
 						break attemptLoop
 					}
-					lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
-					if !isRetryableTransportFailure(credential.Provider, err) {
-						break attemptLoop
-					}
-					if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
-						break attemptLoop
-					}
+				lastFailure = newTransportUpstreamFailure(err, credential.ID, credential.Name)
+				if errors.Is(err, errQualityHeaderBudget) {
+					// Patch #20: degraded-path signal — rotate without the
+					// generic transport penalty (see attemptLoop head).
+					s.selector.NoteThinking(credential.ID, false)
 					continue attemptLoop
 				}
-				goto handleResponse
+				if !isRetryableTransportFailure(credential.Provider, err) {
+					break attemptLoop
+				}
+				if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
+					break attemptLoop
+				}
+				continue attemptLoop
+			}
+			goto handleResponse
 			}
 			failureHandled := false
 			if lease.QuotaMode != "" && response.StatusCode == http.StatusTooManyRequests {

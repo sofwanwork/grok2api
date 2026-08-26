@@ -49,6 +49,12 @@ const (
 var (
 	errQualityDegraded    = errors.New("Respons upstream tiada penaakulan")
 	errQualityEmptyStream = errors.New("Respons berstrim upstream kosong")
+	// errQualityHeaderBudget marks a response-header budget early abort
+	// (patch #20). It deliberately does NOT wrap context.Canceled: only the
+	// per-attempt child context is cancelled — the parent request is still
+	// alive, and misclassifying it as a client cancellation would wrongly
+	// terminate the whole retry loop.
+	errQualityHeaderBudget = errors.New("Respons upstream terlalu lambat pada peringkat header")
 	// errToolCallDegraded drives a retry only. It is never surfaced to the
 	// client, because an exhausted degradation budget delivers the body.
 	errToolCallDegraded = errors.New("Upstream menghuraikan panggilan alat sebagai teks")
@@ -100,6 +106,31 @@ type QualityRetryRuntime struct {
 	// with short idle timeouts (OpenCode retries and the user sees duplicate
 	// answers). Zero disables keepalives.
 	HoldKeepalive time.Duration
+	// EarlyHeaderAbort (patch #20) bounds the wait for upstream response
+	// HEADERS on each streaming attempt when the quality hold is armed.
+	// Healthy thinking streams return headers in seconds (header wait is
+	// independent of generation length); degraded (benak) paths hold headers
+	// back until generation completes, which can take tens of seconds.
+	// A header still missing after this budget aborts the attempt early and
+	// rotates, moving the benak verdict from first-byte to header stage.
+	// INSTRUMENT-FIRST: the default (0) only logs header arrival timings so we
+	// can validate the signal on our own pool before arming a real budget.
+	// Non-streaming requests are exempt (their headers only arrive when
+	// generation completes, by protocol design).
+	EarlyHeaderAbort time.Duration
+}
+
+// qualityHeaderBudget returns the active response-header budget for this
+// attempt (patch #20). Zero means "log-only instrumentation": header arrival
+// times are recorded on every attempt, but nothing is aborted. The budget
+// applies to streaming attempts while the quality hold is armed; non-streaming
+// requests always return 0 because their headers legitimately arrive only
+// when generation completes.
+func qualityHeaderBudget(cfg QualityRetryRuntime, holdEnabled, streaming bool) time.Duration {
+	if !holdEnabled || !streaming || cfg.EarlyHeaderAbort <= 0 {
+		return 0
+	}
+	return cfg.EarlyHeaderAbort
 }
 
 // QualityStreamSignals is the hold classifier input. Tests drive this
