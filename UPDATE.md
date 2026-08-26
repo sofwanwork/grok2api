@@ -12,9 +12,9 @@
 | Bookmark patches | `local-patches` (kini sejajar dengan merge `bed7232d` — di-refresh 22 Ogos, jangan biar stale lagi) |
 | Tag fallback | `backup-pre-merge-v315` (keadaan pra-merge v3.1.5, patch #14); `backup-pre-merge-20260822` |
 | Base upstream terakhir | `62d2775c` = tag `v3.1.5` (25 Ogos 2026) — **merged 25 Ogos 2026** |
-| Image Docker | `grok2api:local-keepalive-v2` (v3.1.5 + patch #1-15; #15 dibina semula 26 Ogos — early SSE head + keepalive ke client); fallback: `grok2api:local-keepalive` (v1 #15, tak berfungsi), `grok2api:local-v315`, `grok2api:local-ttft`, `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
+| Image Docker | `grok2api:local-headerabort` (v3.1.5 + patch #1-20; #20 instrument-first 27 Ogos — log masa header, budget 0s); image backup: `grok2api:local-benakavoid` (#19), `grok2api:local-persist` (#18), `grok2api:local-keepalive-v2` (#15), `grok2api:backup-20260822` |
 | Container | `grok2api` (docker compose) |
-| Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` |
+| Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` — **20/20 marker** |
 
 ## Merge 25 Ogos 2026 (v3.1.5) — apa yang berlaku
 
@@ -515,7 +515,7 @@ $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
 cd backend; go build ./...; go test ./...
 ```
 
-Baseline sihat: **62 pakej lulus, 0 gagal**.
+Baseline sihat: **63 pakej lulus, 0 gagal**.
 
 **Penting:** UPDATE lama kata CI tiada `go test` — **tak betul lagi**. `ghcr-image.yml` job `verify`
 dah jalankan `go test ./...` + `go vet` + swagger check + frontend lint/build pada setiap push/PR ke `main`.
@@ -540,12 +540,20 @@ Confirm dengan `gofmt -d <fail>` kalau ragu.
 | 10 | Diagnostik hosted-tool tak dijalankan (trailer + audit) | `inference/hosted_tools.go`, `inference/handler.go`, `gateway/service.go`, `domain/audit/audit.go`, `relational/models.go` | Model claim "dah search web" tapi tak pernah search — halusinasi senyap tanpa amaran |
 | 11 | Auto-retry tool-call degradasi + salvage XML | `gateway/tool_degradation.go` (baru), `gateway/tool_salvage.go` (baru), `gateway/quality_retry.go`, `gateway/quality_retry_scan.go`, `gateway/service.go`, `config/config.go` | ~50% request dengan argumen tool besar (400+ aksara) balik narasi prosa/XML bukan structured call — client terima teks sampah, tool tak pernah jalan |
 | 12 | Placeholder reasoning bila CoT disorok | `conversation/chat_stream.go`, `conversation/messages_stream.go`, `conversation/stream.go` | Client nampak trace kosong sedangkan model fikir (reasoning_tokens > 0) — tiada beza dari model tak fikir langsung |
+| 13 | Early-release stream ber-tools selepas hold deadline | `gateway/quality_retry_scan.go`, `gateway/quality_retry.go` | Jawapan prose ditampal sekali harung pada hujung (splat) selepas 75s senyap — tiada streaming langsung |
+| 14 | TTFT audit jujur untuk stream ber-hold (`firstEvidenceAt`/`markAt`) | `gateway/quality_retry_scan.go`, `gateway/timing.go` | `first_token_ms` ≈ duration penuh; TPS terbit jadi ~282k token/s — sampah statistik |
+| 15 | Hold keepalive v2 (early SSE head + keepalive sink ke client) | `gateway/quality_retry_scan.go`, `inference/handler.go` | Client idle-timeout pendek abort & retry → jawapan berganda (OpenCode) |
+| 16 | Silent-thinking retry (fikir tapi tiada jawapan) | `gateway/quality_retry.go`, `gateway/quality_retry_scan.go` | Stream tamat dengan reasoning sebenar tapi content ~1 token — UI nampak "terputus" |
+| 17 | Soft thinking-score ordering per-akaun | `gateway/selector.go` | Akaun benak dipilih separuh masa — tiada ordering jangka panjang |
+| 18 | Persist thinking-score seeding (`SeedThinkingScores`) | `gateway/selector.go` | Score hilang bila container restart — akaun benak "belajar semula" dari kosong |
+| 19 | Preemptive benak avoidance (`benakAvoid`) + adaptive hold 5s | `gateway/selector_plan.go`, `gateway/service.go` | 44.5% request ialah retry dalaman quality_degraded; 1.7 jam/masa terbuang |
+| 20 | Early header abort — instrument-first (default 0s = log sahaja) | `gateway/quality_retry.go`, `gateway/service.go`, `infra/config/config.go`, `app/application.go`, `gateway/quality_header_budget_test.go` | Tiada data masa header utk validasi signal sihat-vs-benak; benak hanya tertangkap selepas holdTimeout (10s) — arm 5s selepas data sah |
 
 **Nota:** Persona AKIF settings hidup dalam `config.yaml` (gitignored — **tak ikut git**). Backup ada kat `../backups/config.yaml.persona_*.bak`.
 
-### Liputan ujian setiap patch (audit 22 Ogos)
+### Liputan ujian setiap patch (audit 22 Ogos; dilanjutkan 27 Ogos)
 
-Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **62 pakej, 0 gagal** = sihat.
+Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **63 pakej, 0 gagal** = sihat.
 
 | Patch | Fail ujian |
 |---|---|
@@ -556,6 +564,10 @@ Semua patch kini ada ujian. Jalankan `go test ./...` selepas merge — **62 pake
 | 6+7. Persona (+ berlapis) | `cli/persona_inject_test.go`, `config/persona_test.go` |
 | 8. reasoning_opaque replay | `conversation/reasoning_replay_test.go` |
 | 10. Hosted-tool diagnostic | `inference/hosted_tools_test.go` (12 ujian) |
+| 13-16. Quality hold/retry chain | `gateway/quality_retry_test.go` (termasuk keepalive, silent-thinking) |
+| 17-18. Thinking score + seeding | `gateway/selector_test.go` (`TestNoteThinkingAdjustsScore`, `TestSeedThinkingScores`) |
+| 19. Benak avoidance | `gateway/selector_layered_test.go` (`TestBenakAvoidSoftQuarantine`) |
+| 20. Early header abort | `gateway/quality_header_budget_test.go` (3 ujian) |
 
 ### Diagnostik hosted-tool (patch #10, 22 Ogos)
 
