@@ -33,7 +33,8 @@ $patches = @(
     @{ f = "backend/internal/application/gateway/quality_retry_scan.go"; m = "firstEvidenceAt";   d = "Patch 14: honest upstream TTFT for held streams" },
     @{ f = "backend/internal/application/gateway/quality_retry_scan.go"; m = "startHoldKeepalive|HoldKeepaliveSink"; d = "Patch 15: hold keepalive (anti duplicate retry)"; regex = $true },
     @{ f = "backend/internal/transport/http/inference/handler.go"; m = "streamPreamble|writeCommittedStreamError"; d = "Patch 15 v2: early SSE head + keepalive sink"; regex = $true },
-    @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "QualitySilentThinking|classifySilentThinking"; d = "Patch 16: silent-thinking retry (thought-but-empty answer)"; regex = $true }
+    @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "QualitySilentThinking|classifySilentThinking"; d = "Patch 16: silent-thinking retry (thought-but-empty answer)"; regex = $true },
+    @{ f = "backend/internal/application/gateway/selector.go"; m = "NoteThinking|thinkingScore"; d = "Patch 17: soft thinking-score ordering"; regex = $true }
 )
 foreach ($p in $patches) {
     if (-not (Test-Path $p.f)) { Fail "$($p.d) — file missing: $($p.f)"; continue }

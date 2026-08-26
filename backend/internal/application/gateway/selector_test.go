@@ -1880,3 +1880,75 @@ func (f failingConcurrencyLimiter) Acquire(context.Context, string, int) (func()
 func (f failingConcurrencyLimiter) Current(context.Context, string) (int, error) {
 	return 0, nil
 }
+
+// --- Patch #17: soft thinking-score ordering ---
+
+func TestNoteThinkingAdjustsScore(t *testing.T) {
+	s := NewSelector(nil, nil, nil, nil, 0, 0, 0)
+	// Default (no observation): neutral
+	if got := s.thinkingScoreOf(1); got != thinkingScoreDefault {
+		t.Fatalf("default score = %d, want %d", got, thinkingScoreDefault)
+	}
+	// Up on thinking evidence
+	s.NoteThinking(1, true)
+	if got := s.thinkingScoreOf(1); got <= thinkingScoreDefault {
+		t.Fatalf("score after thinking = %d, want > %d", got, thinkingScoreDefault)
+	}
+	// Down on thin thinking
+	s.NoteThinking(1, false)
+	s.NoteThinking(1, false)
+	if got := s.thinkingScoreOf(1); got >= thinkingScoreDefault {
+		t.Fatalf("score after two thin responses = %d, want < %d", got, thinkingScoreDefault)
+	}
+	// Clamp at min
+	for i := 0; i < 10; i++ {
+		s.NoteThinking(1, false)
+	}
+	if got := s.thinkingScoreOf(1); got != thinkingScoreMin {
+		t.Fatalf("score after many thin responses = %d, want %d (clamp)", got, thinkingScoreMin)
+	}
+	// Clamp at max
+	for i := 0; i < 10; i++ {
+		s.NoteThinking(1, true)
+	}
+	if got := s.thinkingScoreOf(1); got != thinkingScoreMax {
+		t.Fatalf("score after many thinking responses = %d, want %d (clamp)", got, thinkingScoreMax)
+	}
+	// Independent accounts
+	s.NoteThinking(2, true)
+	if got := s.thinkingScoreOf(1); got != thinkingScoreMax {
+		t.Fatalf("account 1 score changed by account 2 observation: %d", got)
+	}
+	if got := s.thinkingScoreOf(2); got <= thinkingScoreDefault {
+		t.Fatalf("account 2 score = %d, want > %d", got, thinkingScoreDefault)
+	}
+}
+
+func TestCandidateScoreBetterPrefersThinking(t *testing.T) {
+	values := []account.RoutingCandidate{
+		{Credential: account.Credential{ID: 1, Priority: 10, WebTier: account.WebTierBasic}},
+		{Credential: account.Credential{ID: 2, Priority: 10, WebTier: account.WebTierBasic}},
+	}
+	s := NewSelector(nil, memory.NewConcurrencyLimiter(), nil, nil, time.Hour, time.Second, time.Minute)
+	plan, err := s.planCandidateIndexesWithHints(context.Background(), values, nil, time.Now(), nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Default: both neutral (no observation). ID 1 wins (lower ID).
+	candidate, ok := plan.Next()
+	if !ok || candidate.Credential.ID != 1 {
+		t.Fatalf("default order: got %v, want ID 1", candidate.Credential.ID)
+	}
+	// Now account 1 produces thin thinking repeatedly
+	s.NoteThinking(1, false)
+	s.NoteThinking(1, false)
+	s.NoteThinking(1, false)
+	plan2, err := s.planCandidateIndexesWithHints(context.Background(), values, nil, time.Now(), nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate2, _ := plan2.Next()
+	if candidate2.Credential.ID != 2 {
+		t.Fatalf("after thin-thinking strikes: got ID %d, want ID 2 (soft priority)", candidate2.Credential.ID)
+	}
+}

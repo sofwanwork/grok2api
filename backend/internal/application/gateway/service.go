@@ -1147,12 +1147,23 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 			hostedToolWarning = warning
 			hostedToolMu.Unlock()
 		}
-		finalize := func(usage Usage, responseID, errorCode string) {
-			once.Do(func() {
-				// HTTP 状态码保留线上真实值；流在 2xx 响应头之后失败时由 errorCode
-				// 决定最终结果，避免把协议状态与业务结果混为一谈。
-				successful := auditRequestSucceeded(response.StatusCode, errorCode)
-				lease.completeSelectorObservation(successful)
+	finalize := func(usage Usage, responseID, errorCode string) {
+		once.Do(func() {
+			// HTTP 状态码保留线上真实值；流在 2xx 响应头之后失败时由 errorCode
+			// 决定最终结果，避免把协议状态与业务结果混为一谈。
+			successful := auditRequestSucceeded(response.StatusCode, errorCode)
+			// Patch #17: record the soft thinking score for this account. A
+			// response with reported reasoning evidence lifts the account's
+			// ordering; a response that produced almost no visible thinking
+			// (or none at all) lowers it. Only meaningful responses adjust
+			// the score — empty/failed streams already carry their own
+			// penalties elsewhere.
+			if successful && usage.Reported && usage.ReasoningTokens > 0 {
+				s.selector.NoteThinking(accountID, true)
+			} else if successful && usage.Reported && usage.ReasoningTokens == 0 && usage.OutputTokens > 0 {
+				s.selector.NoteThinking(accountID, false)
+			}
+			lease.completeSelectorObservation(successful)
 				budget := newFinalizationBudget(string(operation), string(route.Provider))
 				if isUpstreamStreamFailure(errorCode) {
 					status, retryAfter := streamFailureHealthPenalty(errorCode, usage, s.qualityRetryConfig().IdleAccountCooldown)

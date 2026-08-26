@@ -358,6 +358,11 @@ type Selector struct {
 	tierOrders             interface {
 		TierOrder(account.Provider, string) []account.WebTier
 	}
+	// thinkingScore tracks per-account recent reasoning quality (patch #17).
+	// It rises on responses with real thinking evidence and falls on
+	// near-empty thinking-only answers. Used to softly order account picks so
+	// accounts that recently produced thin thinking are tried less often.
+	thinkingScore map[uint64]int
 }
 
 func NewSelector(accounts repository.AccountRepository, concurrency repository.ConcurrencyLimiter, sticky repository.StickySessionRepository, tierOrders interface {
@@ -367,7 +372,7 @@ func NewSelector(accounts repository.AccountRepository, concurrency repository.C
 	if len(capacityWait) > 0 && capacityWait[0] > 0 {
 		wait = capacityWait[0]
 	}
-	return &Selector{accounts: accounts, concurrency: concurrency, sticky: sticky, tierOrders: tierOrders, stickyTTL: stickyTTL, cooldownBase: cooldownBase, cooldownMax: cooldownMax, capacityWait: wait, leaseWake: make(chan struct{}), logger: slog.Default(), lastSelectedAt: make(map[uint64]time.Time), lastSuccessAt: make(map[uint64]time.Time), healthOverrides: make(map[uint64]routingHealthOverride), quotaConsumed: make(map[quotaConsumptionKey]int), staleFallbackLoggedAt: make(map[string]time.Time), candidates: make(map[candidateCacheKey]candidateSnapshot), routingBases: make(map[routingBaseCacheKey]routingBaseSnapshot), routingOverlays: make(map[routingOverlayCacheKey]routingOverlaySnapshot), routingAccountProvider: make(map[uint64]account.Provider), baseProviderVersion: make(map[account.Provider]uint64), overlayProviderVersion: make(map[account.Provider]uint64), concurrencySnapshots: resultcache.New[[32]byte, map[string]int](maxConcurrencySnapshots, concurrencySnapshotTTL), circuitBreaker: newCircuitBreakerState()}
+	return &Selector{accounts: accounts, concurrency: concurrency, sticky: sticky, tierOrders: tierOrders, stickyTTL: stickyTTL, cooldownBase: cooldownBase, cooldownMax: cooldownMax, capacityWait: wait, leaseWake: make(chan struct{}), logger: slog.Default(), lastSelectedAt: make(map[uint64]time.Time), lastSuccessAt: make(map[uint64]time.Time), healthOverrides: make(map[uint64]routingHealthOverride), quotaConsumed: make(map[quotaConsumptionKey]int), staleFallbackLoggedAt: make(map[string]time.Time), candidates: make(map[candidateCacheKey]candidateSnapshot), routingBases: make(map[routingBaseCacheKey]routingBaseSnapshot), routingOverlays: make(map[routingOverlayCacheKey]routingOverlaySnapshot), routingAccountProvider: make(map[uint64]account.Provider), baseProviderVersion: make(map[account.Provider]uint64), overlayProviderVersion: make(map[account.Provider]uint64), concurrencySnapshots: resultcache.New[[32]byte, map[string]int](maxConcurrencySnapshots, concurrencySnapshotTTL), circuitBreaker: newCircuitBreakerState(), thinkingScore: make(map[uint64]int)}
 }
 
 // SetLogger wires the application logger into routing degradation diagnostics.
@@ -1035,6 +1040,48 @@ func (s *Selector) markSuccess(ctx context.Context, credential account.Credentia
 	if quotaProbe {
 		s.evictCandidate(credential.Provider, credential.ID)
 	}
+}
+
+// --- Patch #17: soft thinking-score ordering ---
+
+const (
+	thinkingScoreMax     = 100
+	thinkingScoreDefault = 70
+	thinkingScoreMin     = 0
+	thinkingScoreUp      = 10
+	thinkingScoreDown    = 15
+)
+
+// NoteThinking adjusts the per-account thinking score based on whether the
+// delivered response contained real reasoning evidence. A rise rewards
+// accounts that produce visible thinking; a fall penalises accounts that
+// return near-empty thinking-only answers. This is a soft ordering hint, not
+// a cooldown — the account stays in the pool but is tried less often.
+func (s *Selector) NoteThinking(accountID uint64, hadThinking bool) {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	current, exists := s.thinkingScore[accountID]
+	if !exists {
+		current = thinkingScoreDefault
+	}
+	if hadThinking {
+		current = min(thinkingScoreMax, current+thinkingScoreUp)
+	} else {
+		current = max(thinkingScoreMin, current-thinkingScoreDown)
+	}
+	s.thinkingScore[accountID] = current
+}
+
+// thinkingScoreOf returns the current soft score for an account; accounts
+// with no observations get the neutral default.
+func (s *Selector) thinkingScoreOf(accountID uint64) int {
+	s.healthMu.RLock()
+	defer s.healthMu.RUnlock()
+	score, exists := s.thinkingScore[accountID]
+	if !exists {
+		return thinkingScoreDefault
+	}
+	return score
 }
 
 func (s *Selector) MarkFreeQuotaExhausted(ctx context.Context, credential account.Credential, used, limit int64) {

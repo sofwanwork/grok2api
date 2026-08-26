@@ -50,7 +50,30 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Persona: NEVER ASK WITHOUT PROPOSING + CONFIRM BEFORE EDIT (26 Ogos)
+### Soft thinking-score ordering (patch #17, 26 Ogos)
+
+**Masalah:** ~36% request datang daripada akaun yang menghasilkan jawapan
+tanpa reasoning (benak). Guard reactive bekerja (retry + cooldown 12h) tapi
+request pertama yang jumpa akaun benak masih lambat — ditahan, disekat,
+rotate.
+
+**Fix (kod):** `thinkingScore` per-akaun (0-100, default 70):
+- Naik +10 bila response ada reasoning evidence (usage.ReasoningTokens > 0)
+- Turun -15 bila response berjaya tapi tiada reasoning
+- Susun calon dalam tier sama mengikut score (soft order — bukan exclusion;
+  akaun benak kekal dalam pool tapi kurang dipilih, auto-pulih bila naik
+  kembali)
+- Wire dalam `planCandidateIndexesWithHints` selepas tier, sebelum priority
+
+**Kesan:** akaun yang selalu benak turun skor → dipilih lebih jarang →
+request lebih kerap terus ke akaun yang fikir. Tanpa cooldown keras —
+pemulihan automatik bila akaun berjaya.
+
+**Test:** `TestNoteThinkingAdjustsScore` (up/down/clamp/independent),
+`TestCandidateScoreBetterPrefersThinking` (thin-thinking akaun turun dalam
+ordering). Full suite 63 pakej 0 gagal.
+
+**Image:** `grok2api:local-priority` (= local-silentthink + patch #17).
 
 **Gejala (SukaCode, sesi kedua):** model explore 7 fail (7 reads, 2 searches),
 kemudian keluarkan soalan *"Macam mana kau nak aku improve UI SukaCode ni?

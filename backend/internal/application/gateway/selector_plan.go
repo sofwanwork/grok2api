@@ -22,6 +22,11 @@ type candidateScore struct {
 	inFlight          int
 	remaining         float64
 	lastSelected      time.Time
+	// thinkingScore is the soft per-account reasoning-quality score
+	// (patch #17). Accounts that recently produced thin thinking get a lower
+	// score and are tried less often; accounts that produce real reasoning
+	// rise. Zero means no observation yet — treated as the neutral default.
+	thinkingScore int
 }
 
 // candidatePlan 使用线性建堆保留完整路由优先级，并允许 claim 失败后按顺序取下一账号。
@@ -90,6 +95,13 @@ func candidateScoreBetter(values []account.RoutingCandidate, leftScore, rightSco
 	}
 	if leftScore.tier != rightScore.tier {
 		return leftScore.tier < rightScore.tier
+	}
+	// Patch #17: within the same tier, prefer accounts that recently produced
+	// real thinking over accounts that keep returning thin thinking-only
+	// answers. This is a soft ordering, not an exclusion — the pool stays
+	// intact, but the highest-quality accounts are tried first.
+	if leftScore.thinkingScore != rightScore.thinkingScore {
+		return leftScore.thinkingScore > rightScore.thinkingScore
 	}
 	if left.Priority != right.Priority {
 		return left.Priority > right.Priority
@@ -197,6 +209,9 @@ func (s *Selector) planCandidateIndexesWithHints(ctx context.Context, values []a
 			preferFreeBuild:   preferFreeBuild && candidate.IsKnownFreeBuild(),
 			inFlight:          inFlight[position], lastSelected: s.lastSelectedAt[candidate.Credential.ID],
 		}
+		// Patch #17: attach the soft thinking score so thin-thinking accounts
+		// drop within their tier without leaving the pool.
+		score.thinkingScore = s.thinkingScoreOf(candidate.Credential.ID)
 		// 只有真实上游快照能够证明账号具备该模式额度。历史默认值和
 		// 本地预测值都属于未知能力，只保留为路由兜底。
 		if candidate.QuotaWindow != nil && candidate.QuotaWindow.Source == account.QuotaSourceUpstream {
