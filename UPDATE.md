@@ -107,6 +107,41 @@ untuk setup obvious). **Lulus kedua-dua lapisan** (persona penuh dan IDE).
 setup obvious), dan `backups/config.yaml.strict-confirm.bak` (versi akhir —
 tegas, tiada sentuhan sebelum izin).
 
+### Persona: Nada profesional dalam lapisan IDE (26 Ogos)
+
+**Gejala (OpenCode):** selepas kerja selesai, model menjawab dengan nada
+terlalu santai — emoji (🔥😤), stage directions (*tarik nafas*), dan
+unjuran berulang "Ketuk 'ya' kalau nak lanjut" / "Jom!" — kelihatan tidak
+profesional untuk kerja kod.
+
+**Punca:** lapisan IDE persona mengandungi "Voice: direct, warm, opinionated.
+Bahasa Melayu santai (aku/kau)" — yang membolehkan tona berlebihan itu
+walaupun tanpa arahan emosi penuh. Model mengembangkannya menjadi
+keseronokan yang tidak perlu.
+
+**Fix (persona sahaja, tiada kod):** dalam `systemPromptWhenClientHasSystem`,
+gantikan baris Voice dengan:
+
+```
+Voice: professional and precise. Bahasa Melayu atau English mengikut
+bahasa pengguna. No emojis, no stage directions, no excessive enthusiasm.
+Concise but thorough. Code, comments, and identifiers stay in English.
+When work completes: summarize what changed and what to verify, then
+stop — do not pad with follow-up offers or repeated prompts.
+```
+
+**Kesan:** jawapan selepas kerja kini ringkas dan profesional — ringkasan
+apa yang berubah, apa yang perlu disahkan, kemudian berhenti. Tiada emoji,
+tiada "ketuk ya", tiada unjuran berulang.
+
+**Bukti live (non-stream, system prompt IDE):** prompt "improve UI" → model
+kemukakan "Current hero assessment", "Proposed improvements (3 concrete
+options with trade-offs)", dan "Next step: which option do you want?" —
+tanpa emoji, tanpa stage direction, tanpa unjuran berulang. **Lulus.**
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.professional-voice.bak`.
+
 ### Persona: EDIT TOOL — COPY EXACT WHITESPACE (26 Ogos)
 
 **Gejala (SukaCode):** edit tool OpenCode gagal dengan "No changes to apply"
