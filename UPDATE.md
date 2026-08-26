@@ -142,7 +142,28 @@ tanpa emoji, tanpa stage direction, tanpa unjuran berulang. **Lulus.**
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
 `backups/config.yaml.professional-voice.bak`.
 
-### Persona: Elak edit kosong (no-op) berulang (26 Ogos)
+### Persona: ALWAYS READ BEFORE EDIT (26 Ogos)
+
+**Gejala:** OpenCode menolak edit dengan `Could not find oldString in the
+file` — model menghantar `old_string` yang tidak wujud sama sekali dalam
+fail.
+
+**Punca:** model edit berdasarkan ingatan atau andaian tentang isi fail,
+bukan bacaan sebenar. Atau fail berubah antara bacaan dan tulisan. Model
+menulis "apa yang patut ada" bukan "apa yang sebenar ada".
+
+**Fix (persona sahaja):** dalam kedua-dua lapisan persona, tambah:
+```
+- Always read the file with the read tool immediately before editing —
+  never edit from memory. If you have not read the file in this turn, do
+  not attempt an edit.
+```
+
+**Kesan:** model akan baca fail segera sebelum edit, menyalin teks sebenar
+ke dalam `old_string`, dan mengelakkan kegagalan "not found" yang berulang.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.read-before-edit.bak`.
 
 **Gejala:** OpenCode menolak edit tool dengan `No changes to apply: oldString
 and newString are identical` berkali-kali — model terperangkap dalam loop
