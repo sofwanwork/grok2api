@@ -142,7 +142,31 @@ tanpa emoji, tanpa stage direction, tanpa unjuran berulang. **Lulus.**
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
 `backups/config.yaml.professional-voice.bak`.
 
-### Persona: EDIT TOOL — COPY EXACT WHITESPACE (26 Ogos)
+### Persona: Elak edit kosong (no-op) berulang (26 Ogos)
+
+**Gejala:** OpenCode menolak edit tool dengan `No changes to apply: oldString
+and newString are identical` berkali-kali — model terperangkap dalam loop
+menghantar edit yang sama (old == new), membazirkan giliran.
+
+**Punca:** model baca fail, nampak kandungan sasaran sudah ada (edit
+sebelumnya berjaya), kemudian tulis edit dengan `old_string` dan
+`new_string` yang sama — tidak sedar bahawa kerja itu sudah selesai.
+Bukan masalah gateway; ini tingkah laku model (Grok) yang terperangkap
+dalam "edit loop".
+
+**Fix (persona sahaja):** dalam kedua-dua lapisan persona, tambah:
+```
+- NEVER send an edit where old_string equals new_string — that is a no-op
+  and wastes a turn. If the target content is already in the file, the
+  edit is already done; move on instead of retrying. If you find yourself
+  repeating the same edit, stop and summarize the current state instead.
+```
+
+**Kesan:** model akan berhenti menghantar edit kosong dan mengakui keadaan
+semasa ("kerja sudah siap") daripada terus mencuba.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.no-empty-edits.bak`.
 
 **Gejala (SukaCode):** edit tool OpenCode gagal dengan "No changes to apply"
 kerana `old_string` tidak padan persis dengan fail — fail mempunyai blank
