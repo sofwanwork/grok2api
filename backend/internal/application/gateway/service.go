@@ -34,6 +34,7 @@ import (
 	"github.com/chenyme/grok2api/backend/internal/infra/security"
 	neterrorpkg "github.com/chenyme/grok2api/backend/internal/pkg/neterror"
 	"github.com/chenyme/grok2api/backend/internal/pkg/requestmeta"
+	"github.com/chenyme/grok2api/backend/internal/pkg/tooltimeguard"
 	"github.com/chenyme/grok2api/backend/internal/repository"
 )
 
@@ -965,6 +966,10 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	}
 	publicModel := modeldomain.ExternalPublicID(route.Provider, route.PublicID)
 	input.PublicModel = publicModel
+	// Patch #21 lapisan A: tulis semula description tool bash/shell dalam
+	// body sebelum upstream supaya unit timeout (milisaat) dinyatakan jelas
+	// pada setiap request — no-op jika body tanpa tools.
+	input.Body = tooltimeguard.ApplyTimeoutHint(input.Body)
 	if aliasEffort != "" {
 		input.Body, err = rewriteAliasedModel(input.Body, publicModel, aliasEffort, operation)
 		if err != nil {

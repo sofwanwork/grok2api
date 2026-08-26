@@ -50,7 +50,41 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Early header abort — instrument-first (patch #20, 27 Ogos)
+### Bash tool timeout guard (patch #21, 27 Ogos)
+
+**Masalah (eksperimen round 1–4):** model Grok menjana tool call `bash`
+dengan `timeout` terlalu kecil (180–1800) kerana dia sangka unit itu
+DETIK; OpenCode membacanya sebagai MILISAAT dan membunuh `npm install`
+selepas 0.18s. Lima percubaan install mati sebelum sempat berjalan;
+model menyerahkan langkah manual kepada user. Fakta ini disahkan dari
+DB sesi (nilai `timeout` datang dari tool call yang dijana model sendiri,
+bukan default OpenCode).
+
+**Reka bentuk — dua lapisan (pakej neutral `internal/pkg/tooltimeguard`):**
+
+- **Lapisan A (request path — `ApplyTimeoutHint`):** tulis semula
+  description tool `bash`/`shell` dalam body request sebelum upstream
+  supaya unit milisaat dinyatakan jelas pada setiap request. Cover dua
+  format (OpenAI Chat + Anthropic Messages), idempoten, body dikembalikan
+  tanpa perubahan pada parse gagal — tidak boleh menenggelamkan request.
+  Wire: `gateway/service.go` sebelum `rewriteAliasedModel`.
+- **Lapisan B (response path — `EnlargeToolTimeout`):** bila model tetap
+  jana `timeout < 10000ms` untuk command yang diketahui lambat
+  (`npm/pnpm/yarn/bun install`, `npx`, `npm run build`, `pip`, `uv`,
+  `composer`, `cargo`, `mvn`), naikkan ke nilai selamat (install 300000,
+  build 120000) sebelum delta sampai ke client. Idempoten; abaikan
+  arguments bukan JSON sah / non-bash / timeout besar / command biasa.
+  Wire: `conversation/chat_stream.go` `toolArgumentsDoneChat`.
+
+**Bug dalam pembangunan:** pas pertama implementasi — mutasi berjaya
+dalam memori tapi `json.Marshal(payload)` tak memasukkannya sebab
+`payload` simpan `"tools"` sebagai `RawMessage` asal; fix dengan tulis
+semula `payload["tools"]` selepas ubah. Ujian konfirmasikan.
+
+**Ujian:** 14 ujian dalam `tooltimeguard_test.go` — hint dua format,
+idempotensi, body tanpa tools/bash, raise install/build, abaikan
+timeout besar, abaikan command biasa, abaikan non-bash, missing timeout,
+JSON rosak, timeout sebagai string. Full suite 64 pakej, 0 gagal.
 
 **Latar:** fork hardened `gnayhz/grok2api` mengukur bahawa stream sihat
 menghantar response header dalam 0.7–2.2s berbanding 3.0–15.6s untuk path

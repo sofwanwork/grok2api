@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/chenyme/grok2api/backend/internal/pkg/tooltimeguard"
 )
 
 func (c *streamConverter) startChat() error {
@@ -86,6 +88,13 @@ func (c *streamConverter) toolArgumentsDoneChat(itemID, arguments string) error 
 			arguments = tool.Arguments
 		}
 		if arguments != "" {
+			// Patch #21 lapisan B: bila model jana timeout terlalu kecil untuk
+			// command lambat (npm install/build dll) — naikkan nilai itu ke
+			// minimum selamat sebelum delta sampai ke client. Idempoten dan
+			// hanya berkesan pada arguments yang sah JSON.
+			if corrected, changed := tooltimeguard.EnlargeToolTimeout(tool.Name, arguments); changed {
+				arguments = corrected
+			}
 			if err := c.chatDelta(map[string]any{"tool_calls": []any{map[string]any{"index": tool.Index, "function": map[string]any{"arguments": arguments}}}}); err != nil {
 				return err
 			}
