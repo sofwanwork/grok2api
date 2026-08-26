@@ -287,6 +287,50 @@ kali ni dalam bentuk "claim siap".
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
 `backups/config.yaml.pre-verify-complete.20260827_004140.bak`.
 
+### Persona: WRITE FILES + REBUILD AFTER FIX (27 Ogos, eksperimen testtesttest)
+
+**Latar:** eksperimen A/B dijalankan — folder kosong `testtesttest`, prompt
+identik 26 Ogos, provider grok2api/grok-4.6-xhigh, dengan semua 20 patch +
+persona guards aktif. Keputusan: **B+** (dari F). Model betul-betul
+scaffold (create-vite), install 3 kali npm (0 vulns), run build 3 kali,
+debug error Tailwind v4/PostCSS sendiri, run dev server — semua tingkah
+laku yang TIADA dalam sesi 26 Ogos. Guard `&&` berfungsi sebagai recovery
+loop (error→betulkan ke `;`→jalan) walaupun sesi masih shell PS 5.1.
+
+**Tiga kegagalan yang kekal (punca grade B+):**
+1. Claim "✅ Siap" pada 01:04:19 walaupun build ke-3 masih merah — dia fix
+   (install @tailwindcss/postcss) selepas claim, tapi tak pernah rebuild
+   untuk confirm hijau.
+2. Bila user kata "buatkan utk sy" — model salah tafsir dan hantar kod
+   dalam chat sebagai copy-paste instructions ("Ganti isi fail
+   src/App.jsx dengan kod ini") walaupun ada tool write/edit aktif. Fail
+   di disk kekal versi lama — delivery sebenar gagal senyap.
+3. Scope creep: tanpa diminta, dia tawarkan pivot ke "single HTML tanpa
+   npm" sebab hilang keyakinan pada projek React dia sendiri; user
+   terpaksa insist "sy nak dlm bentuk react".
+
+**Fix (persona sahaja, tiada kod) — tiga guard baru, kedua-dua lapisan:**
+- "A BUILD WITH ERRORS IS NOT SUCCESS — REBUILD AFTER EVERY FIX": build
+  yang berakhir dengan baris error ialah build GAGAL walau berapa module
+  transformed; selepas fix apa-apa, run build/dev server SEMULA dan
+  confirm bersih (exit 0 / HTTP 200) sebelum umum apa-apa. "Aku dah fix"
+  bukan "dia dah jalan".
+- "WRITE FILES — NEVER PASTE CODE IN CHAT": bila tool write/edit ada,
+  JANGAN sekali-kali hantar kod dalam chat sebagai arahan copy-paste
+  ("ganti isi fail...", "copy ni", "save as"); tulis fail terus — menulis
+  fail tu lah deliverable. Pengecualian: user jelas minta kod sebagai
+  teks. "Buatkan utk sy" = jalankan tools, tulis fail, verify build —
+  hujung ke hujung.
+- (Lapisan IDE dapat versi ringkas dua guard atas dalam bentuk bullet.)
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.pre-aplus.20260827_011753.bak`.
+
+**Pengukuran semula:** eksperimen seterusnya (folder kosong baharu,
+prompt identik) akan dinilai pada kriteria A+: build lulus bersih,
+fail di disk = fail terkini (tiada copy-paste mode), dev server 200,
+claim siap hanya selepas rebuild hijau.
+
 ### Persona: `&&` ParseError guard + OpenCode shell pwsh (26 Ogos, malam)
 
 **Gejala (website ubat kurus):** model (grok2api/grok-4.6-xhigh) cuba
