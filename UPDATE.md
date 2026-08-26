@@ -183,7 +183,33 @@ tanpa emoji, tanpa stage direction, tanpa unjuran berulang. **Lulus.**
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
 `backups/config.yaml.professional-voice.bak`.
 
-### Persona: ALWAYS READ BEFORE EDIT (26 Ogos)
+### Persona: WINDOWS SHELL COMMANDS (26 Ogos)
+
+**Gejala (website ubat kurus):** OpenCode log menunjukkan banyak
+`Unknown: ChildProcess.kill` — model generate arahan Unix (`ls -la`,
+`mkdir -p`) yang gagal di PowerShell, dan arahan npm (`npx create-next-app`,
+`npm install`) yang dibunuh kerana lambat (timeout).
+
+**Punca:** dua arah:
+1. Model tak tahu environment Windows — dia generate syntax Unix.
+2. Arahan npm/npx download pakej dari internet (boleh ambil minit pada
+   sambungan perlahan) → dibunuh oleh timeout OpenCode.
+
+**Fix (persona sahaja, tiada kod):** dalam kedua-dua lapisan persona:
+```
+- This environment is Windows with PowerShell. Use PowerShell commands:
+  Get-ChildItem (not ls -la), New-Item -ItemType Directory (not mkdir -p),
+  Get-Content (not cat), Remove-Item (not rm -rf).
+  npm/npx commands like npx create-next-app or npm install download packages
+  and can take minutes — run once and be patient; do not retry immediately
+  if the process seems slow.
+```
+
+**Kesan:** model akan gunakan arahan Windows yang betul dan tidak retry
+arahan npm secara melulu.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.windows-shell.bak`.
 
 **Gejala:** OpenCode menolak edit dengan `Could not find oldString in the
 file` — model menghantar `old_string` yang tidak wujud sama sekali dalam
