@@ -331,6 +331,48 @@ prompt identik) akan dinilai pada kriteria A+: build lulus bersih,
 fail di disk = fail terkini (tiada copy-paste mode), dev server 200,
 claim siap hanya selepas rebuild hijau.
 
+### Persona: LONG COMMANDS NEED A LARGE TIMEOUT (27 Ogos, round 3 kurus-pro)
+
+**Latar (round 3, 01:21–01:32):** guard WRITE-DON'T-PASTE **berfungsi
+100%** — semua fail ditulis guna tool, tiada kod dalam chat. `tsconfig.json`
+juga ada. Tapi dua kegagalan baharu:
+
+1. Claim "Siap!" sebelum sebarang install/build berjaya (guard verify
+   dilanggar — masih lemah pada fasa akhir).
+2. `npm install` × 5 varian — SEMUA dibunuh oleh bash tool timeout
+   (600ms–1800ms), kemudian model menyerah: "tool timeout lama, kau
+   install sendiri".
+
+**Bukti punca (log):** `shell tool terminated command after exceeding
+timeout 600 ms` — model cuba naikkan timeout sedikit-sedikit
+(180→300→600→900→1200→1800ms) tapi tak tahu dia boleh pass nilai besar
+terus. npm install perlukan 30–180 saat. Pesan OpenCode sendiri ada
+hint: "retry with a larger timeout value" — model tak membacanya.
+
+**Penemuan sampingan:** sesi round 3 masih guna PS 5.1
+(`shell tool using shell ... WindowsPowerShell\v1.0\powershell.EXE`)
+walaupun `shell: pwsh` dah diset — config shell hanya dibaca semasa
+OpenCode STARTUP, bukan setiap sesi. Restart process penuh diperlukan.
+Persona guard `&&` yang menyelamatkan sekali lagi (auto-tukar ke
+`Set-Location ; ...`).
+
+**Fix (persona sahaja, tiada kod) — kedua-dua lapisan:**
+- "LONG COMMANDS NEED A LARGE TIMEOUT — PASS IT ON THE FIRST ATTEMPT":
+  bila run npm install / create-next-app / npm run build, sentiasa pass
+  parameter timeout eksplisit (300000 untuk install, 120000 untuk build)
+  pada percubaan PERTAMA. Kalau output kata "terminated after exceeding
+  timeout" — command dibunuh sebelum habis; itu BUKAN kegagalan npm /
+  projek / pendekatan. Jangan retry dengan kenaikan kecil, jangan
+  mengaku "aku tak boleh run ni" dan serah pada user. Retry SEKALI
+  dengan timeout betul-betul besar.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.pre-bashtimeout.20260827_014001.bak`.
+
+**Round 4 persediaan:** exit OpenCode sepenuhnya (bukan tutup sesi)
+supaya `shell: pwsh` betul-betur load — `&&` jadi sah pada environment
+level, dan guard timeout persona aktif. Kriteria A+ kekal sama.
+
 ### Persona: `&&` ParseError guard + OpenCode shell pwsh (26 Ogos, malam)
 
 **Gejala (website ubat kurus):** model (grok2api/grok-4.6-xhigh) cuba
