@@ -50,6 +50,37 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
+### Persona: NEVER ASK WITHOUT PROPOSING (26 Ogos)
+
+**Gejala (SukaCode, sesi kedua):** model explore 7 fail (7 reads, 2 searches),
+kemudian keluarkan soalan *"Macam mana kau nak aku improve UI SukaCode ni?
+Kau nak aku propose dulu atau langsung edit yang paling impactful?"* — tanpa
+cadangan. Kau terpaksa jawab sendiri ("dari segi design").
+
+**Punca:** model terlalu berhati-hati (over-hedging) — takut buat keputusan
+open-ended tanpa pengesahan, jadi dia "tanya dulu" walaupun kau dah suruh.
+Banding Claude/GPT: mereka propose cadangan konkrit + trade-off, baru minta
+pilihan.
+
+**Fix (persona sahaja, tiada kod):**
+- `systemPromptWhenClientHasSystem` (IDE layer): tambah arahan — "For
+  open-ended tasks (improve, refactor, redesign), always propose 2-3 concrete
+  recommendations with trade-offs first, then ask which to pursue — never
+  respond with a bare question."
+- `systemPrompt` (persona penuh): tambah seksyen **NEVER ASK WITHOUT
+  PROPOSING** — for open-ended tasks, always propose 2-3 concrete
+  recommendations with honest trade-offs FIRST, then ask which one to
+  pursue. Bare "which part?" questions are forbidden; only ask a pure
+  question when the task is literally impossible without the info.
+
+**Bukti live (non-stream):** prompt "improve UI" tanpa konteks fail → model
+propose 3 cadangan konkrit dengan trade-off, recommend yang terbaik, hormati
+format client (code diff), baru tanya di hujung bila perlu. **Lulus dua-dua
+lapisan** (persona penuh dan IDE).
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.propose-first.bak`.
+
 ### Auto-retry silent-thinking (patch #16, 26 Ogos)
 
 **Gejala (SukaCode, 26 Ogos):** sesi OpenCode baca 4 fail projek (input 42k
