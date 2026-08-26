@@ -38,7 +38,8 @@ $patches = @(
     @{ f = "backend/internal/application/gateway/selector.go"; m = "SeedThinkingScores|thinkingScorePenaltySeed"; d = "Patch 18: persist thinking score seeding"; regex = $true },
     @{ f = "backend/internal/application/gateway/selector_plan.go"; m = "benakAvoid"; d = "Patch 19: preemptive benak avoidance"; regex = $false },
     @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "errQualityHeaderBudget|qualityHeaderBudget"; d = "Patch 20: early header abort (instrument-first)"; regex = $true },
-    @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "ApplyTimeoutHint|EnlargeToolTimeout"; d = "Patch 21: bash tool timeout guard (request hint + response raise)"; regex = $true }
+    @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "ApplyTimeoutHint|EnlargeToolTimeout"; d = "Patch 21: bash tool timeout guard (request hint + response raise)"; regex = $true },
+    @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "questionHint|ApplySchemaHints"; d = "Patch 22: question tool options hint (structured choices)"; regex = $true }
 )
 foreach ($p in $patches) {
     if (-not (Test-Path $p.f)) { Fail "$($p.d) — file missing: $($p.f)"; continue }

@@ -50,6 +50,34 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
+### Question tool options hint (patch #22, 27 Ogos)
+
+**Masalah (round 4, 01:50:40):** model panggil tool `question` dengan
+soalan yang bagus — tapi medan `options` kosong `[]`; semua cadangan
+disimpan dalam teks soalan sahaja. Kesan pada user: popup soalan tanpa
+pilihan untuk klik, terpaksa taip jawapan sendiri. Keluarga sama dengan
+masalah `timeout` (patch #21): model tahu konsep "tanya dengan cadangan"
+tapi letak cadangan dalam ayat, bukan dalam struktur schema.
+
+**Reka bentuk:** perluas `tooltimeguard` — Lapisan A kini dipanggil
+`ApplySchemaHints` (alias `ApplyTimeoutHint` dikekalkan supaya rujukan
+lama tidak pecah). Untuk tool bernama `question`, description ditulis
+semula dengan hint: *"the 'options' field is a STRUCTURED ARRAY, not
+optional decoration. For every question you must fill options with 2-4
+concrete choices as objects ({label, description}) so the user can CLICK
+them. Writing the suggestions only inside the question text while
+leaving options [] is a failed call — the popup renders nothing
+clickable."* Open-ended questions dengan tiada pilihan bermakna adalah
+pengecualian tunggal.
+
+**Tiada Lapisan B untuk patch #22** — auto-generate pilihan bermakna
+dari teks soalan memerlukan semantic parsing; risiko false-positive
+tinggi untuk gain rendah. Hint di Lapisan A adalah seimbang yang betul.
+
+**Ujian:** 3 ujian baharu (Chat format, Anthropic format, dua tools
+satu body + read untouched); 17 ujian total. Full suite 64 pakej,
+0 gagal.
+
 ### Bash tool timeout guard (patch #21, 27 Ogos)
 
 **Masalah (eksperimen round 1–4):** model Grok menjana tool call `bash`

@@ -1,21 +1,27 @@
-// Package tooltimeguard melindungi parameter `timeout` tool bash daripada
-// salah erti unit oleh model — patch #21.
+// Package tooltimeguard melindungi dua parameter tool daripada salah guna
+// oleh model — patch #21 (bash timeout) dan #22 (question options).
 //
-// Latar (eksperimen testtesttest round 1–4): model Grok menjana tool call
-// bash dengan `timeout` kecil (180–1800) kerana dia sangka unit itu DETIK;
-// OpenCode membacanya sebagai MILISAAT dan membunuh npm install selepas
-// 0.18s. Lima percubaan install mati sebelum sempat berjalan, dan model
-// menyerahkan langkah manual kepada user.
+// Latar #21 (eksperimen testtesttest round 1–4): model Grok menjana tool
+// call bash dengan `timeout` kecil (180–1800) kerana dia sangka unit itu
+// DETIK; OpenCode membacanya sebagai MILISAAT dan membunuh npm install
+// selepas 0.18s. Lima percubaan install mati sebelum sempat berjalan, dan
+// model menyerahkan langkah manual kepada user.
+//
+// Latar #22 (round 4, 01:50:40): model memanggil tool `question` dengan
+// soalan yang bagus — tapi `options` kosong []; cadangan disimpan dalam
+// teks soalan sahaja, jadi user nampak popup tanpa pilihan untuk klik.
+// Model tahu konsep "tanya soalan dengan cadangan" tapi letak cadangan
+// dalam ayat, bukan dalam struktur — keluarga sama dengan masalah timeout.
 //
 // Dua lapisan:
 //
-// Lapisan A (request path, Hint): tulis semula description tool bash/shell
-// supaya unit milisaat dinyatakan jelas pada setiap request — ilmu itu
-// sampai ke model sebagai sebahagian schema, bukan persona yang boleh
-// dilupakan.
+// Lapisan A (request path, ApplySchemaHints): tulis semula description
+// tool bash/shell (unit milisaat) dan tool question (options wajib
+// berstruktur) supaya petunjuk sampai ke model sebagai sebahagian schema,
+// bukan persona yang boleh dilupakan.
 //
-// Lapisan B (response path, Enlarge): bila model tetap menjana timeout
-// kecil untuk command yang diketahui lambat (npm install, create-*,
+// Lapisan B (response path, EnlargeToolTimeout): bila model tetap menjana
+// timeout kecil untuk command yang diketahui lambat (npm install, create-*,
 // build), naikkan nilai itu ke minimum selamat sebelum sampai ke client.
 package tooltimeguard
 
@@ -28,6 +34,9 @@ const (
 	// Hint dilampirkan pada description tool bash/shell.
 	Hint = " IMPORTANT: the timeout parameter is in MILLISECONDS. 180 means 0.18 seconds — enough time for nothing. Package installs (npm install, npx create-*) need timeout 300000 (5 minutes); builds (npm run build) need 120000 (2 minutes). Before sending a tool call, think 'how many MILLISECONDS does this need' and never pass a value under 10000 for install/build commands."
 
+	// questionHint dilampirkan pada description tool question (patch #22).
+	questionHint = " IMPORTANT: the 'options' field is a STRUCTURED ARRAY, not optional decoration. For every question you must fill options with 2-4 concrete choices as objects ({\"label\": \"short text (1-5 words)\", \"description\": \"one line explaining the choice\"}) so the user can CLICK them. Writing the suggestions only inside the question text while leaving options [] is a failed call — the popup renders nothing clickable. Open-ended questions with no meaningful choices are the ONLY exception."
+
 	// buildTimeoutMs ialah nilai selamat untuk command build.
 	buildTimeoutMs = 120000
 
@@ -39,14 +48,15 @@ const (
 	maxInspectionBytes = 1 << 20 // 1 MiB
 )
 
-// ApplyTimeoutHint melaksanakan Lapisan A: tulis semula description tool
-// bernama "bash" atau "shell" dalam request body supaya unit timeout
-// dinyatakan dengan jelas. Cover kedua-dua format: OpenAI Chat
-// ({"type":"function","function":{...}}) dan Anthropic Messages
-// ({"name":"bash","description":"...","input_schema":{...}}). Body
-// dikembalikan tanpa perubahan jika tiada tools, body terlalu besar, atau
-// parse gagal — kegagalan di sini tidak boleh menenggelamkan request.
-func ApplyTimeoutHint(body []byte) []byte {
+// ApplySchemaHints melaksanakan Lapisan A (kini merangkumi patch #21 dan
+// #22): tulis semula description tool "bash"/"shell" (unit timeout) dan
+// tool "question" (options wajib berstruktur) dalam request body supaya
+// petunjuk sampai ke model sebagai sebahagian schema setiap request.
+// Cover kedua-dua format: OpenAI Chat ({"type":"function","function":{...}})
+// dan Anthropic Messages ({"name":"bash","description":"...","input_schema":...}).
+// Body dikembalikan tanpa perubahan jika tiada tools, body terlalu besar,
+// atau parse gagal — kegagalan di sini tidak boleh menenggelamkan request.
+func ApplySchemaHints(body []byte) []byte {
 	if len(body) == 0 || len(body) > maxInspectionBytes {
 		return body
 	}
@@ -71,17 +81,25 @@ func ApplyTimeoutHint(body []byte) []byte {
 			target = function
 		}
 		name, _ := target["name"].(string)
-		if name != "bash" && name != "shell" {
+		description, _ := target["description"].(string)
+		var hint, marker string
+		switch name {
+		case "bash", "shell":
+			hint = Hint
+			marker = "MILLISECONDS"
+		case "question":
+			hint = questionHint
+			marker = "STRUCTURED ARRAY"
+		default:
 			continue
 		}
-		description, _ := target["description"].(string)
-		if strings.Contains(description, "MILLISECONDS") {
+		if strings.Contains(description, marker) {
 			continue // hint sudah ada (request ulangan / idempotensi)
 		}
 		if description == "" {
-			target["description"] = strings.TrimSpace(Hint)
+			target["description"] = strings.TrimSpace(hint)
 		} else {
-			target["description"] = description + Hint
+			target["description"] = description + hint
 		}
 		changed = true
 	}
@@ -100,6 +118,13 @@ func ApplyTimeoutHint(body []byte) []byte {
 		return body
 	}
 	return updated
+}
+
+// ApplyTimeoutHint ialah alias untuk ApplySchemaHints — dikekalkan supaya
+// rujukan sedia ada (service.go, UPDATE.md) tidak pecah; namanya kini
+// merangkumi kedua-dua hint (timeout + question options).
+func ApplyTimeoutHint(body []byte) []byte {
+	return ApplySchemaHints(body)
 }
 
 // slowToolCommandKind mengelaskan command yang diketahui memakan masa.

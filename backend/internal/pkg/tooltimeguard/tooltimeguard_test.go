@@ -80,6 +80,45 @@ func TestApplyTimeoutHintLeavesInvalidJSONUnchanged(t *testing.T) {
 	}
 }
 
+// --- Patch #22: question tool options hint ---
+
+func TestApplySchemaHintsRewritesQuestionToolChatFormat(t *testing.T) {
+	body := []byte(`{"model":"grok-4.6","tools":[{"type":"function","function":{"name":"question","description":"Ask the user questions during execution","parameters":{}}}]}`)
+	updated := ApplySchemaHints(body)
+	text := string(updated)
+	if !strings.Contains(text, `"description":"Ask the user questions during execution IMPORTANT: the 'options' field is a STRUCTURED ARRAY`) {
+		t.Fatal("question hint must be appended in Chat format")
+	}
+	// Idempoten
+	again := ApplySchemaHints(updated)
+	if strings.Contains(string(again), "STRUCTURED ARRAY. For every question you must fill options with 2-4 concrete choices as objects ({\"label\": \"short text (1-5 words)\", \"description\": \"one line explaining the choice\"}) so the user can CLICK them. Writing the suggestions only inside the question text while leaving options [] is a failed call — the popup renders nothing clickable. Open-ended questions with no meaningful choices are the ONLY exception. IMPORTANT") {
+		t.Fatal("question hint must be idempotent")
+	}
+}
+
+func TestApplySchemaHintsRewritesQuestionToolAnthropicFormat(t *testing.T) {
+	body := []byte(`{"model":"grok-4.6","tools":[{"name":"question","description":"Ask the user questions","input_schema":{}}]}`)
+	updated := ApplySchemaHints(body)
+	if !strings.Contains(string(updated), `"description":"Ask the user questions IMPORTANT: the 'options' field is a STRUCTURED ARRAY`) {
+		t.Fatal("question hint must be appended in Anthropic format")
+	}
+}
+
+func TestApplySchemaHintsCoversBothToolsInOneBody(t *testing.T) {
+	body := []byte(`{"model":"grok-4.6","tools":[{"type":"function","function":{"name":"bash","description":"Execute shell","parameters":{}}},{"type":"function","function":{"name":"question","description":"Ask questions","parameters":{}}},{"type":"function","function":{"name":"read","description":"Read a file","parameters":{}}}]}`)
+	updated := ApplySchemaHints(body)
+	text := string(updated)
+	if !strings.Contains(text, "MILLISECONDS") {
+		t.Fatal("bash hint missing")
+	}
+	if !strings.Contains(text, "STRUCTURED ARRAY") {
+		t.Fatal("question hint missing")
+	}
+	if strings.Contains(text, `"description":"Read a file IMPORTANT`) {
+		t.Fatal("read tool must be untouched")
+	}
+}
+
 // --- Lapisan B: EnlargeToolTimeout ---
 
 func TestEnlargeToolTimeoutRaisesTinyInstallTimeout(t *testing.T) {
