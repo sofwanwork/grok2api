@@ -50,7 +50,7 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Persona: NEVER ASK WITHOUT PROPOSING (26 Ogos)
+### Persona: NEVER ASK WITHOUT PROPOSING + CONFIRM BEFORE EDIT (26 Ogos)
 
 **Gejala (SukaCode, sesi kedua):** model explore 7 fail (7 reads, 2 searches),
 kemudian keluarkan soalan *"Macam mana kau nak aku improve UI SukaCode ni?
@@ -62,24 +62,23 @@ open-ended tanpa pengesahan, jadi dia "tanya dulu" walaupun kau dah suruh.
 Banding Claude/GPT: mereka propose cadangan konkrit + trade-off, baru minta
 pilihan.
 
-**Fix (persona sahaja, tiada kod):**
-- `systemPromptWhenClientHasSystem` (IDE layer): tambah arahan — "For
-  open-ended tasks (improve, refactor, redesign), always propose 2-3 concrete
-  recommendations with trade-offs first, then ask which to pursue — never
-  respond with a bare question."
-- `systemPrompt` (persona penuh): tambah seksyen **NEVER ASK WITHOUT
-  PROPOSING** — for open-ended tasks, always propose 2-3 concrete
-  recommendations with honest trade-offs FIRST, then ask which one to
-  pursue. Bare "which part?" questions are forbidden; only ask a pure
-  question when the task is literally impossible without the info.
+**Fix (persona sahaja, tiada kod) — dua peraturan:**
 
-**Bukti live (non-stream):** prompt "improve UI" tanpa konteks fail → model
-propose 3 cadangan konkrit dengan trade-off, recommend yang terbaik, hormati
-format client (code diff), baru tanya di hujung bila perlu. **Lulus dua-dua
-lapisan** (persona penuh dan IDE).
+1. **NEVER ASK WITHOUT PROPOSING:** untuk tugas open-ended, propose 2-3
+   cadangan konkrit dengan trade-off dulu, baru minta pilihan.
+2. **CONFIRM BEFORE EDITING:** selepas propose, **jangan terus edit fail.**
+   Tunggu user pilih — ini membolehkan OpenCode clarification popup muncul
+   (bila user nak pilih antara cadangan) dan mengelakkan perubahan yang
+   tidak diingini.
+
+**Bukti live (non-stream):** prompt "improve UI" → model propose 3 cadangan
+dengan trade-off, kemudian berhenti dan tanya "Yang mana kau nak? Pilih
+satu, aku terus buat." — tanpa edit. **Lulus kedua-dua lapisan** (persona
+penuh dan IDE).
 
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
-`backups/config.yaml.propose-first.bak`.
+`backups/config.yaml.propose-first.bak` (versi pertama tanpa confirm) dan
+`backups/config.yaml.propose-confirm.bak` (versi akhir dengan confirm).
 
 ### Auto-retry silent-thinking (patch #16, 26 Ogos)
 
