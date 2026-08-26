@@ -1097,6 +1097,10 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	}
 	toolDegradationHold := len(holdCfg.DeclaredClientTools) > 0
 	qualityHoldEnabled := missingThinkingHold || toolDegradationHold
+	// Patch #19: adaptive hold timeout. Accounts that just returned a benak
+	// (missing thinking) response get a shorter hold timeout on the next
+	// attempt so a bad stream fails faster and rotates sooner.
+	recentBenakAccounts := make(map[uint64]bool)
 	// Attempt ceiling for the loop guard. Degradation-only requests use the
 	// smaller degradation budget so a narrating model cannot consume the whole
 	// missing-thinking allowance.
@@ -1698,7 +1702,14 @@ attemptLoop:
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
 			s.selector.markSuccess(ctx, credential, lease.QuotaProbe)
 			if qualityHoldEnabled {
-				replay, verdict, peekUsage, _, firstEvidenceAt, peekErr := peekQualityStream(ctx, response.Body, qualityProtocolForOperation(operation), holdCfg, input.HoldKeepaliveSink)
+				// Patch #19: if this account just returned a benak response in
+				// this request, cut its hold timeout so a repeat stalls out
+				// faster instead of waiting the full deadline again.
+				effectiveHoldCfg := holdCfg
+				if recentBenakAccounts[credential.ID] && effectiveHoldCfg.HoldTimeout > 5*time.Second {
+					effectiveHoldCfg.HoldTimeout = 5 * time.Second
+				}
+				replay, verdict, peekUsage, _, firstEvidenceAt, peekErr := peekQualityStream(ctx, response.Body, qualityProtocolForOperation(operation), effectiveHoldCfg, input.HoldKeepaliveSink)
 				peekFirstEvidenceAt = firstEvidenceAt
 				if peekErr != nil {
 					if replay != nil {
@@ -1814,6 +1825,11 @@ attemptLoop:
 				}
 				if verdict == QualityWithhold {
 					s.applyMissingThinkingPenalty(ctx, input.RequestID, credential, holdCfg.AccountCooldown)
+					// Patch #19: mark this account so its next attempt in this
+					// request gets a shorter hold timeout — a benak account
+					// that stalls again fails fast instead of waiting the full
+					// deadline a second time.
+					recentBenakAccounts[credential.ID] = true
 				}
 				deferFailOpenAudit := commit.Action == QualityActionRetry && holdCfg.OnExhausted == qualityRetryFailOpen
 				if commit.Audit && !deferFailOpenAudit {

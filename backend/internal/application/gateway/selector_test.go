@@ -1980,3 +1980,24 @@ func TestSeedThinkingScores(t *testing.T) {
 		t.Fatalf("seeding overwrote an observed score: %d → %d", before, got)
 	}
 }
+
+func TestBenakAvoidSoftQuarantine(t *testing.T) {
+	values := []account.RoutingCandidate{
+		{Credential: account.Credential{ID: 1, Priority: 10, WebTier: account.WebTierBasic, LastError: account.LastErrorMissingThinking}},
+		{Credential: account.Credential{ID: 2, Priority: 10, WebTier: account.WebTierBasic}},
+	}
+	s := NewSelector(nil, memory.NewConcurrencyLimiter(), nil, nil, time.Hour, time.Second, time.Minute)
+	// No observations yet — but account 1 carries the missing-thinking marker.
+	plan, err := s.planCandidateIndexesWithHints(context.Background(), values, nil, time.Now(), nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, ok := plan.Next()
+	if !ok {
+		t.Fatal("plan empty")
+	}
+	// Account 2 (no marker) must be picked before account 1 (marker).
+	if candidate.Credential.ID != 2 {
+		t.Fatalf("benakAvoid: picked account %d first, want account 2 (healthy)", candidate.Credential.ID)
+	}
+}

@@ -50,7 +50,30 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Persist thinking score seeding (patch #18, 26 Ogos)
+### Preemptive benak avoidance + adaptive hold (patch #19, 26 Ogos)
+
+**Masalah (data live):** daripada 800 request audit, **44.5%** ialah retry
+dalaman `quality_degraded` — semuanya missing thinking (benak). Masa terbuang
+dalam retry: 6216s (~1.7 jam). Akaun benak dipilih separuh masa kerana selector
+tiada memory jangka panjang.
+
+**Fix (kod) — tiga lapisan:**
+
+1. **Preemptive avoidance (`selector_plan.go`):** akaun dengan durable marker
+   `missing_thinking` / `missing_thinking_disabled` ditandai `benakAvoid` dan
+   disusun **paling akhir** dalam tier yang sama (soft quarantine, bukan
+   cooldown). Akaun sihat sentiasa dipilih dahulu.
+2. **Adaptive hold timeout (`service.go`):** akaun yang dengan verdict
+   `QualityWithhold` dalam request yang sama ditandai `recentBenakAccounts`;
+   percubaan seterusnya pada akaun itu dapat `HoldTimeout` 5s (bukan 10s) —
+   stream benak yang berulang gagal lebih pantas dan rotate lebih awal.
+3. **Kekal dengan patch #17/#18:** thinking score + seeding kekal sebagai
+   lapisan asas; patch #19 menambah gate yang lebih tegas di atasnya.
+
+**Test:** `TestBenakAvoidSoftQuarantine` (akaun bermarker dipilih akhir).
+Full suite 63 pakej 0 gagal.
+
+**Image:** `grok2api:local-benakavoid` (= local-persist + patch #19).
 
 **Masalah:** Patch #17 soft thinking-score adalah in-memory — score hilang bila
 container restart, jadi akaun yang terbukti benak perlu "belajar semula" dari

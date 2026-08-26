@@ -27,6 +27,10 @@ type candidateScore struct {
 	// score and are tried less often; accounts that produce real reasoning
 	// rise. Zero means no observation yet — treated as the neutral default.
 	thinkingScore int
+	// benakAvoid is set for accounts that currently carry a durable
+	// missing-thinking marker. They are kept in the pool but their score is
+	// heavily discounted so they are tried last among healthy candidates.
+	benakAvoid bool
 }
 
 // candidatePlan 使用线性建堆保留完整路由优先级，并允许 claim 失败后按顺序取下一账号。
@@ -102,6 +106,11 @@ func candidateScoreBetter(values []account.RoutingCandidate, leftScore, rightSco
 	// intact, but the highest-quality accounts are tried first.
 	if leftScore.thinkingScore != rightScore.thinkingScore {
 		return leftScore.thinkingScore > rightScore.thinkingScore
+	}
+	// Patch #19: accounts with a durable missing-thinking marker are tried
+	// last among healthy candidates — a soft quarantine without a cooldown.
+	if leftScore.benakAvoid != rightScore.benakAvoid {
+		return rightScore.benakAvoid // left healthy wins when right is benakAvoid
 	}
 	if left.Priority != right.Priority {
 		return left.Priority > right.Priority
@@ -212,6 +221,11 @@ func (s *Selector) planCandidateIndexesWithHints(ctx context.Context, values []a
 		// Patch #17: attach the soft thinking score so thin-thinking accounts
 		// drop within their tier without leaving the pool.
 		score.thinkingScore = s.thinkingScoreOf(candidate.Credential.ID)
+		// Patch #19: a durable missing-thinking marker marks the account as
+		// benak-avoid — it is tried last among healthy candidates.
+		if candidate.Credential.LastError == account.LastErrorMissingThinking || candidate.Credential.LastError == account.LastErrorMissingThinkingDisabled {
+			score.benakAvoid = true
+		}
 		// 只有真实上游快照能够证明账号具备该模式额度。历史默认值和
 		// 本地预测值都属于未知能力，只保留为路由兜底。
 		if candidate.QuotaWindow != nil && candidate.QuotaWindow.Source == account.QuotaSourceUpstream {
