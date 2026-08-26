@@ -107,6 +107,31 @@ untuk setup obvious). **Lulus kedua-dua lapisan** (persona penuh dan IDE).
 setup obvious), dan `backups/config.yaml.strict-confirm.bak` (versi akhir —
 tegas, tiada sentuhan sebelum izin).
 
+### Persona: EDIT TOOL — COPY EXACT WHITESPACE (26 Ogos)
+
+**Gejala (SukaCode):** edit tool OpenCode gagal dengan "No changes to apply"
+kerana `old_string` tidak padan persis dengan fail — fail mempunyai blank
+line yang mengandungi spaces tersembunyi (baris 56, 357, 432), dan model
+menganggap blank line itu kosong.
+
+**Punca:** bukan gateway — model tulis pattern dari ingatan/andaian, bukan
+dari bacaan sebenar. Whitespace tersembunyi (trailing spaces, blank line
+dengan indent) menyebabkan exact-match gagal.
+
+**Fix (persona sahaja, tiada kod):**
+- `systemPrompt` dan `systemPromptWhenClientHasSystem`: tambah arahan —
+  "Bila edit gagal dengan 'No changes to apply', baca fail dan salin pattern
+  verbatim termasuk trailing spaces dan blank line dengan indent. Blank line
+  selalunya `'      '` (spaces), bukan `''`. Salin dari bacaan sebenar, bukan
+  ingatan. Kalau masih gagal, cuba pattern lebih kecil dan unik yang elak
+  blank line."
+
+**Kesan:** model kini akan baca semula fail dan salin whitespace tersembunyi
+dengan tepat, mengelakkan kegagalan exact-match yang berulang.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.whitespace-aware.bak`.
+
 ### Auto-retry silent-thinking (patch #16, 26 Ogos)
 
 **Gejala (SukaCode, 26 Ogos):** sesi OpenCode baca 4 fail projek (input 42k
