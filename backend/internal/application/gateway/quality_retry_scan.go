@@ -606,6 +606,12 @@ func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string,
 			if sig.HasThinking && holdExpired && sig.VisibleRunes >= toolNarrationWindow {
 				return newPrefixReplay(&held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 			}
+			// Patch #16: finished stream that thought but produced almost no
+			// visible answer — retry under its own budget before the
+			// missing-thinking classifier delivers it.
+			if classifySilentThinking(sig, cfg.MinOutputTokens, cfg.DeclaredClientTools, cfg.SilentThinkingEnabled) {
+				return newPrefixReplay(&held, pump), QualitySilentThinking, state.usage, state.responseID, state.firstEvidenceAt, nil
+			}
 			if len(cfg.DeclaredClientTools) > 0 && !sig.SawToolCall && !sig.Terminal {
 				// keep waiting for text that proves or disproves degradation
 			} else if verdict := ClassifyQualityHold(sig, cfg.MinOutputTokens); verdict != QualityWait {
@@ -689,6 +695,12 @@ func finishQualityPeek(held *bytes.Buffer, pump *qualityReadPump, state *quality
 			return newPrefixReplay(held, pump), QualityDeliver, state.usage, state.responseID, state.firstEvidenceAt, nil
 		}
 		return newPrefixReplay(held, pump), QualityWait, state.usage, state.responseID, state.firstEvidenceAt, errQualityEmptyStream
+	}
+	// Patch #16: a finished stream that thought but produced almost no visible
+	// answer gets its own retry verdict before the missing-thinking
+	// classifier, which would deliver it as "thinking is proof enough".
+	if classifySilentThinking(signals, cfg.MinOutputTokens, cfg.DeclaredClientTools, cfg.SilentThinkingEnabled) {
+		return newPrefixReplay(held, pump), QualitySilentThinking, state.usage, state.responseID, state.firstEvidenceAt, nil
 	}
 	// Without the missing-thinking policy a completed stream is always
 	// delivered: withholding here would drop a usable body.

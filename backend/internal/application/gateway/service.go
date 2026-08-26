@@ -1108,6 +1108,7 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	// do not consume the quality retry budget; refreshes stay on the same account.
 	qualityAccountAttempts := 0
 	toolDegradedAttempts := 0
+	silentThinkingAttempts := 0
 	quotaMode := s.providers.QuotaMode(route.Provider, route.UpstreamModel)
 	quotaProbeAttempted := false
 	selection := preselectedSession
@@ -1771,6 +1772,30 @@ attemptLoop:
 					discardFallback(true)
 					s.logger.Warn("tool_call_degraded_deliver_last", "request_id", input.RequestID, "account_id", credential.ID, "attempts", toolDegradedAttempts, "tools", strings.Join(holdCfg.DeclaredClientTools, ","))
 					degradedDeliver = true
+				}
+				// Patch #16: the model thought (real reasoning evidence) but the
+				// finished answer is nearly empty. Stochastic upstream behaviour,
+				// not an account fault — retry under its own budget, deliver the
+				// last body when it runs out.
+				if verdict == QualitySilentThinking {
+					silentThinkingAttempts++
+					if DecideSilentThinkingRetry(silentThinkingAttempts-1, holdCfg.SilentThinkingMaxAttempts, hasNextAccount) == QualityActionRetry {
+						_ = response.Body.Close()
+						lease.Release()
+						lastErr = errSilentThinking
+						lastFailure = &UpstreamFailure{
+							HTTPStatus: http.StatusServiceUnavailable, Code: ErrorSilentThinking,
+							PublicMessage: "Upstream berfikir tetapi tiada jawapan", AccountID: credential.ID, AccountName: credential.Name,
+							Cause: errSilentThinking,
+						}
+						s.logger.Info("silent_thinking_retry", "request_id", input.RequestID, "account_id", credential.ID, "attempt", silentThinkingAttempts, "reasoning_tokens", peekUsage.ReasoningTokens, "visible_tokens", peekUsage.OutputTokens-peekUsage.ReasoningTokens)
+						continue
+					}
+					discardFallback(true)
+					s.logger.Warn("silent_thinking_deliver_last", "request_id", input.RequestID, "account_id", credential.ID, "attempts", silentThinkingAttempts, "reasoning_tokens", peekUsage.ReasoningTokens)
+					// Fall through: the body is delivered as-is. It still
+					// carries the (near-empty) answer plus any reasoning
+					// evidence the client can render.
 				}
 				commit := QualityCommit{Action: QualityActionDeliverLast, KeepBody: true}
 				if !degradedDeliver {

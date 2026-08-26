@@ -50,7 +50,41 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Fail-fast anggun untuk input besar (26 Ogos, selepas patch #15 v2)
+### Auto-retry silent-thinking (patch #16, 26 Ogos)
+
+**Gejala (SukaCode, 26 Ogos):** sesi OpenCode baca 4 fail projek (input 42k
+token), kemudian model output **256 token reasoning + ~1 token content** dan
+terus `finish_reason: stop`. Loop keluar normal → UI nampak "terputus",
+tiada jawapan UI improvement.
+
+**Punca:** quality guard cuma semak "model fikir tak?" (HasThinking). Model
+itu **memang fikir** (256 token reasoning, encrypted) jadi verdict Deliver.
+Tapi ia fikir tanpa berkata — guard tak cover kes *"thought but said
+nothing"*.
+
+**Fix:**
+- Verdict baru `QualitySilentThinking`: stream Terminal + bukti reasoning
+  sebenar + reasoning_tokens ≥ 64 (penjaga jawapan pendek sah) + content <
+  minOutputTokens + request declare client tools.
+- Retry bajet sendiri `silentThinking.maxAttempts` (default 2), tiada
+  penalti akaun (stokastik, bukan salah akaun), deliver-last kalau habis.
+- `silentThinkingEnabled` + `silentThinkingMaxAttempts` dalam
+  `QualityRetryRuntime`; config yaml `silentThinking: enabled, maxAttempts`.
+- Interaksi dengan patch #13: check diletakkan SELEBELUM
+  `ClassifyQualityHold` yang mengembalikan Deliver sebaik HasThinking —
+  kerana stream dengan bukti thinking tidak pernah sampai ke
+  `finishQualityPeek` (pemantauan awal).
+
+**Test:** `TestClassifySilentThinking` (7 kes termasuk penjaga jawapan
+pendek sah, tool call sebenar, reasoning rendah, non-terminal),
+`TestPeekQualityStreamSilentThinkingVerdict`,
+`TestPeekQualityStreamSilentThinkingNotTriggeredWithoutReasoning`,
+`TestDecideSilentThinkingRetry` (bajet + no-routing → deliver-last).
+Regression: request biasa dengan tools **tidak** disekat, request 390k
+stokastik **tidak** dipotong.
+
+**Image:** `grok2api:local-silentthink` (= local-keepalive-v2 + patch #16).
+**Config:** `silentThinking: enabled: true, maxAttempts: 2` dalam config.yaml.
 
 **Penemuan sempadan (ujian socket mentah):** prompt ~390k token kadangkala
 mendapat jawapan penuh (contoh: 447k token in, TTFT 101s, jawapan sempurna)

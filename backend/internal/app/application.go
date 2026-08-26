@@ -524,6 +524,9 @@ func qualityRetryRuntime(value config.QualityGuardRequestRetryConfig) gateway.Qu
 		// policy and never cool or disable an account.
 		ToolDegradationEnabled:     value.ToolDegradation.Enabled,
 		ToolDegradationMaxAttempts: value.ToolDegradation.MaxAttempts,
+		// Silent-thinking retries are also independent and penalty-free.
+		SilentThinkingEnabled:     value.SilentThinking.Enabled,
+		SilentThinkingMaxAttempts: value.SilentThinking.MaxAttempts,
 	}
 }
 

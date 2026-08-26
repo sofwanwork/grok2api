@@ -394,6 +394,17 @@ type QualityGuardRequestRetryConfig struct {
 	// ToolDegradation retries streams where upstream narrates a tool call as
 	// prose instead of emitting a structured call. Never penalises accounts.
 	ToolDegradation QualityGuardToolDegradationConfig `yaml:"toolDegradation"`
+	// SilentThinking retries completed streams that produced real reasoning
+	// but almost no visible answer ("thought but never spoke"). Observed on
+	// grok-4.6 xhigh after long tool chains; stochastic upstream behaviour,
+	// so accounts are never penalised.
+	SilentThinking QualityGuardSilentThinkingConfig `yaml:"silentThinking"`
+}
+
+// QualityGuardSilentThinkingConfig holds the empty-answer retry policy.
+type QualityGuardSilentThinkingConfig struct {
+	Enabled     bool `yaml:"enabled"`
+	MaxAttempts int  `yaml:"maxAttempts"`
 }
 
 // QualityGuardToolDegradationConfig holds the prose-narration retry policy.
@@ -926,6 +937,9 @@ func validateQualityGuardRequestRetry(value QualityGuardRequestRetryConfig) erro
 	if n := value.ToolDegradation.MaxAttempts; n != 0 && (n < 1 || n > 6) {
 		return errors.New("qualityGuard.requestRetry.toolDegradation.maxAttempts mesti antara 1 hingga 6")
 	}
+	if n := value.SilentThinking.MaxAttempts; n != 0 && (n < 1 || n > 6) {
+		return errors.New("qualityGuard.requestRetry.silentThinking.maxAttempts mesti antara 1 hingga 6")
+	}
 	return nil
 }
 
@@ -1062,6 +1076,7 @@ func defaultConfig() Config {
 				MaxAttempts: 6, HoldTimeout: Duration(30 * time.Second), MinOutputTokens: 8, OnExhausted: "fail_closed",
 				AccountCooldown: Duration(12 * time.Hour), IdleAccountCooldown: Duration(15 * time.Minute),
 				ToolDegradation: QualityGuardToolDegradationConfig{Enabled: false, MaxAttempts: 3},
+				SilentThinking:  QualityGuardSilentThinkingConfig{Enabled: false, MaxAttempts: 2},
 			},
 		},
 		ClientKeyDefaults: ClientKeyDefaultsConfig{RPMLimit: clientkeydomain.DefaultRPMLimit, MaxConcurrent: clientkeydomain.DefaultMaxConcurrent},

@@ -171,3 +171,13 @@ qualityGuard:
     # Single-account pools should set this lower; toggling enabled does not
     # clear cooldown — use POST /api/admin/v1/accounts/:id/clear-cooldown.
     idleAccountCooldown: 15m
+    # Optional prose-tool-call degradation retries; never cools or disables accounts.
+    toolDegradation:
+      enabled: true
+      maxAttempts: 3
+    # Optional silent-thinking retries: completed streams that thought (real
+    # reasoning evidence) but produced almost no visible answer. Never cools
+    # or disables accounts.
+    silentThinking:
+      enabled: true
+      maxAttempts: 2

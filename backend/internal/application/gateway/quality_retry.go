@@ -19,6 +19,7 @@ import (
 const (
 	ErrorQualityDegraded             = "quality_degraded"
 	ErrorToolCallDegraded            = "tool_call_degraded"
+	ErrorSilentThinking              = "silent_thinking"
 	qualityRetryFailOpen             = "fail_open"
 	qualityRetryFailClosed           = "fail_closed"
 	defaultQualityMaxAttempts        = 6
@@ -34,6 +35,15 @@ const (
 	// attempts recover about 87% of requests. Higher values mostly multiply
 	// token spend for diminishing returns.
 	defaultToolDegradationMaxAttempts = 3
+	// defaultSilentThinkingMaxAttempts bounds silent-thinking retries. The
+	// behaviour is stochastic; two attempts (original + one rotate) already
+	// recover the common case without multiplying token spend on a prompt
+	// that just burned a full tool-call chain.
+	defaultSilentThinkingMaxAttempts = 2
+	// silentThinkingMinReasoningTokens is the floor of reasoning evidence
+	// before a near-empty answer is classified as silent thinking. Streams
+	// that barely thought are just short replies and must stay delivered.
+	silentThinkingMinReasoningTokens = int64(64)
 )
 
 var (
@@ -42,6 +52,9 @@ var (
 	// errToolCallDegraded drives a retry only. It is never surfaced to the
 	// client, because an exhausted degradation budget delivers the body.
 	errToolCallDegraded = errors.New("Upstream menghuraikan panggilan alat sebagai teks")
+	// errSilentThinking also drives a retry only; an exhausted budget
+	// delivers the near-empty body so the answer is not lost entirely.
+	errSilentThinking = errors.New("Upstream berfikir tetapi tiada jawapan")
 )
 
 // QualityRetryRuntime is the isolated request-path withhold/retry policy.
@@ -65,6 +78,14 @@ type QualityRetryRuntime struct {
 	// roughly one in two requests, so a small number already recovers most of
 	// them without multiplying token spend.
 	ToolDegradationMaxAttempts int
+	// SilentThinkingEnabled retries completed streams that produced real
+	// reasoning but almost no visible answer (observed on grok-4.6 xhigh
+	// after long tool chains). Independent of missing-thinking: the model
+	// thought, it just never spoke. Stochastic upstream behaviour, so the
+	// account is never cooled or disabled.
+	SilentThinkingEnabled bool
+	// SilentThinkingMaxAttempts bounds those retries under its own budget.
+	SilentThinkingMaxAttempts int
 	// MissingThinkingDisabled turns off the withhold verdict when the peek runs
 	// only for tool degradation. It is an opt-out (pointer) so existing callers
 	// that construct the struct literally keep the original missing-thinking
@@ -116,6 +137,13 @@ const (
 	// QualityToolDegraded is a prose-narrated tool call. Kept separate from
 	// QualityWithhold so it never reaches applyMissingThinkingPenalty.
 	QualityToolDegraded QualityVerdict = "tool_degraded"
+	// QualitySilentThinking marks a completed stream that thought (real
+	// reasoning evidence) but produced almost no visible answer. Observed on
+	// grok-4.6 xhigh after a long tool-call chain: reasoning_tokens > 0 yet
+	// the final content delta is a single token, so the agent loop exits with
+	// an empty-looking reply. Like tool degradation it is stochastic upstream
+	// behaviour, not an account fault: retry, never penalise.
+	QualitySilentThinking QualityVerdict = "silent_thinking"
 )
 
 // QualityRetryAction is what the attempt loop does with a withhold verdict.
@@ -146,6 +174,9 @@ func normalizeQualityRetry(cfg QualityRetryRuntime) QualityRetryRuntime {
 	}
 	if cfg.ToolDegradationMaxAttempts <= 0 {
 		cfg.ToolDegradationMaxAttempts = defaultToolDegradationMaxAttempts
+	}
+	if cfg.SilentThinkingMaxAttempts <= 0 {
+		cfg.SilentThinkingMaxAttempts = defaultSilentThinkingMaxAttempts
 	}
 	cfg.OnExhausted = normalizeQualityExhaustionPolicy(cfg.OnExhausted)
 	if cfg.HoldKeepalive < 0 {
@@ -414,6 +445,49 @@ func DecideToolDegradationRetry(attemptIndex, maxAttempts int, hasNextRouting bo
 		return QualityActionRetry
 	}
 	return QualityActionDeliverLast
+}
+
+// DecideSilentThinkingRetry mirrors the tool-degradation budget: retry while
+// attempts and routing remain, then deliver the last body. It never rejects —
+// the near-empty body still carries reasoning evidence the client can show.
+func DecideSilentThinkingRetry(attemptIndex, maxAttempts int, hasNextRouting bool) QualityRetryAction {
+	if maxAttempts <= 0 {
+		maxAttempts = defaultSilentThinkingMaxAttempts
+	}
+	if attemptIndex < 0 {
+		attemptIndex = 0
+	}
+	if attemptIndex < maxAttempts-1 && hasNextRouting {
+		return QualityActionRetry
+	}
+	return QualityActionDeliverLast
+}
+
+// classifySilentThinking reports whether a completed stream "thought but never
+// spoke": real reasoning evidence, a terminal event, and visible output below
+// the minimum while the model had actual tools to work with. The reasoning
+// floor keeps genuinely short replies delivered. Only requests that declared
+// client-executed tools qualify — a plain prompt with a one-token answer is a
+// legal (if terse) completion.
+func classifySilentThinking(sig QualityStreamSignals, minOutput int64, declaredClientTools []string, enabled bool) bool {
+	if !enabled || len(declaredClientTools) == 0 || !sig.Terminal {
+		return false
+	}
+	if !sig.HasThinking {
+		return false
+	}
+	if sig.SawToolCall {
+		// A structured call is a productive answer; the next round-trip
+		// belongs to the client, not to this retry.
+		return false
+	}
+	if sig.ReasoningTokens < silentThinkingMinReasoningTokens {
+		return false
+	}
+	if minOutput <= 0 {
+		minOutput = defaultQualityMinOutput
+	}
+	return sig.VisibleTokens < minOutput
 }
 
 func qualityRequestHasReplayUnsafeHostedTools(body []byte) bool {

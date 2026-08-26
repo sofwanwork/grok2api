@@ -1882,3 +1882,117 @@ func TestPeekQualityStreamHoldKeepaliveStopsWhenSinkFails(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// --- Patch #16: silent-thinking verdict (fikir tapi tiada jawapan) ---
+
+func TestClassifySilentThinking(t *testing.T) {
+	t.Parallel()
+	sig := QualityStreamSignals{
+		HasThinking:     true,
+		ReasoningTokens: 256,
+		VisibleTokens:   2,
+		Terminal:        true,
+	}
+	if !classifySilentThinking(sig, 8, []string{"read_file"}, true) {
+		t.Fatal("thought-but-empty answer must be classified as silent thinking")
+	}
+	if classifySilentThinking(sig, 8, nil, true) {
+		t.Fatal("no declared client tools must not classify")
+	}
+	if classifySilentThinking(sig, 8, []string{"read_file"}, false) {
+		t.Fatal("disabled must not classify")
+	}
+	shortSig := QualityStreamSignals{HasThinking: true, ReasoningTokens: 30, VisibleTokens: 2, Terminal: true}
+	if classifySilentThinking(shortSig, 8, []string{"read_file"}, true) {
+		t.Fatal("low reasoning evidence must not classify (short-but-real reply)")
+	}
+	goodSig := QualityStreamSignals{HasThinking: true, ReasoningTokens: 256, VisibleTokens: 20, Terminal: true}
+	if classifySilentThinking(goodSig, 8, []string{"read_file"}, true) {
+		t.Fatal("sufficient visible output must deliver normally")
+	}
+	toolSig := QualityStreamSignals{HasThinking: true, ReasoningTokens: 256, VisibleTokens: 2, Terminal: true, SawToolCall: true}
+	if classifySilentThinking(toolSig, 8, []string{"read_file"}, true) {
+		t.Fatal("structured tool call must never be classified as silent thinking")
+	}
+	noThinkingSig := QualityStreamSignals{HasThinking: false, ReasoningTokens: 256, VisibleTokens: 2, Terminal: true}
+	if classifySilentThinking(noThinkingSig, 8, []string{"read_file"}, true) {
+		t.Fatal("no thinking evidence must not classify")
+	}
+	nonTerminalSig := QualityStreamSignals{HasThinking: true, ReasoningTokens: 256, VisibleTokens: 2, Terminal: false}
+	if classifySilentThinking(nonTerminalSig, 8, []string{"read_file"}, true) {
+		t.Fatal("non-terminal stream must not classify (mid-stream content may arrive)")
+	}
+}
+
+func TestPeekQualityStreamSilentThinkingVerdict(t *testing.T) {
+	t.Parallel()
+	// Stream: reasoning evidence marker, then tiny answer, then [DONE] —
+	// matching the observed OpenCode failure (42k context, 256 reasoning, ~1 content).
+	fixture := sse(
+		": grok2api-reasoning-start",
+		": grok2api-reasoning-evidence",
+		`data: {"choices":[{"delta":{"content":"hi"}}]}`,
+		`data: {"usage":{"completion_tokens":257,"completion_tokens_details":{"reasoning_tokens":256}}}`,
+		"data: [DONE]",
+	)
+	cfg := QualityRetryRuntime{
+		MinOutputTokens:       8,
+		HoldTimeout:           time.Second,
+		DeclaredClientTools:   []string{"read_file"},
+		SilentThinkingEnabled: true,
+	}
+	replay, verdict, usage, _, _, err := peekQualityStream(context.Background(), io.NopCloser(strings.NewReader(fixture)), qualityProtocolChat, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	if verdict != QualitySilentThinking {
+		t.Fatalf("verdict = %s, want silent_thinking", verdict)
+	}
+	if usage.ReasoningTokens != 256 {
+		t.Fatalf("reasoning_tokens = %d, want 256", usage.ReasoningTokens)
+	}
+	// The near-empty body must be preserved for the deliver-last path.
+	body, _ := io.ReadAll(replay)
+	if !strings.Contains(string(body), "hi") {
+		t.Fatalf("replay lost the near-empty answer: %q", body)
+	}
+}
+
+func TestPeekQualityStreamSilentThinkingNotTriggeredWithoutReasoning(t *testing.T) {
+	t.Parallel()
+	fixture := sse(
+		`data: {"choices":[{"delta":{"content":"hi"}}]}`,
+		`data: {"usage":{"completion_tokens":2,"completion_tokens_details":{"reasoning_tokens":0}}}`,
+		"data: [DONE]",
+	)
+	cfg := QualityRetryRuntime{
+		MinOutputTokens:       8,
+		HoldTimeout:           time.Second,
+		DeclaredClientTools:   []string{"read_file"},
+		SilentThinkingEnabled: true,
+	}
+	_, verdict, _, _, _, err := peekQualityStream(context.Background(), io.NopCloser(strings.NewReader(fixture)), qualityProtocolChat, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verdict == QualitySilentThinking {
+		t.Fatalf("verdict = %s, must not be silent_thinking without reasoning evidence", verdict)
+	}
+}
+
+func TestDecideSilentThinkingRetry(t *testing.T) {
+	t.Parallel()
+	if DecideSilentThinkingRetry(0, 2, true) != QualityActionRetry {
+		t.Fatal("first attempt with routing must retry")
+	}
+	if DecideSilentThinkingRetry(1, 2, true) != QualityActionDeliverLast {
+		t.Fatal("exhausted budget must deliver last, not retry")
+	}
+	if DecideSilentThinkingRetry(0, 2, false) != QualityActionDeliverLast {
+		t.Fatal("no routing left must deliver last, not retry")
+	}
+	if DecideSilentThinkingRetry(0, 0, true) != QualityActionRetry {
+		t.Fatal("zero maxAttempts must use default 2 and retry")
+	}
+}
