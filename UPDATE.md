@@ -50,6 +50,40 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
+### Fail-fast anggun untuk input besar (26 Ogos, selepas patch #15 v2)
+
+**Penemuan sempadan (ujian socket mentah):** prompt ~390k token kadangkala
+mendapat jawapan penuh (contoh: 447k token in, TTFT 101s, jawapan sempurna)
+dan kadangkala upstream **senyap mutlak** (0 byte selama 120s idle deadline) —
+tingkah laku stokastik free tier, bukan batas keras saiz.
+
+**Masalah lama:** idle pada input besar → percubaan akaun kedua (fingerprint
+limit 2) → 244s menunggu + 2 akaun kena cooldown 15m untuk kegagalan yang
+hampir pasti (punca provider-wide, bukan akaun).
+
+**Fix (commit `cd55e9c5`):**
+- `shouldStopForLargePromptIdle` — prompt ≥200k token yang idle **tanpa
+  sebarang bukti generation** berhenti selepas percubaan pertama (~127s,
+  bukan 244s). Guard penting: stream yang dah hasilkan bukti apa-apa
+  (reasoning/text/tool) TIDAK terjejas — ujian live request 447k token
+  berjaya sepenuhnya selepas fix ini.
+- Mesej error berpandu: `... (input ~Nk token melebihi kemampuan upstream
+  semasa — kecilkan sesi/compact dan cuba semula)` — client/agent tahu kena
+  compact, bukan cuba lagi buta.
+- Audit jujur: baris gagal idle kini rekod anggaran prompt token (dulu
+  in=0 menyembunyikan saiz sebenar).
+
+**Config terlibat:** tiada field baru; threshold tetap 200k token dalam
+kod. Guna compaction OpenCode (80k) — jauh di bawah sempadan.
+
+**Peta sempadan context (disahkan 26 Ogos 2026):**
+
+| Saiz prompt | Tingkah laku |
+|---|---|
+| ≤200k | Stabil terbukti (termasuk 159k+xhigh, 198k+tools) |
+| 200k–500k | **Stokastik** — kadang penuh, kadang idle; gagal anggun dalam ~127s |
+| >500k | Fail-fast HTTP 400 `context_length_exceeded` (0.2s) |
+
 ### Keepalive semasa quality hold (patch #15, 25 Ogos — dibina semula 26 Ogos sebagai v2)
 
 **Gejala:** dalam OpenCode, jawapan muncul dua kali dengan kandungan hampir
