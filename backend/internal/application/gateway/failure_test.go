@@ -388,3 +388,30 @@ func TestTerminalRequestForbiddenRequiresExplicitRequestSignal(t *testing.T) {
 		}
 	}
 }
+
+// --- Large-prompt idle fail-fast (input-besar graceful degradation) ---
+
+func TestShouldStopForLargePromptIdle(t *testing.T) {
+	idle := &UpstreamFailure{Code: "upstream_stream_idle_timeout", Fingerprint: "upstream_stream_idle_timeout"}
+	empty := &UpstreamFailure{Code: "upstream_stream_empty", Fingerprint: "upstream_stream_empty"}
+	network := &UpstreamFailure{Code: "upstream_network_error", Fingerprint: "upstream_network_error"}
+
+	if !shouldStopForLargePromptIdle(390_000, idle) {
+		t.Fatal("idle failure on a giant prompt must fail fast")
+	}
+	if !shouldStopForLargePromptIdle(250_000, empty) {
+		t.Fatal("empty-stream failure on a giant prompt must fail fast")
+	}
+	if shouldStopForLargePromptIdle(150_000, idle) {
+		t.Fatal("prompt below the threshold keeps the normal compensating-account retry")
+	}
+	if shouldStopForLargePromptIdle(390_000, network) {
+		t.Fatal("non-idle transport failures keep the normal retry path")
+	}
+	if shouldStopForLargePromptIdle(390_000, nil) {
+		t.Fatal("nil failure must never stop the loop")
+	}
+	if shouldStopForLargePromptIdle(390_000, &UpstreamFailure{Code: "upstream_stream_idle_timeout", Fingerprint: "upstream_stream_idle_timeout", AccountScoped: true}) {
+		t.Fatal("account-scoped idle failures rotate accounts as before (account health, not prompt size)")
+	}
+}

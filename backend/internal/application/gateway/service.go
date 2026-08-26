@@ -100,6 +100,26 @@ const nonAccountFailureFingerprintLimit = 16
 // upstream from multiplying a long idle deadline across the whole pool.
 const streamIdleFailureFingerprintLimit = 2
 
+// largePromptIdleFailFastTokens is the prompt-size threshold above which a
+// stream idle failure stops the request immediately instead of allowing one
+// compensating account switch. Giant prompts that go idle are almost always
+// a provider/free-tier generation limit, not an account fault: retrying a
+// second account burns another full idle deadline (minutes) and one more
+// 15-minute cooldown for near-certain failure.
+const largePromptIdleFailFastTokens = 200_000
+
+// shouldStopForLargePromptIdle reports whether an idle-stream transport
+// failure on a very large prompt should end the request after this single
+// attempt. Only genuinely idle (no bytes generated) failures qualify; an
+// interrupted stream that already produced data keeps the normal retry path.
+func shouldStopForLargePromptIdle(promptTokens int, failure *UpstreamFailure) bool {
+	if failure == nil || failure.AccountScoped || promptTokens < largePromptIdleFailFastTokens {
+		return false
+	}
+	return failure.Code == "upstream_stream_idle_timeout" || failure.Fingerprint == "upstream_stream_idle_timeout" ||
+		failure.Code == "upstream_stream_empty" || failure.Fingerprint == "upstream_stream_empty"
+}
+
 var freeQuotaUsagePattern = regexp.MustCompile(`(?i)tokens\s*\(actual/limit\)\s*:\s*([0-9]+)\s*/\s*([0-9]+)`)
 
 type Input struct {
@@ -955,9 +975,11 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	// tokens exceed the model's context window so clients get a stable
 	// OpenAI-standard context_length_exceeded error instead of an opaque
 	// upstream 4xx/5xx after a long conversation.
+	promptTokens := 0
 	if routeErr == nil {
+		promptTokens = estimatePromptTokens(input.Body)
 		if limit := contextWindowForRoute(route); limit > 0 {
-			if estimatePromptTokens(input.Body) > limit {
+			if promptTokens > limit {
 				return nil, ErrContextLengthExceeded
 			}
 		}
@@ -1678,24 +1700,33 @@ attemptLoop:
 						lastFailure = &UpstreamFailure{HTTPStatus: 499, Code: "request_canceled", PublicMessage: "Permintaan telah dibatalkan", AccountID: credential.ID, AccountName: credential.Name, Cause: firstError(ctx.Err(), peekErr)}
 						break
 					}
-					lastFailure = newTransportUpstreamFailure(peekErr, credential.ID, credential.Name)
-					if neterrorpkg.IsUpstreamStreamIdleTimeout(peekErr) || neterrorpkg.IsUpstreamStreamIdleTimeout(context.Cause(ctx)) || errors.Is(peekErr, errQualityEmptyStream) {
-						logPrefix := "quality_peek_idle"
-						if errors.Is(peekErr, errQualityEmptyStream) {
-							logPrefix = "quality_peek_empty"
-						}
-						writeCtx, writeCancel := context.WithTimeout(context.WithoutCancel(ctx), finalizationTimeout)
-						if markErr := s.selector.MarkFailureAfterSuccess(writeCtx, credential, http.StatusGatewayTimeout, holdCfg.IdleAccountCooldown); markErr != nil {
-							s.logger.Warn(logPrefix+"_cooldown_failed", "request_id", input.RequestID, "account_id", credential.ID, "error", markErr)
-						} else {
-							s.logger.Warn(logPrefix+"_retry", "request_id", input.RequestID, "account_id", credential.ID, "cooldown", holdCfg.IdleAccountCooldown)
-						}
-						writeCancel()
+				lastFailure = newTransportUpstreamFailure(peekErr, credential.ID, credential.Name)
+				if neterrorpkg.IsUpstreamStreamIdleTimeout(peekErr) || neterrorpkg.IsUpstreamStreamIdleTimeout(context.Cause(ctx)) || errors.Is(peekErr, errQualityEmptyStream) {
+					logPrefix := "quality_peek_idle"
+					if errors.Is(peekErr, errQualityEmptyStream) {
+						logPrefix = "quality_peek_empty"
 					}
-					if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
-						break
+					writeCtx, writeCancel := context.WithTimeout(context.WithoutCancel(ctx), finalizationTimeout)
+					if markErr := s.selector.MarkFailureAfterSuccess(writeCtx, credential, http.StatusGatewayTimeout, holdCfg.IdleAccountCooldown); markErr != nil {
+						s.logger.Warn(logPrefix+"_cooldown_failed", "request_id", input.RequestID, "account_id", credential.ID, "error", markErr)
+					} else {
+						s.logger.Warn(logPrefix+"_retry", "request_id", input.RequestID, "account_id", credential.ID, "cooldown", holdCfg.IdleAccountCooldown)
 					}
-					continue
+					writeCancel()
+				}
+				if shouldStopForNonAccountFingerprint(failureFingerprints, lastFailure) {
+					break
+				}
+				// A giant prompt that went fully idle is a provider/free-tier
+				// generation limit, not an account fault: one more account
+				// only burns another idle deadline and cooldown. Fail now
+				// with a hint instead of doubling the wait.
+				if shouldStopForLargePromptIdle(promptTokens, lastFailure) {
+					s.logger.Warn("large_prompt_idle_fail_fast", "request_id", input.RequestID, "account_id", credential.ID, "prompt_tokens", promptTokens)
+					lastFailure.PublicMessage = fmt.Sprintf("%s (input ~%dk token melebihi kemampuan upstream semasa — kecilkan sesi/compact dan cuba semula)", lastFailure.PublicMessage, promptTokens/1000)
+					break
+				}
+				continue
 				}
 				response.Body = replay
 				hasNextAccount := attemptPolicy.hasNext(attempt) && selection.hasAvailableCandidate(excluded, !quotaProbeAttempted)
@@ -1842,6 +1873,13 @@ attemptLoop:
 		record.Attempts = failureAttempts.snapshot()
 		record.CreatedAt = time.Now().UTC()
 		applyAuditEgress(&record, egressTrace, route.Provider)
+		// Upstream never reported usage (idle/empty/transport failures report
+		// zero), so the audit row would hide the true request size. Fill the
+		// estimate so a giant-prompt failure is diagnosable from the audit
+		// trail instead of showing in=0.
+		if record.InputTokens == 0 && promptTokens > 0 {
+			record.InputTokens = int64(promptTokens)
+		}
 		if lastFailure.AccountID != 0 {
 			accountID := lastFailure.AccountID
 			record.AccountID = &accountID
