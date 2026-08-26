@@ -373,6 +373,36 @@ Persona guard `&&` yang menyelamatkan sekali lagi (auto-tukar ke
 supaya `shell: pwsh` betul-betur load — `&&` jadi sah pada environment
 level, dan guard timeout persona aktif. Kriteria A+ kekal sama.
 
+### Persona: END-TO-END OWNERSHIP — senior dev identity (27 Ogos, pra-round 4)
+
+**Analisis 3 round eksperimen:** punca root semua kegagalan bukan
+kekurangan ilmu (Grok dah tahu semua framework dari training — bukti:
+round 3 dia tahu create-next-app, --legacy-peer-deps, Tailwind config).
+Punca sebenar: **model lupa dia seorang agent dengan tools** dan
+fallback ke "chat mode" (copy-paste kod, arahan manual) seperti
+assistant biasa.
+
+**Fix (persona sahaja, tiada kod) — 4 guard baharu, kedua-dua lapisan:**
+1. "YOU ARE THE DEVELOPER — END-TO-END OWNERSHIP": user ialah client,
+   model ialah developer. "Buatkan utk sy" = hasil BERJALAN di machine
+   ini + penjelasan. Semua langkah milik model: install deps, scaffold,
+   tulis fail, build, fix error, dev server, verify. Frasa "kau boleh
+   jalankan sendiri" = failed delivery.
+2. "KNOW YOUR ENVIRONMENT — YOU ARE AN AGENT WITH TOOLS": sebelum apa-apa
+   fallback ke "aku tak boleh", inventori tools dulu. Hampir semua
+   "can't" ialah "didn't try with the right tool".
+3. "VERIFY — THE DEFINITION OF DONE" (dikemas kini): urutan konkrit —
+   (1) deps installed, (2) fail ditulis, (3) build lulus bersih,
+   (4) server respond 200. "Done" = model sendiri tengok ia jalan.
+4. "SCAFFOLD PREFER OFFICIAL TOOLING": guna scaffolder rasmi dengan
+   timeout besar dulu (create-next-app, create-vite, dsb.) — config
+   known-good, fail tulisan tangan kerap tertinggal (insiden tsconfig).
+   Senarai ekosistem disebut: npm/yarn/pnpm/bun, pip/poetry/uv, cargo,
+   composer + framework atasnya.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.pre-seniordev.20260827_014438.bak`.
+
 ### Persona: `&&` ParseError guard + OpenCode shell pwsh (26 Ogos, malam)
 
 **Gejala (website ubat kurus):** model (grok2api/grok-4.6-xhigh) cuba
