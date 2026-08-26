@@ -345,6 +345,13 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Applicat
 	selector.UpdatePreferFreeBuild(cfg.Routing.PreferFreeBuild)
 	selector.UpdateSegmentedSelector(cfg.Routing.SegmentedSelectorEnabled, cfg.Routing.SegmentedMinCandidates, cfg.Routing.SegmentedWindowSize)
 	selector.UpdateExcludeBuildBotFlaggedFromScheduling(cfg.Accounts.ExcludeBuildBotFlaggedFromScheduling)
+	// Patch #18: seed the soft thinking score from durable health markers so a
+	// container restart does not forget which accounts keep producing thin
+	// thinking. Accounts marked missing-thinking start at a low score and must
+	// earn it back with real reasoning evidence.
+	if enabledCredentials, err := accountRepo.ListEnabled(context.Background(), account.ProviderBuild); err == nil {
+		selector.SeedThinkingScores(enabledCredentials)
+	}
 	accountService.UpdateExcludeBuildBotFlaggedFromScheduling(cfg.Accounts.ExcludeBuildBotFlaggedFromScheduling)
 	egressManager.UpdateAccountIsolatedConnections(cfg.Routing.AccountIsolatedConnections)
 	invalidationService := invalidationapp.NewService(invalidationBus, invalidationSourceInstance(cfg), func(event repository.InvalidationEvent) {

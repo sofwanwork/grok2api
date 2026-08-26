@@ -1952,3 +1952,31 @@ func TestCandidateScoreBetterPrefersThinking(t *testing.T) {
 		t.Fatalf("after thin-thinking strikes: got ID %d, want ID 2 (soft priority)", candidate2.Credential.ID)
 	}
 }
+
+func TestSeedThinkingScores(t *testing.T) {
+	s := NewSelector(nil, memory.NewConcurrencyLimiter(), nil, nil, time.Hour, time.Second, time.Minute)
+	// Account 1 has a durable missing-thinking marker; account 2 does not.
+	credentials := []account.Credential{
+		{ID: 1, LastError: account.LastErrorMissingThinking},
+		{ID: 2, LastError: ""},
+		{ID: 3, LastError: account.LastErrorMissingThinkingDisabled},
+	}
+	s.SeedThinkingScores(credentials)
+	if got := s.thinkingScoreOf(1); got != thinkingScorePenaltySeed {
+		t.Fatalf("account 1 seeded score = %d, want %d", got, thinkingScorePenaltySeed)
+	}
+	if got := s.thinkingScoreOf(2); got != thinkingScoreDefault {
+		t.Fatalf("account 2 (no marker) score = %d, want default %d", got, thinkingScoreDefault)
+	}
+	if got := s.thinkingScoreOf(3); got != thinkingScorePenaltySeed {
+		t.Fatalf("account 3 seeded score = %d, want %d", got, thinkingScorePenaltySeed)
+	}
+	// Seeding must not overwrite an already-observed score.
+	s.NoteThinking(1, true)
+	s.NoteThinking(1, true)
+	before := s.thinkingScoreOf(1)
+	s.SeedThinkingScores(credentials)
+	if got := s.thinkingScoreOf(1); got != before {
+		t.Fatalf("seeding overwrote an observed score: %d → %d", before, got)
+	}
+}

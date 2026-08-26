@@ -50,7 +50,25 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Soft thinking-score ordering (patch #17, 26 Ogos)
+### Persist thinking score seeding (patch #18, 26 Ogos)
+
+**Masalah:** Patch #17 soft thinking-score adalah in-memory — score hilang bila
+container restart, jadi akaun yang terbukti benak perlu "belajar semula" dari
+kosong setiap kali.
+
+**Fix (kod):** `SeedThinkingScores(credentials)` — pada startup, baca semua
+akaun enabled dari DB. Akaun dengan durable health marker `missing_thinking`
+atau `missing_thinking_disabled` (dari guard missing-thinking) dimulakan
+dengan score rendah (30) — mereka perlu buktikan diri semula dengan
+reasoning sebenar. Seeding tidak menggantikan score yang sudah diamati.
+
+**Kesan:** akaun benak kekal rendah skor melalui restart; akaun yang sehat
+terus sehat. Tiada DB migration diperlukan — guna marker sedia ada.
+
+**Test:** `TestSeedThinkingScores` (seed marker vs tiada, tak overwrite
+observed score). Full suite 63 pakej 0 gagal.
+
+**Image:** `grok2api:local-persist` (= local-priority + patch #18).
 
 **Masalah:** ~36% request datang daripada akaun yang menghasilkan jawapan
 tanpa reasoning (benak). Guard reactive bekerja (retry + cooldown 12h) tapi

@@ -1050,6 +1050,11 @@ const (
 	thinkingScoreMin     = 0
 	thinkingScoreUp      = 10
 	thinkingScoreDown    = 15
+	// thinkingScorePenaltySeed is the starting score for accounts whose
+	// durable health marker already proves they produce thin thinking
+	// (missing_thinking / missing_thinking_disabled). It keeps them low
+	// from the first request instead of waiting for fresh observations.
+	thinkingScorePenaltySeed = 30
 )
 
 // NoteThinking adjusts the per-account thinking score based on whether the
@@ -1082,6 +1087,23 @@ func (s *Selector) thinkingScoreOf(accountID uint64) int {
 		return thinkingScoreDefault
 	}
 	return score
+}
+
+// SeedThinkingScores sets a low starting score for accounts whose durable
+// health marker already proves they produce thin thinking. This means a
+// restart does not wipe the memory of bad accounts: they start at a low
+// score and must earn their way back up with real reasoning evidence. It
+// runs once at startup, before any request is served.
+func (s *Selector) SeedThinkingScores(credentials []account.Credential) {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	for _, credential := range credentials {
+		if credential.LastError == account.LastErrorMissingThinking || credential.LastError == account.LastErrorMissingThinkingDisabled {
+			if _, exists := s.thinkingScore[credential.ID]; !exists {
+				s.thinkingScore[credential.ID] = thinkingScorePenaltySeed
+			}
+		}
+	}
 }
 
 func (s *Selector) MarkFreeQuotaExhausted(ctx context.Context, credential account.Credential, used, limit int64) {
