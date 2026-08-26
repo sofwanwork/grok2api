@@ -1118,6 +1118,10 @@ func (s *Service) createResponseAt(ctx context.Context, input Input, path string
 	qualityAccountAttempts := 0
 	toolDegradedAttempts := 0
 	silentThinkingAttempts := 0
+	// Patch #23: consecutive QualityWithhold counter for the degrade retry
+	// circuit-breaker. Resets on any delivered stream; only true withholds
+	// increment it, so one healthy stream in the middle stops the storm.
+	consecutiveWithholds := 0
 	quotaMode := s.providers.QuotaMode(route.Provider, route.UpstreamModel)
 	quotaProbeAttempted := false
 	selection := preselectedSession
@@ -1913,18 +1917,30 @@ attemptLoop:
 					// carries the (near-empty) answer plus any reasoning
 					// evidence the client can render.
 				}
-				commit := QualityCommit{Action: QualityActionDeliverLast, KeepBody: true}
-				if !degradedDeliver {
+			commit := QualityCommit{Action: QualityActionDeliverLast, KeepBody: true}
+			if !degradedDeliver {
+				// Patch #23: degrade retry circuit-breaker. If this request has
+				// already hit consecutiveWithholds >= DegradeCircuitThreshold,
+				// the next withhold is delivered fail-open (keep the still-
+				// readable benak body) instead of burning yet another account
+				// into a 503 loop — refine-phase sessions stay alive. Account
+				// cooldowns still apply; only the client-visible 503 is broken.
+				if degradeCircuitOpen(consecutiveWithholds, holdCfg) && verdict == QualityWithhold {
+					commit = QualityCommit{Action: QualityActionDeliverLast, KeepBody: true}
+					s.logger.Warn("quality_degrade_circuit_open", "request_id", input.RequestID, "account_id", credential.ID, "consecutive_withholds", consecutiveWithholds, "threshold", holdCfg.DegradeCircuitThreshold)
+				} else {
 					commit = CommitQualityHold(verdict, qualityAccountAttempts-1, holdCfg.MaxAttempts, hasNextAccount, holdCfg.OnExhausted)
 				}
-				if verdict == QualityWithhold {
-					s.applyMissingThinkingPenalty(ctx, input.RequestID, credential, holdCfg.AccountCooldown)
-					// Patch #19: mark this account so its next attempt in this
-					// request gets a shorter hold timeout — a benak account
-					// that stalls again fails fast instead of waiting the full
-					// deadline a second time.
-					recentBenakAccounts[credential.ID] = true
-				}
+			}
+			if verdict == QualityWithhold {
+				consecutiveWithholds++
+				s.applyMissingThinkingPenalty(ctx, input.RequestID, credential, holdCfg.AccountCooldown)
+				// Patch #19: mark this account so its next attempt in this
+				// request gets a shorter hold timeout — a benak account
+				// that stalls again fails fast instead of waiting the full
+				// deadline a second time.
+				recentBenakAccounts[credential.ID] = true
+			}
 				deferFailOpenAudit := commit.Action == QualityActionRetry && holdCfg.OnExhausted == qualityRetryFailOpen
 				if commit.Audit && !deferFailOpenAudit {
 					s.recordQualityDegraded(ctx, auditBase, credential, peekUsage, startedAt, egressTrace, route.Provider)

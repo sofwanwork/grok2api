@@ -399,6 +399,11 @@ type QualityGuardRequestRetryConfig struct {
 	// so the signal can be validated on real traffic before arming a budget.
 	// 5s is the upstream-fork-measured recommendation once validated.
 	EarlyHeaderAbort Duration `yaml:"earlyHeaderAbort"`
+	// DegradeCircuitThreshold (patch #23) trips a withhold storm: after this
+	// many consecutive QualityWithhold verdicts in one request, the next
+	// withhold is delivered fail-open (keeps the still-readable benak body)
+	// instead of a 503 loop. 0 disables the circuit.
+	DegradeCircuitThreshold int `yaml:"degradeCircuitThreshold"`
 	// ToolDegradation retries streams where upstream narrates a tool call as
 	// prose instead of emitting a structured call. Never penalises accounts.
 	ToolDegradation QualityGuardToolDegradationConfig `yaml:"toolDegradation"`

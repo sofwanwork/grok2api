@@ -78,6 +78,34 @@ tinggi untuk gain rendah. Hint di Lapisan A adalah seimbang yang betul.
 satu body + read untouched); 17 ujian total. Full suite 64 pakej,
 0 gagal.
 
+### Degrade retry circuit-breaker (patch #23, 27 Ogos)
+
+**Masalah (round 5, fasa refine 19:27–19:32):** selepas model claim
+"✅ Siap" pada 03:14, fasa "cantikkan design" menghantar request refine
+berulang. Empat quality_degraded berturut-turut pada akaun berbeza
+(19:27, 19:28, 19:29, 19:32) — setiap satu diproses oleh
+`CommitQualityHold` sebagai Retry → burn akaun → 503. Sesi mati dengan
+`process ERROR` walaupun website sudah dihantar. Ini bukan satu akaun
+jahat; ini **withhold storm pada prompt berat** — benak stokastik yang
+memilih hampir setiap akaun dalam pool untuk sesi itu.
+
+**Reka bentuk:** `DegradeCircuitThreshold` dalam `QualityRetryRuntime`
+dan config `requestRetry.degradeCircuitThreshold`. Counter
+`consecutiveWithholds` per-request (reset pada mana-mana stream yang
+deliver). Bila counter >= threshold, withhold seterusnya di-commit
+sebagai `DeliverLast` (fail-open — body benak masih boleh dibaca)
+bukan Retry/503 lagi. **Penalti akaun kekal** (cooldown 12h diteruskan
+oleh `applyMissingThinkingPenalty`); hanya 503 client loop diputus.
+0 = circuit off (tingkah laku asal penuh).
+
+**Perbezaan dari OnExhausted fail_open:** `onExhausted: fail_closed`
+masih mengawal penghujung budget `MaxAttempts` (safety net untuk
+prompt benar-benar besar). Circuit ini beroperasi **sebelum** budget
+habis — dua mekanisme berasingan.
+
+**Ujian:** 5 ujian (trip at/beyond threshold, closed below, disabled
+at 0/negative, normalize clamp). Full suite 64 pakej, 0 gagal.
+
 ### Bash tool timeout guard (patch #21, 27 Ogos)
 
 **Masalah (eksperimen round 1–4):** model Grok menjana tool call `bash`

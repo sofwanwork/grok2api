@@ -530,6 +530,9 @@ func qualityRetryRuntime(value config.QualityGuardRequestRetryConfig) gateway.Qu
 		// Patch #20: response-header budget early abort. Default 0 keeps
 		// instrument-only behavior (header arrival logging).
 		EarlyHeaderAbort: value.EarlyHeaderAbort.Value(),
+		// Patch #23: degrade retry circuit-breaker. 0 disables; 2 trips
+		// after two consecutive withholds in one request.
+		DegradeCircuitThreshold: value.DegradeCircuitThreshold,
 		// Tool-degradation retries are independent of the missing-thinking
 		// policy and never cool or disable an account.
 		ToolDegradationEnabled:     value.ToolDegradation.Enabled,

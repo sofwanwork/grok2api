@@ -118,6 +118,17 @@ type QualityRetryRuntime struct {
 	// Non-streaming requests are exempt (their headers only arrive when
 	// generation completes, by protocol design).
 	EarlyHeaderAbort time.Duration
+	// DegradeCircuitThreshold (patch #23) is the circuit-breaker for a
+	// withhold storm: after this many consecutive QualityWithhold verdicts
+	// in the same request (default 2), the next withhold is delivered
+	// fail-open (DeliverLast) instead of burning another account and
+	// returning 503. In a design-refine phase where the client retries the
+	// same heavy prompt, 4+ consecutive degraded retries across accounts
+	// mean a 503 loop with no answer — accepting the still-readable benak
+	// body beats a dead session. 0 disables the circuit (full
+	// withhold-to-the-end behavior). Account penalties (cooldown) are
+	// NOT waived — only the client-visible 503 loop is broken.
+	DegradeCircuitThreshold int
 }
 
 // qualityHeaderBudget returns the active response-header budget for this
@@ -209,11 +220,23 @@ func normalizeQualityRetry(cfg QualityRetryRuntime) QualityRetryRuntime {
 	if cfg.SilentThinkingMaxAttempts <= 0 {
 		cfg.SilentThinkingMaxAttempts = defaultSilentThinkingMaxAttempts
 	}
+	if cfg.DegradeCircuitThreshold < 0 {
+		cfg.DegradeCircuitThreshold = 0
+	}
 	cfg.OnExhausted = normalizeQualityExhaustionPolicy(cfg.OnExhausted)
 	if cfg.HoldKeepalive < 0 {
 		cfg.HoldKeepalive = 0
 	}
 	return cfg
+}
+
+// degradeCircuitOpen reports whether the withhold-storm circuit-breaker
+// (patch #23) should trip. consecutiveWithholds is the count of consecutive
+// QualityWithhold verdicts already seen in this request; when it reaches
+// the threshold, the NEXT withhold must be delivered fail-open instead of
+// burning another account in a 503 loop. Threshold 0 keeps the circuit off.
+func degradeCircuitOpen(consecutiveWithholds int, cfg QualityRetryRuntime) bool {
+	return cfg.DegradeCircuitThreshold > 0 && consecutiveWithholds >= cfg.DegradeCircuitThreshold
 }
 
 // missingThinkingEnabled resolves the opt-out to the effective verdict switch.
