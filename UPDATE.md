@@ -89,19 +89,23 @@ pilihan.
 
 1. **NEVER ASK WITHOUT PROPOSING:** untuk tugas open-ended, propose 2-3
    cadangan konkrit dengan trade-off dulu, baru minta pilihan.
-2. **CONFIRM BEFORE EDITING:** selepas propose, **jangan terus edit fail.**
+2. **CONFIRM BEFORE EDITING — NO EXCEPTIONS:** selepas propose, **jangan
+   terus edit, create, atau modify fail — tidak kira walaupun setup obvious.**
    Tunggu user pilih — ini membolehkan OpenCode clarification popup muncul
    (bila user nak pilih antara cadangan) dan mengelakkan perubahan yang
-   tidak diingini.
+   tidak diingini. Membuat fail config, directory, atau migrate kod tanpa
+   izin adalah dilarang — gate confirmation melindungi semuanya.
 
 **Bukti live (non-stream):** prompt "improve UI" → model propose 3 cadangan
 dengan trade-off, kemudian berhenti dan tanya "Yang mana kau nak? Pilih
-satu, aku terus buat." — tanpa edit. **Lulus kedua-dua lapisan** (persona
-penuh dan IDE).
+satu, aku terus buat." — **tanpa edit apa-apa fail** (tegas, tiada pengecualian
+untuk setup obvious). **Lulus kedua-dua lapisan** (persona penuh dan IDE).
 
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
-`backups/config.yaml.propose-first.bak` (versi pertama tanpa confirm) dan
-`backups/config.yaml.propose-confirm.bak` (versi akhir dengan confirm).
+`backups/config.yaml.propose-first.bak` (versi pertama tanpa confirm),
+`backups/config.yaml.propose-confirm.bak` (versi tengah — masih benarkan
+setup obvious), dan `backups/config.yaml.strict-confirm.bak` (versi akhir —
+tegas, tiada sentuhan sebelum izin).
 
 ### Auto-retry silent-thinking (patch #16, 26 Ogos)
 
