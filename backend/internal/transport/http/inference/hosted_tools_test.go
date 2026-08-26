@@ -149,7 +149,7 @@ func writeHostedToolResult(t *testing.T, declared []string, body string, protoco
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Finalize:   func(gateway.Usage, string, string) {},
-	}, stream, false, protocol, "")
+	}, stream, false, protocol, "", nil)
 	return recorder
 }
 
@@ -242,7 +242,7 @@ func TestWriteProtocolResultRecordsHostedToolWarningBeforeFinalize(t *testing.T)
 				t.Errorf("usage.OutputTokens = %d, want 40", usage.OutputTokens)
 			}
 		},
-	}, false, false, streamProtocolChat, "")
+	}, false, false, streamProtocolChat, "", nil)
 
 	if recorded != "web_search,x_search" {
 		t.Fatalf("recorded warning = %q, want %q", recorded, "web_search,x_search")
@@ -281,7 +281,7 @@ func TestWriteProtocolResultSkipsAuditWhenToolsExecuted(t *testing.T) {
 		Body:                    io.NopCloser(strings.NewReader(body)),
 		RecordHostedToolWarning: func(string) { recordCalls++ },
 		Finalize:                func(gateway.Usage, string, string) {},
-	}, false, false, streamProtocolChat, "")
+	}, false, false, streamProtocolChat, "", nil)
 
 	if recordCalls != 0 {
 		t.Fatalf("RecordHostedToolWarning called %d times, want 0 when sources prove execution", recordCalls)

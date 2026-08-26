@@ -115,18 +115,24 @@ func newQualityReadPump(source io.ReadCloser) *qualityReadPump {
 	return pump
 }
 
-// startHoldKeepalive injects periodic SSE comment chunks into the pump while a
-// hold is buffering, so clients with short idle timeouts (OpenCode aborts and
-// retries a silent long-thinking stream, surfacing duplicate answers) see the
-// connection as alive. The comment is an internal marker filtered before the
-// client and ignored by the quality scanner. The returned stop function must
-// be called when the peek finishes.
-func startHoldKeepalive(pump *qualityReadPump, interval time.Duration) func() {
-	if pump == nil || interval <= 0 {
+// startHoldKeepalive writes periodic SSE comment chunks directly to the
+// downstream client while a hold is buffering, so clients with short idle
+// timeouts (OpenCode aborts and retries a silent long-thinking stream,
+// surfacing duplicate answers) see the connection as alive. The comments are
+// written straight to the client sink, never into the held prefix, so the
+// replayed body stays byte-identical to the upstream stream and the quality
+// scanner never sees them. The returned stop function blocks until the
+// writer goroutine has fully exited, so no keepalive write can race the
+// final body copy. A nil or failing sink disables injection.
+func startHoldKeepalive(sink func([]byte) bool, interval time.Duration) func() {
+	if sink == nil || interval <= 0 {
 		return func() {}
 	}
 	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		payload := []byte(qualityKeepaliveSSEComment + "\n\n")
@@ -134,21 +140,19 @@ func startHoldKeepalive(pump *qualityReadPump, interval time.Duration) func() {
 			select {
 			case <-stop:
 				return
-			case <-pump.done:
-				return
 			case <-ticker.C:
-				select {
-				case pump.results <- qualityReadResult{data: append([]byte(nil), payload...)}:
-				case <-stop:
-					return
-				case <-pump.done:
+				if !sink(payload) {
+					// Client is gone or the transport cannot write.
 					return
 				}
 			}
 		}
 	}()
 	var once sync.Once
-	return func() { once.Do(func() { close(stop) }) }
+	return func() {
+		once.Do(func() { close(stop) })
+		wg.Wait()
+	}
 }
 
 func (p *qualityReadPump) run() {
@@ -559,13 +563,13 @@ func noteVisibleContent(state *qualityScanState, text string) {
 	state.captureVisibleText(text)
 }
 
-func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string, cfg QualityRetryRuntime) (io.ReadCloser, QualityVerdict, Usage, string, time.Time, error) {
+func peekQualityStream(ctx context.Context, body io.ReadCloser, protocol string, cfg QualityRetryRuntime, keepaliveSink func([]byte) bool) (io.ReadCloser, QualityVerdict, Usage, string, time.Time, error) {
 	cfg = normalizeQualityRetry(cfg)
 	if body == nil {
 		return io.NopCloser(bytes.NewReader(nil)), QualityWait, Usage{}, "", time.Time{}, errQualityEmptyStream
 	}
 	pump := newQualityReadPump(body)
-	stopKeepalive := startHoldKeepalive(pump, cfg.HoldKeepalive)
+	stopKeepalive := startHoldKeepalive(keepaliveSink, cfg.HoldKeepalive)
 	defer stopKeepalive()
 	state := qualityScanState{protocol: protocol}
 	var held bytes.Buffer

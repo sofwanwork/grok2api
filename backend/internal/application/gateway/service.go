@@ -125,6 +125,16 @@ type Input struct {
 	auditOperation audit.Operation
 	// skipQualityHold is set only by trusted gateway-side request classifiers.
 	skipQualityHold bool
+	// HoldKeepaliveSink receives SSE keepalive comments while a quality hold
+	// buffers the stream, so clients with short idle timeouts see the
+	// connection as alive instead of aborting and retrying (which surfaced
+	// duplicate answers). The first successful call commits the downstream
+	// response head: afterwards the caller can no longer switch to an HTTP
+	// error status and terminal failures must surface as in-stream error
+	// events. Returning false (client gone, transport cannot write) stops
+	// injection for the rest of the request. Nil keeps the legacy buffering
+	// behaviour with no early head commit.
+	HoldKeepaliveSink func(payload []byte) bool
 	// ForcedEgressNodeID is an internal-only administrator probe constraint.
 	// Public inference handlers never populate it.
 	ForcedEgressNodeID uint64
@@ -1654,7 +1664,7 @@ attemptLoop:
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
 			s.selector.markSuccess(ctx, credential, lease.QuotaProbe)
 			if qualityHoldEnabled {
-				replay, verdict, peekUsage, _, firstEvidenceAt, peekErr := peekQualityStream(ctx, response.Body, qualityProtocolForOperation(operation), holdCfg)
+				replay, verdict, peekUsage, _, firstEvidenceAt, peekErr := peekQualityStream(ctx, response.Body, qualityProtocolForOperation(operation), holdCfg, input.HoldKeepaliveSink)
 				peekFirstEvidenceAt = firstEvidenceAt
 				if peekErr != nil {
 					if replay != nil {

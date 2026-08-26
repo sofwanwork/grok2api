@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -458,8 +459,13 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
 	requestIDValue, _ := requestID.(string)
-	if hosted := declaredHostedTools(body); len(hosted) > 0 {
+	hosted := declaredHostedTools(body)
+	if len(hosted) > 0 {
 		c.Set(hostedToolsContextKey, hosted)
+	}
+	var preamble *streamPreamble
+	if request.Stream {
+		preamble = newStreamPreamble(c.Writer, streamProtocolChat, nil, len(hosted) > 0)
 	}
 	result, err := h.gateway.CreateChatCompletion(c.Request.Context(), gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
@@ -470,12 +476,17 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 		Method:                    c.Request.Method,
 		Path:                      c.Request.URL.Path,
 		Headers:                   c.Request.Header.Clone(),
+		HoldKeepaliveSink:         preamble.keepalive,
 	})
 	if err != nil {
+		if preambleCommitted(preamble) {
+			writeCommittedStreamError(c, preamble, err)
+			return
+		}
 		writeGatewayError(c, err)
 		return
 	}
-	h.writeResult(c, result, request.Stream, streamProtocolChat)
+	h.writeResult(c, result, request.Stream, streamProtocolChat, preamble)
 }
 
 func (h *Handler) createMessage(c *gin.Context) {
@@ -506,8 +517,13 @@ func (h *Handler) createMessage(c *gin.Context) {
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
 	requestIDValue, _ := requestID.(string)
-	if hosted := declaredHostedTools(body); len(hosted) > 0 {
+	hosted := declaredHostedTools(body)
+	if len(hosted) > 0 {
 		c.Set(hostedToolsContextKey, hosted)
+	}
+	var preamble *streamPreamble
+	if request.Stream {
+		preamble = newStreamPreamble(c.Writer, streamProtocolAnthropic, nil, len(hosted) > 0)
 	}
 	result, err := h.gateway.CreateMessage(c.Request.Context(), gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
@@ -518,12 +534,17 @@ func (h *Handler) createMessage(c *gin.Context) {
 		Method:                    c.Request.Method,
 		Path:                      c.Request.URL.Path,
 		Headers:                   c.Request.Header.Clone(),
+		HoldKeepaliveSink:         preamble.keepalive,
 	})
 	if err != nil {
+		if preambleCommitted(preamble) {
+			writeCommittedStreamError(c, preamble, err)
+			return
+		}
 		writeGatewayAnthropicError(c, err)
 		return
 	}
-	h.writeAnthropicResult(c, result, request.Stream)
+	h.writeAnthropicResult(c, result, request.Stream, preamble)
 }
 
 func (h *Handler) generateImage(c *gin.Context) {
@@ -590,7 +611,7 @@ func (h *Handler) generateImage(c *gin.Context) {
 		writeGatewayError(c, err)
 		return
 	}
-	h.writeResult(c, result, request.Stream, streamProtocolImage)
+	h.writeResult(c, result, request.Stream, streamProtocolImage, nil)
 }
 
 func (h *Handler) writeMediaResult(c *gin.Context, result *gateway.Result) {
@@ -679,6 +700,134 @@ func setResponseWriteDeadline(writer http.ResponseWriter) error {
 		return nil
 	}
 	return err
+}
+
+// streamPreamble commits the downstream SSE response head before the gateway
+// buffers a quality-hold stream, then serves as the keepalive sink. The head
+// is committed at most once (first successful keepalive tick): afterwards the
+// response status can no longer change, so gateway failures must surface as
+// in-stream error events instead of an HTTP error status. Keepalive comments
+// are plain SSE comments — ignored by every SSE parser, invisible in message
+// content, but enough traffic to defeat short client idle timeouts.
+type streamPreamble struct {
+	writer      gin.ResponseWriter
+	protocol    streamProtocol
+	hostedTools bool
+	headers     map[string][]string
+	once        sync.Once
+	committed   bool
+	failed      bool
+}
+
+func newStreamPreamble(writer gin.ResponseWriter, protocol streamProtocol, upstreamHeaders http.Header, hostedTools bool) *streamPreamble {
+	return &streamPreamble{writer: writer, protocol: protocol, hostedTools: hostedTools, headers: copyHeadersForPreamble(upstreamHeaders)}
+}
+
+// copyHeadersForPreamble selects the hop-by-hop-safe subset an SSE head needs.
+// Content-Length is deliberately dropped: the body is unbounded.
+func copyHeadersForPreamble(source http.Header) map[string][]string {
+	excluded := map[string]struct{}{
+		"connection": {}, "content-length": {}, "keep-alive": {}, "proxy-authenticate": {},
+		"proxy-authorization": {}, "set-cookie": {}, "te": {}, "trailer": {},
+		"transfer-encoding": {}, "upgrade": {}, "x-models-etag": {},
+	}
+	for _, value := range source.Values("Connection") {
+		for name := range strings.SplitSeq(value, ",") {
+			name = strings.ToLower(strings.TrimSpace(name))
+			if name != "" {
+				excluded[name] = struct{}{}
+			}
+		}
+	}
+	copied := make(map[string][]string)
+	for name, values := range source {
+		lower := strings.ToLower(name)
+		if _, skip := excluded[lower]; skip {
+			continue
+		}
+		copied[name] = append([]string(nil), values...)
+	}
+	// The gateway streaming contract is always SSE downstream.
+	copied["Content-Type"] = []string{"text/event-stream; charset=utf-8"}
+	copied["Cache-Control"] = []string{"no-cache"}
+	return copied
+}
+
+// commit writes the response head exactly once. It reports whether the head
+// was newly committed.
+func (p *streamPreamble) commit() bool {
+	if p == nil {
+		return false
+	}
+	newlyCommitted := false
+	p.once.Do(func() {
+		for name, values := range p.headers {
+			for _, value := range values {
+				p.writer.Header().Add(name, value)
+			}
+		}
+		// Announce the hosted-tool warning trailer before any bytes are
+		// written, mirroring the non-preamble path.
+		if p.hostedTools {
+			p.writer.Header().Add("Trailer", hostedToolWarningTrailer)
+		}
+		p.writer.WriteHeader(http.StatusOK)
+		newlyCommitted = true
+		p.committed = true
+	})
+	return newlyCommitted
+}
+
+// keepalive writes one SSE comment and flushes it. It is the sink handed to
+// the gateway quality hold; false means stop injecting.
+func (p *streamPreamble) keepalive(payload []byte) bool {
+	if p == nil || p.failed {
+		return false
+	}
+	if !p.commit() {
+		// A previous commit attempt already ran (successfully or not).
+		// Keepalive ticks after a failed commit cannot proceed.
+		if !p.committed {
+			return false
+		}
+	}
+	if err := setResponseWriteDeadline(p.writer); err != nil {
+		p.failed = true
+		return false
+	}
+	if _, err := p.writer.Write(payload); err != nil {
+		p.failed = true
+		return false
+	}
+	p.writer.Flush()
+	return true
+}
+
+// preambleCommitted reports whether the early SSE head has already reached
+// the client (keepalive tick fired at least once).
+func preambleCommitted(p *streamPreamble) bool {
+	return p != nil && p.committed
+}
+
+// writeCommittedStreamError surfaces a terminal gateway failure after the SSE
+// head is already committed: an HTTP error status would be ignored by the
+// client, so the failure is framed as a protocol in-stream error event and
+// the stream is closed with the protocol's terminal sequence.
+func writeCommittedStreamError(c *gin.Context, preamble *streamPreamble, err error) {
+	if preamble == nil || preamble.failed {
+		return
+	}
+	trailer := streamAbortTrailer(preamble.protocol, err, responseMetadata{}, &responsesCompatState{})
+	if len(trailer) == 0 {
+		return
+	}
+	if err := setResponseWriteDeadline(c.Writer); err != nil {
+		return
+	}
+	if _, writeErr := c.Writer.Write(trailer); writeErr != nil {
+		return
+	}
+	c.Writer.Flush()
 }
 
 // writeMediaBody binds the validated non-HTML content type before emitting the
@@ -829,7 +978,7 @@ func (h *Handler) editImage(c *gin.Context) {
 		writeGatewayError(c, err)
 		return
 	}
-	h.writeResult(c, result, request.Stream, streamProtocolImage)
+	h.writeResult(c, result, request.Stream, streamProtocolImage, nil)
 }
 
 func requestIdentity(c *gin.Context) (clientkeydomain.Key, string, bool) {
@@ -1297,8 +1446,13 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 	}
 	requestID, _ := c.Get(middleware.RequestIDKey)
 	requestIDValue, _ := requestID.(string)
-	if hosted := declaredHostedTools(body); len(hosted) > 0 {
+	hosted := declaredHostedTools(body)
+	if len(hosted) > 0 {
 		c.Set(hostedToolsContextKey, hosted)
+	}
+	var preamble *streamPreamble
+	if request.Stream && !compact {
+		preamble = newStreamPreamble(c.Writer, streamProtocolResponses, nil, len(hosted) > 0)
 	}
 	input := gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
@@ -1309,6 +1463,7 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 		Method:                    c.Request.Method,
 		Path:                      c.Request.URL.Path,
 		Headers:                   c.Request.Header.Clone(),
+		HoldKeepaliveSink:         preamble.keepalive,
 	}
 	var result *gateway.Result
 	if compact {
@@ -1317,10 +1472,14 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 		result, err = h.gateway.CreateResponse(c.Request.Context(), input)
 	}
 	if err != nil {
+		if preambleCommitted(preamble) {
+			writeCommittedStreamError(c, preamble, err)
+			return
+		}
 		writeGatewayError(c, err)
 		return
 	}
-	h.writeResponsesResult(c, result, request.Stream && !compact, request.Model)
+	h.writeResponsesResult(c, result, request.Stream && !compact, request.Model, preamble)
 }
 
 func isJSONRequest(c *gin.Context) bool {
@@ -1376,22 +1535,22 @@ func (h *Handler) handleOwnedResource(c *gin.Context, deleteResource bool) {
 		writeGatewayError(c, err)
 		return
 	}
-	h.writeResult(c, result, false, streamProtocolResponses)
+	h.writeResult(c, result, false, streamProtocolResponses, nil)
 }
 
-func (h *Handler) writeResult(c *gin.Context, result *gateway.Result, stream bool, protocol streamProtocol) {
-	h.writeProtocolResult(c, result, stream, false, protocol, "")
+func (h *Handler) writeResult(c *gin.Context, result *gateway.Result, stream bool, protocol streamProtocol, preamble *streamPreamble) {
+	h.writeProtocolResult(c, result, stream, false, protocol, "", preamble)
 }
 
-func (h *Handler) writeResponsesResult(c *gin.Context, result *gateway.Result, stream bool, fallbackModel string) {
-	h.writeProtocolResult(c, result, stream, false, streamProtocolResponses, fallbackModel)
+func (h *Handler) writeResponsesResult(c *gin.Context, result *gateway.Result, stream bool, fallbackModel string, preamble *streamPreamble) {
+	h.writeProtocolResult(c, result, stream, false, streamProtocolResponses, fallbackModel, preamble)
 }
 
-func (h *Handler) writeAnthropicResult(c *gin.Context, result *gateway.Result, stream bool) {
-	h.writeProtocolResult(c, result, stream, true, streamProtocolAnthropic, "")
+func (h *Handler) writeAnthropicResult(c *gin.Context, result *gateway.Result, stream bool, preamble *streamPreamble) {
+	h.writeProtocolResult(c, result, stream, true, streamProtocolAnthropic, "", preamble)
 }
 
-func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, stream, anthropic bool, protocol streamProtocol, fallbackModel string) {
+func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, stream, anthropic bool, protocol streamProtocol, fallbackModel string, preamble *streamPreamble) {
 	usage := gateway.Usage{}
 	responseID := ""
 	errorCode := ""
@@ -1400,6 +1559,10 @@ func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, st
 	if isUpstreamCredentialStatus(result.StatusCode) {
 		errorCode = "upstream_unavailable"
 		clientCode := readCredentialErrorCode(result.StatusCode, result.Body)
+		if preambleCommitted(preamble) {
+			writeCommittedStreamError(c, preamble, &gateway.UpstreamFailure{HTTPStatus: http.StatusServiceUnavailable, Code: clientCode, PublicMessage: credentialErrorMessage(clientCode)})
+			return
+		}
 		if anthropic {
 			writeAnthropicError(c, http.StatusServiceUnavailable, "overloaded_error", credentialErrorMessage(clientCode), clientCode)
 		} else {
@@ -1437,16 +1600,25 @@ func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, st
 		writeOpenAIError(c, http.StatusBadGateway, "response_too_large", "Respons upstream melebihi had keselamatan proksi")
 		return
 	}
-	copyHeaders(c.Writer.Header(), result.Header)
+	headCommitted := preambleCommitted(preamble)
+	if !headCommitted {
+		copyHeaders(c.Writer.Header(), result.Header)
+	}
 	// Hosted-tool execution is only provable from end-of-response usage, so the
 	// diagnostic must be announced as a trailer before any bytes are written.
 	declaredHosted, _ := c.Get(hostedToolsContextKey)
 	hostedTools, _ := declaredHosted.([]string)
-	if len(hostedTools) > 0 {
+	if len(hostedTools) > 0 && !headCommitted {
 		c.Writer.Header().Add("Trailer", hostedToolWarningTrailer)
 	}
-	c.Status(result.StatusCode)
-	if result.StatusCode >= 400 {
+	if !headCommitted {
+		c.Status(result.StatusCode)
+	} else {
+		// The early SSE head already committed a 200; the rest of this
+		// response must stay on the wire as stream events.
+		c.Status(http.StatusOK)
+	}
+	if result.StatusCode >= 400 && !headCommitted {
 		errorCode = "upstream_error"
 	}
 	if len(hostedTools) > 0 {
@@ -1629,7 +1801,15 @@ func writeStreamAbortTrailer(writer gin.ResponseWriter, protocol streamProtocol,
 
 func streamAbortTrailer(protocol streamProtocol, cause error, meta responseMetadata, compat *responsesCompatState) []byte {
 	code, message := "upstream_stream_interrupted", "Respons berstrim upstream terganggu"
+	var upstreamFailure *gateway.UpstreamFailure
 	switch {
+	case errors.As(cause, &upstreamFailure) && upstreamFailure.Code != "":
+		// A classified gateway failure (quality degradation, quota, transport)
+		// must surface its own code/message instead of the generic interrupt.
+		code, message = upstreamFailure.Code, upstreamFailure.PublicMessage
+		if message == "" {
+			message = code
+		}
 	case errors.Is(cause, neterror.ErrUpstreamStreamIdleTimeout):
 		code, message = "upstream_stream_idle_timeout", "Respons berstrim upstream tiada data terlalu lama"
 	case errors.Is(cause, errUpstreamStreamIncomplete):
@@ -1811,13 +1991,15 @@ type responseInspector struct {
 const (
 	reasoningStartSSEComment    = ": grok2api-reasoning-start"
 	reasoningEvidenceSSEComment = ": grok2api-reasoning-evidence"
-	reasoningKeepaliveComment   = ": grok2api-keepalive"
 )
 
+// internalSSEMarkers are stripped from the client-visible stream. The hold
+// keepalive comment is intentionally absent: since the early-head fix it is
+// written directly to the client (never into the upstream body), so it must
+// not be filtered.
 var internalSSEMarkers = [][]byte{
 	[]byte(reasoningStartSSEComment + "\n\n"),
 	[]byte(reasoningEvidenceSSEComment + "\n\n"),
-	[]byte(reasoningKeepaliveComment + "\n\n"),
 }
 
 func (i *responseInspector) Inspect(chunk []byte) {

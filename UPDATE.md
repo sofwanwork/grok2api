@@ -12,7 +12,7 @@
 | Bookmark patches | `local-patches` (kini sejajar dengan merge `bed7232d` — di-refresh 22 Ogos, jangan biar stale lagi) |
 | Tag fallback | `backup-pre-merge-v315` (keadaan pra-merge v3.1.5, patch #14); `backup-pre-merge-20260822` |
 | Base upstream terakhir | `62d2775c` = tag `v3.1.5` (25 Ogos 2026) — **merged 25 Ogos 2026** |
-| Image Docker | `grok2api:local-keepalive` (v3.1.5 + patch #1-15); fallback: `grok2api:local-v315`, `grok2api:local-ttft`, `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
+| Image Docker | `grok2api:local-keepalive-v2` (v3.1.5 + patch #1-15; #15 dibina semula 26 Ogos — early SSE head + keepalive ke client); fallback: `grok2api:local-keepalive` (v1 #15, tak berfungsi), `grok2api:local-v315`, `grok2api:local-ttft`, `grok2api:local-earlythink`, `grok2api:local-salvage`, `grok2api:backup-20260822` |
 | Container | `grok2api` (docker compose) |
 | Verify tool | `powershell tools/verify-patches.ps1` atau `make verify VERIFY_ARGS=-SkipLive` |
 
@@ -50,7 +50,7 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Keepalive semasa quality hold (patch #15, 25 Ogos)
+### Keepalive semasa quality hold (patch #15, 25 Ogos — dibina semula 26 Ogos sebagai v2)
 
 **Gejala:** dalam OpenCode, jawapan muncul dua kali dengan kandungan hampir
 serupa (seolah model mengulang). Audit menunjukkan pasangan request dengan
@@ -62,22 +62,52 @@ bukti thinking (fasa senyap 12–135s). Bagi client dengan idle timeout pendek
 (OpenCode), senyap sebegini kelihatan seperti sambungan mati → client abort
 dan retry → gateway memproses kedua-dua request → jawapan berganda.
 
-**Fix:** `startHoldKeepalive` menyuntik komen SSE dalaman
-(`: grok2api-keepalive`) ke dalam pump pada selang `requestRetry.holdKeepalive`
-(default 0/mati; 5s dalam config kita). Komen itu melalui scanner tanpa kesan,
-ditapis oleh `internalSSEMarkerFilter` sebelum client, dan memberitahu client
-bahawa sambungan masih hidup — OpenCode tidak lagi abort & retry.
+**Versi pertama (25 Ogos) — terbukti TIDAK berfungsi.** Suntikan ke dalam
+pump (`: grok2api-keepalive` masuk buffer `held`) tidak sampai ke client
+semasa senyap kerana (a) response HTTP hanya bermula SELEPAS peek tamat —
+sepanjang hold client belum terima headers pun; (b) untuk protokol Chat,
+marker itu juga tersenarai dalam `internalSSEMarkerFilter` dan ditapis.
+Eksperimen socket mentah: headers hanya tiba pada 67.45s (selepas fasa
+thinking), 0 keepalive sampai ke client. Bukti "tiada duplikat selepas
+patch" dalam versi awal nota ini datang dari sample kecil/kesan patch #13,
+bukan dari mekanisme keepalive.
 
-**Bukti live:** sebelum patch — 13 pasangan duplikat `input_tokens` dalam
-sehari; selepas patch — **tiada satu pun** dalam 32 request berturut,
-streaming esei panjang 3656 event/102s kekal sempurna.
+**Fix v2 (26 Ogos) — keepalive betul-betul ke client:**
+- `Input.HoldKeepaliveSink` (gateway): sink yang menerima komen keepalive
+  semasa hold. `startHoldKeepalive` menulis TERUS ke sink client pada selang
+  `requestRetry.holdKeepalive` — tidak menyentuh pump/buffer `held`, jadi
+  replay kekal byte-identical dengan upstream dan scanner tak terganggu.
+  Stop function menunggu goroutine keluar (tiada race dengan body copy).
+- `streamPreamble` (handler): commit head SSE 200 awal pada tick keepalive
+  pertama (`Content-Type: text/event-stream`, `Cache-Control: no-cache`,
+  trailer hosted-tool bila diisytiharkan). Idempotent — `WriteHeader` sekali.
+- Marker keepalive DIBUANG dari `internalSSEMarkers` — ia kini lulus ke
+  client sebagai komen SSE (semua parser SSE abaikannya; kandungan mesej
+  tidak terjejas).
+- Laluan error selepas head committed: `writeCommittedStreamError` menghantar
+  event error in-stream (`data: {"error":...}` + `[DONE]`) memakai code
+  sebenar dari `UpstreamFailure` (`streamAbortTrailer` kini map
+  `UpstreamFailure.Code`), bukan lagi `upstream_stream_interrupted` generik.
+
+**Bukti live (eksperimen socket mentah, xhigh soalan kompleks):**
+sebelum v2 — headers 67.45s, 0 keepalive; selepas v2 — headers 5.92s,
+**20 keepalive setiap ~5s sepanjang fasa senyap**, max silence gap 5.0s,
+stream penuh 175s/854KB kekal sempurna. Client dengan idle timeout ≥10s
+tidak lagi abort & retry.
 
 **Test:** `TestPeekQualityStreamHoldKeepaliveInjectsComments` (komen sampai
-dalam replay + verdict tidak terjejas) dan
-`TestPeekQualityStreamHoldKeepaliveDisabledByDefault` (tiada suntikan bila 0) —
-lulus, full suite 63 pakej 0 gagal.
+ke sink SEMASA senyap + replay bebas kontaminasi),
+`TestPeekQualityStreamHoldKeepaliveDisabledByDefault` (0 = tiada suntikan),
+`TestPeekQualityStreamHoldKeepaliveStopsWhenSinkFails` (sink gagal → berhenti
+tanpa rosakkan peek), `TestStreamPreambleKeepaliveCommitsHeadAndWritesComments`,
+`TestStreamPreambleAnnouncesHostedToolTrailer`,
+`TestWriteCommittedStreamErrorEmitsInStreamError`,
+`TestWriteProtocolResultContinuesAfterPreamble` — lulus `-count=2`, full
+suite 63 pakej 0 gagal.
 
-**Image:** `grok2api:local-keepalive` (= local-v315 + patch #15).
+**Image:** `grok2api:local-keepalive-v2` (backup `.env` pra-v2 dalam
+`../backups/.env.pre-keepalive-v2.bak`; image lama `local-keepalive` kekal
+sebagai fallback).
 
 ## Merge 22 Ogos 2026 — apa yang berlaku
 

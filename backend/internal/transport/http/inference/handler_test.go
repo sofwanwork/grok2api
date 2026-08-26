@@ -407,9 +407,9 @@ func TestDirectUpstreamCredentialResponsesAreRewritten(t *testing.T) {
 				case tc.media:
 					handler.writeMediaResult(c, result)
 				case tc.anthropic:
-					handler.writeAnthropicResult(c, result, false)
+					handler.writeAnthropicResult(c, result, false, nil)
 				default:
-					handler.writeResult(c, result, false, streamProtocolResponses)
+					handler.writeResult(c, result, false, streamProtocolResponses, nil)
 				}
 			})
 			recorder := httptest.NewRecorder()
@@ -443,7 +443,7 @@ func TestNonStreamingEmptyAndIdleResponsesFailBeforeCommittingSuccess(t *testing
 				Finalize: func(_ gateway.Usage, _, code string) { finalCode = code },
 			}
 			router := gin.New()
-			router.GET("/", func(c *gin.Context) { handler.writeResult(c, result, false, streamProtocolResponses) })
+			router.GET("/", func(c *gin.Context) { handler.writeResult(c, result, false, streamProtocolResponses, nil) })
 			recorder := httptest.NewRecorder()
 			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
 			if recorder.Code != test.wantStatus || finalCode != test.wantCode || !strings.Contains(recorder.Body.String(), `"`+test.wantCode+`"`) {
@@ -1528,7 +1528,7 @@ func TestWriteResultRecordsStreamFailureDiagnostic(t *testing.T) {
 	}
 	router := gin.New()
 	router.GET("/", func(c *gin.Context) {
-		handler.writeResult(c, result, true, streamProtocolResponses)
+		handler.writeResult(c, result, true, streamProtocolResponses, nil)
 	})
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -1733,5 +1733,104 @@ func TestEditAndExtendVideoRequestValidation(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("extend bad duration status = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// --- Patch #15 (v2): streamPreamble / early SSE head ---
+
+// The keepalive sink must commit the SSE head on first use and write plain
+// SSE comments afterwards. Each write must be visible in the recorder body.
+func TestStreamPreambleKeepaliveCommitsHeadAndWritesComments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	preamble := newStreamPreamble(c.Writer, streamProtocolChat, nil, false)
+	payload := []byte(": grok2api-keepalive\n\n")
+	if !preamble.keepalive(payload) {
+		t.Fatal("first keepalive write failed")
+	}
+	if !preambleCommitted(preamble) {
+		t.Fatal("head not committed after first keepalive")
+	}
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", recorder.Code)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "text/event-stream; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want SSE", got)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, ": grok2api-keepalive") {
+		t.Fatalf("keepalive comment not written: %q", body)
+	}
+	// Second write: head must not be re-committed, comment appended.
+	if !preamble.keepalive(payload) {
+		t.Fatal("second keepalive write failed")
+	}
+	if got := strings.Count(recorder.Body.String(), ": grok2api-keepalive"); got != 2 {
+		t.Fatalf("keepalive comment count = %d, want 2", got)
+	}
+}
+
+// A preamble with hosted tools must announce the diagnostic trailer header.
+func TestStreamPreambleAnnouncesHostedToolTrailer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	preamble := newStreamPreamble(c.Writer, streamProtocolChat, nil, true)
+	if !preamble.keepalive([]byte(": grok2api-keepalive\n\n")) {
+		t.Fatal("keepalive write failed")
+	}
+	if got := recorder.Header().Get("Trailer"); got != hostedToolWarningTrailer {
+		t.Fatalf("Trailer = %q, want %q", got, hostedToolWarningTrailer)
+	}
+}
+
+// After the head is committed, a terminal gateway failure must surface as an
+// in-stream error event (protocol chat: data: {"error":...} + [DONE]), not an
+// HTTP error status.
+func TestWriteCommittedStreamErrorEmitsInStreamError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	preamble := newStreamPreamble(c.Writer, streamProtocolChat, nil, false)
+	if !preamble.keepalive([]byte(": grok2api-keepalive\n\n")) {
+		t.Fatal("keepalive write failed")
+	}
+	writeCommittedStreamError(c, preamble, &gateway.UpstreamFailure{HTTPStatus: http.StatusServiceUnavailable, Code: "quality_degraded", PublicMessage: "Respons upstream tiada penaakulan"})
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"type":"error"`) || !strings.Contains(body, "quality_degraded") {
+		t.Fatalf("in-stream error event missing: %q", body)
+	}
+	if !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("terminal [DONE] missing: %q", body)
+	}
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (head already committed)", recorder.Code)
+	}
+}
+
+// The writeProtocolResult path must not re-send headers or status after an
+// early head commit; the upstream body follows the keepalive comments.
+func TestWriteProtocolResultContinuesAfterPreamble(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	preamble := newStreamPreamble(c.Writer, streamProtocolChat, nil, false)
+	if !preamble.keepalive([]byte(": grok2api-keepalive\n\n")) {
+		t.Fatal("keepalive write failed")
+	}
+	handler := &Handler{}
+	handler.writeProtocolResult(c, &gateway.Result{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Finalize:   func(gateway.Usage, string, string) {},
+	}, true, false, streamProtocolChat, "", preamble)
+	body := recorder.Body.String()
+	if !strings.Contains(body, ": grok2api-keepalive") {
+		t.Fatalf("keepalive comment lost: %q", body)
+	}
+	if !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("body content lost after preamble: %q", body)
 	}
 }
