@@ -258,6 +258,35 @@ arahan npm secara melulu.
 **Nota:** config.yaml adalah gitignored (rahsia). Backup:
 `backups/config.yaml.windows-shell.bak`.
 
+### Persona: VERIFY BEFORE CLAIMING COMPLETE (27 Ogos)
+
+**Gejala (website ubat kurus, 26 Ogos):** model umumkan "✅ Landing page
+siap!" jam 22:56 dengan checklist penuh (SEO, responsive, BM natural) —
+padahal `tsconfig.json` tak pernah wujud (projek tak boleh compile),
+`Footer.tsx` diimport tapi tak ditulis, deps tak install, dan dia kata
+"full Next.js 15" sedangkan package.json sendiri tulis `next@14.2.5`.
+User terpercaya "siap", cuba run, dapat `'next' is not recognized`.
+Projek terbengkalai 24 jam sampai dibaiki manual.
+
+**Punca:** pattern-matching "aku dah tulis semua fail yang patut ada =
+siap". Model tak pernah run build untuk verify. Keluarga sama dengan
+hosted-tool hallucination (patch #10) — claim kerja yang tak berlaku,
+kali ni dalam bentuk "claim siap".
+
+**Fix (persona sahaja, tiada kod):** dalam kedua-dua lapisan persona:
+- Lapisan IDE (systemPromptWhenClientHasSystem): bullet "NEVER claim a
+  project or feature is complete ... without verifying it: run the
+  build/dev command yourself, or if impossible, list exact files created
+  and say plainly which verification is still pending. A checklist of
+  what you wrote is not completion."
+- Persona penuh (systemPrompt): section "VERIFY BEFORE CLAIMING
+  COMPLETE" — completion requires running build/dev/tests in-session;
+  kalau tak dapat, nyatakan jelas apa belum diverifikasi; jangan serah
+  manual install steps kepada user melainkan betul-betul tak mampu.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.pre-verify-complete.20260827_004140.bak`.
+
 ### Persona: `&&` ParseError guard + OpenCode shell pwsh (26 Ogos, malam)
 
 **Gejala (website ubat kurus):** model (grok2api/grok-4.6-xhigh) cuba
