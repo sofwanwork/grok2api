@@ -73,9 +73,15 @@ func (c *streamConverter) toolDeltaChat(itemID, delta string) error {
 	if !ok {
 		return nil
 	}
-	tool.SentArgs = true
+	// Patch #21 v2: buffer arguments instead of forwarding them live.
+	// Progressive argument deltas would deliver a tiny broken `timeout`
+	// straight to the client before the guard could rewrite it at .done —
+	// and HTTP tool-call contract does not need progressive args (clients
+	// act on finish_reason=tool_calls with the complete arguments string).
+	tool.SentArgs = false
+	tool.Arguments += delta
 	c.tools[itemID] = tool
-	return c.chatDelta(map[string]any{"tool_calls": []any{map[string]any{"index": tool.Index, "function": map[string]any{"arguments": delta}}}})
+	return nil
 }
 
 func (c *streamConverter) toolArgumentsDoneChat(itemID, arguments string) error {
@@ -84,8 +90,13 @@ func (c *streamConverter) toolArgumentsDoneChat(itemID, arguments string) error 
 		return nil
 	}
 	if !tool.SentArgs {
+		// Gabungkan delta buffered dengan arguments done yang mungkin kosong.
+		arguments = strings.TrimSpace(arguments)
 		if arguments == "" {
-			arguments = tool.Arguments
+			arguments = strings.TrimSpace(tool.Arguments)
+		} else if strings.TrimSpace(tool.Arguments) != "" {
+			// Upstream may have buffered partial deltas AND a done payload —
+			// the done payload is authoritative (it carries the final value).
 		}
 		if arguments != "" {
 			// Patch #21 lapisan B: bila model jana timeout terlalu kecil untuk
