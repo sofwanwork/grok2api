@@ -467,12 +467,13 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 	// last turn claims a file was written/replaced but carries no tool
 	// calls, flag it on the wire so the client sees the warning explicitly
 	// instead of trusting a silent false claim.
-	if gateway.HallucinatedEditClaim(body) {
+	hallucinated := gateway.HallucinatedEditClaim(body)
+	if hallucinated {
 		c.Set(hallucinatedEditContextKey, true)
 	}
 	var preamble *streamPreamble
 	if request.Stream {
-		preamble = newStreamPreamble(c.Writer, streamProtocolChat, nil, len(hosted) > 0)
+		preamble = newStreamPreamble(c.Writer, streamProtocolChat, nil, len(hosted) > 0).withHallucinatedEdit(hallucinated)
 	}
 	result, err := h.gateway.CreateChatCompletion(c.Request.Context(), gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
@@ -528,9 +529,13 @@ func (h *Handler) createMessage(c *gin.Context) {
 	if len(hosted) > 0 {
 		c.Set(hostedToolsContextKey, hosted)
 	}
+	hallucinated := gateway.HallucinatedEditClaim(body)
+	if hallucinated {
+		c.Set(hallucinatedEditContextKey, true)
+	}
 	var preamble *streamPreamble
 	if request.Stream {
-		preamble = newStreamPreamble(c.Writer, streamProtocolAnthropic, nil, len(hosted) > 0)
+		preamble = newStreamPreamble(c.Writer, streamProtocolAnthropic, nil, len(hosted) > 0).withHallucinatedEdit(hallucinated)
 	}
 	result, err := h.gateway.CreateMessage(c.Request.Context(), gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
@@ -717,17 +722,25 @@ func setResponseWriteDeadline(writer http.ResponseWriter) error {
 // are plain SSE comments — ignored by every SSE parser, invisible in message
 // content, but enough traffic to defeat short client idle timeouts.
 type streamPreamble struct {
-	writer      gin.ResponseWriter
-	protocol    streamProtocol
-	hostedTools bool
-	headers     map[string][]string
-	once        sync.Once
-	committed   bool
-	failed      bool
+	writer           gin.ResponseWriter
+	protocol         streamProtocol
+	hostedTools      bool
+	hallucinatedEdit bool
+	headers          map[string][]string
+	once             sync.Once
+	committed        bool
+	failed           bool
 }
 
 func newStreamPreamble(writer gin.ResponseWriter, protocol streamProtocol, upstreamHeaders http.Header, hostedTools bool) *streamPreamble {
 	return &streamPreamble{writer: writer, protocol: protocol, hostedTools: hostedTools, headers: copyHeadersForPreamble(upstreamHeaders)}
+}
+
+// withHallucinatedEdit menandai preamble supaya trailer hallucinated-edit
+// turut diisytiharkan apabila head di-commit (patch #24 v2 — streaming path).
+func (p *streamPreamble) withHallucinatedEdit(flag bool) *streamPreamble {
+	p.hallucinatedEdit = flag
+	return p
 }
 
 // copyHeadersForPreamble selects the hop-by-hop-safe subset an SSE head needs.
@@ -777,6 +790,12 @@ func (p *streamPreamble) commit() bool {
 		// written, mirroring the non-preamble path.
 		if p.hostedTools {
 			p.writer.Header().Add("Trailer", hostedToolWarningTrailer)
+		}
+		// Patch #24 v2: announce the hallucinated-edit trailer in the
+		// streaming preamble too — without this, streaming responses never
+		// carry the warning even though the detector fired.
+		if p.hallucinatedEdit {
+			p.writer.Header().Add("Trailer", hallucinatedEditWarningTrailer)
 		}
 		p.writer.WriteHeader(http.StatusOK)
 		newlyCommitted = true
@@ -1457,9 +1476,13 @@ func (h *Handler) handleCreate(c *gin.Context, compact bool) {
 	if len(hosted) > 0 {
 		c.Set(hostedToolsContextKey, hosted)
 	}
+	hallucinated := gateway.HallucinatedEditClaim(body)
+	if hallucinated {
+		c.Set(hallucinatedEditContextKey, true)
+	}
 	var preamble *streamPreamble
 	if request.Stream && !compact {
-		preamble = newStreamPreamble(c.Writer, streamProtocolResponses, nil, len(hosted) > 0)
+		preamble = newStreamPreamble(c.Writer, streamProtocolResponses, nil, len(hosted) > 0).withHallucinatedEdit(hallucinated)
 	}
 	input := gateway.Input{
 		RequestID: requestIDValue, ClientKey: clientKey, PublicModel: request.Model,
