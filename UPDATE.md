@@ -50,7 +50,28 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Question tool options hint (patch #22, 27 Ogos)
+### Question tool options hint v2 (patch #22 v2, 27 Ogos)
+
+**Isu (pemerhatian user):** selepas patch #22, cadangan dalam tool
+question jadi "pendek perkataan" — label sangat ringkas ("HTML +
+Tailwind", "Next.js", "Plain CSS") dan teks soalan jadi lebih
+singkat berbanding gaya sebelum patch (yang ada contoh penuh dalam
+teks soalan, cth. "Pilih mana dari 3 cadangan landing page: 1. ...
+2. ... 3. ...").
+
+**Punca:** hint patch #22 mengajar "label: short text (1-5 words)" —
+model ikut dengan tepat, jadi cadangan berpindah ke description
+field dan soalan jadi lebih ringkas. Ia trade-off yang tidak
+dijangka.
+
+**Fix (v2):** tambah satu ayat dalam hint supaya teks soalan masih
+mengandungi cadangan lengkap — *"The question TEXT should still
+explain your recommendations fully (what you recommend and why) —
+options are the clickable shortcut, not a replacement for a complete
+explanation."* Label kekal pendek (untuk butang klik), options
+berstruktur kekal, tapi penjelasan dalam soalan kembali penuh.
+
+**Ujian:** 17 ujian, 0 gagal. Full suite 64 pakej, 0 gagal.
 
 **Masalah (round 4, 01:50:40):** model panggil tool `question` dengan
 soalan yang bagus — tapi medan `options` kosong `[]`; semua cadangan
