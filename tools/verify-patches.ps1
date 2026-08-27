@@ -40,7 +40,8 @@ $patches = @(
     @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "errQualityHeaderBudget|qualityHeaderBudget"; d = "Patch 20: early header abort (instrument-first)"; regex = $true },
     @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "ApplyTimeoutHint|EnlargeToolTimeout"; d = "Patch 21: bash tool timeout guard (request hint + response raise)"; regex = $true },
     @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "questionHint|ApplySchemaHints"; d = "Patch 22: question tool options hint (structured choices)"; regex = $true },
-    @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "DegradeCircuitThreshold|degradeCircuitOpen"; d = "Patch 23: degrade retry circuit-breaker (withhold storm fail-open)"; regex = $true }
+    @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "DegradeCircuitThreshold|degradeCircuitOpen"; d = "Patch 23: degrade retry circuit-breaker (withhold storm fail-open)"; regex = $true },
+    @{ f = "backend/internal/application/gateway/hallucinated_edit.go"; m = "HallucinatedEditClaim|editClaimPatterns"; d = "Patch 24: hallucinated-edit detector (claim-tulis tanpa tool calls)"; regex = $true }
 )
 foreach ($p in $patches) {
     if (-not (Test-Path $p.f)) { Fail "$($p.d) — file missing: $($p.f)"; continue }

@@ -21,6 +21,19 @@ const hostedToolNotExecutedWarning = "hosted_tool_not_executed"
 // handler to the response writer without widening five writer signatures.
 const hostedToolsContextKey = "grok2api_declared_hosted_tools"
 
+// hallucinatedEditWarningTrailer reports assistant text claiming a file was
+// written/replaced while the turn carried no tool calls (patch #24). The
+// claim is almost certainly false; the client should not trust it.
+const hallucinatedEditWarningTrailer = "X-Grok2API-Warning"
+
+// hallucinatedEditWarning is the trailer value and log code emitted when the
+// hallucinated-edit flag is set.
+const hallucinatedEditWarning = "hallucinated_edit_claim"
+
+// hallucinatedEditContextKey carries the hallucinated-edit flag from the
+// request handler to the response writer.
+const hallucinatedEditContextKey = "grok2api_hallucinated_edit_claim"
+
 // maxHostedToolInspectionBytes bounds tool parsing. Requests larger than this
 // are dominated by conversation history, not tool declarations, and the
 // diagnostic is advisory only.

@@ -78,7 +78,46 @@ tinggi untuk gain rendah. Hint di Lapisan A adalah seimbang yang betul.
 satu body + read untouched); 17 ujian total. Full suite 64 pakej,
 0 gagal.
 
-### Degrade retry circuit-breaker (patch #23, 27 Ogos)
+### Hallucinated-edit detector (patch #24, 27 Ogos)
+
+**Masalah (round 6, 07:40–07:58):** model claim DUA KALI berturut-turut
+"Wah gila, landing page dah siap guna. Aku dah replace dengan design
+yang aku buat" dan "aku dah edit fail page.tsx dengan kod yang aku
+tulis tadi" — sementara **tiada SATU PUN tool write/edit call** dalam
+keseluruhan sesi (42 parts). Tiada build, tiada verify, tiada fail
+disentuh. User perasan "something wrong dengan gateway" sebab jawapan
+itu bohong tetapi kelihatan sah.
+
+Ini ialah claim-hallucination yang berbeza dari insiden 26 Ogos
+("siap" tanpa tsconfig/Footer): kali ini model berbohong **secara
+eksplisit tentang penggunaan tool** — dia naratifkan kerja yang
+tidak pernah berlaku, dan tiada apa dalam protokol yang memaksa dia
+jujur.
+
+**Reka bentuk (`gateway/hallucinated_edit.go`):**
+- `HallucinatedEditClaim(body)` mengimbas history request OpenAI Chat
+  ({"messages":[...]}): jika teks assistant terkini mengandungi frasa
+  klaim-tulis (BM + English: "dah siap", "dah edit", "dah replace",
+  "aku dah replace", "I've written", "I've edited", dll.) **tanpa
+  tool_calls dalam mesej assistant yang sama** → flag.
+- Frasa konservatif: "Done!", "Selesai.", "ok" tidak disertakan
+  (false-positive tinggi untuk jawapan pendek sah).
+- User prompt dan turn dengan tool_calls tidak di-flag.
+- Wire: `inference/handler.go` — trailer `X-Grok2API-Warning:
+  hallucinated_edit_claim` diumumkan sebelum apa-apa byte ditulis,
+  supaya client menerima amaran seiring response, bukan selepas
+  mempercayai claim itu.
+- Tiada perubahan pada response body; ini advisory sahaja, macam
+  patch #10 (hosted-tool).
+
+**Ujian:** 10 ujian (BM claim, English claim, claim dengan tool_calls,
+non-claim, user prompt, content blocks, latest-only, invalid JSON,
+no-messages, Done exclusion note). Full suite 64 pakej, 0 gagal.
+
+**Nota:** patch ini tidak mengubah response; ia hanya membuat bohong
+itu nampak. Untuk auto-remediation (cth. arahkan model untuk benar-
+benar buat edit), itu memerlukan pengubahsuaian prompt yang lebih
+halus — keputusan itu ditinggalkan untuk pemerhatian masa depan.
 
 **Masalah (round 5, fasa refine 19:27–19:32):** selepas model claim
 "✅ Siap" pada 03:14, fasa "cantikkan design" menghantar request refine

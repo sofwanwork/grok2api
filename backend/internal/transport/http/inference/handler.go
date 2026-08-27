@@ -463,6 +463,13 @@ func (h *Handler) createChatCompletion(c *gin.Context) {
 	if len(hosted) > 0 {
 		c.Set(hostedToolsContextKey, hosted)
 	}
+	// Patch #24: hallucinated-edit detection. If the assistant text in the
+	// last turn claims a file was written/replaced but carries no tool
+	// calls, flag it on the wire so the client sees the warning explicitly
+	// instead of trusting a silent false claim.
+	if gateway.HallucinatedEditClaim(body) {
+		c.Set(hallucinatedEditContextKey, true)
+	}
 	var preamble *streamPreamble
 	if request.Stream {
 		preamble = newStreamPreamble(c.Writer, streamProtocolChat, nil, len(hosted) > 0)
@@ -1610,6 +1617,13 @@ func (h *Handler) writeProtocolResult(c *gin.Context, result *gateway.Result, st
 	hostedTools, _ := declaredHosted.([]string)
 	if len(hostedTools) > 0 && !headCommitted {
 		c.Writer.Header().Add("Trailer", hostedToolWarningTrailer)
+	}
+	// Patch #24: hallucinated-edit claims are detectable from the request
+	// body before any generation — the trailer is announced now so the client
+	// receives the warning alongside the response, not after trusting the
+	// claim.
+	if claimed, _ := c.Get(hallucinatedEditContextKey); claimed == true && !headCommitted {
+		c.Writer.Header().Add("Trailer", hallucinatedEditWarningTrailer)
 	}
 	if !headCommitted {
 		c.Status(result.StatusCode)
