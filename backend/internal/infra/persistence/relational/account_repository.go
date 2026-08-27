@@ -463,6 +463,14 @@ func (r *AccountRepository) ListRoutingCandidates(ctx context.Context, provider 
 		if window, ok := quotaWindows[value.ID]; ok {
 			candidate.QuotaWindow = &window
 		}
+		// Patch #25: provider Grok Build tidak memuatkan account_quota_windows
+		// dalam routing — selector tidak pernah mempunyai QuotaWindow untuknya,
+		// jadi comparator quota tidak aktif dan akaun dipilih buta. Bila Billing
+		// snapshot wujud (QuotaBilling), bina QuotaWindow sintetik daripadanya
+		// supaya comparator quota berfungsi untuk Build seperti provider lain.
+		if candidate.QuotaWindow == nil && candidate.Billing != nil && value.Provider == account.ProviderBuild {
+			candidate.QuotaWindow = account.BuildBillingQuotaWindow(value, *candidate.Billing)
+		}
 		if block, ok := modelQuotaBlocks[value.ID]; ok {
 			candidate.ModelQuotaBlock = &block
 		}
@@ -506,6 +514,13 @@ func (r *AccountRepository) ListRoutingAccountBases(ctx context.Context, provide
 		}
 		if window, ok := quotaWindows[value.ID]; ok {
 			base.QuotaWindow = &window
+		}
+		// Patch #25: sama dengan ListRoutingCandidates — provider Grok Build
+		// tidak memuatkan account_quota_windows dalam routing. Bila Billing
+		// snapshot wujud, bina QuotaWindow sintetik supaya comparator quota
+		// berfungsi untuk Build (laluan layered/bases mesti konsisten).
+		if base.QuotaWindow == nil && base.Billing != nil && value.Provider == account.ProviderBuild {
+			base.QuotaWindow = account.BuildBillingQuotaWindow(value, *base.Billing)
 		}
 		if block, ok := egressLeaseBlocks[value.ID]; ok {
 			base.EgressLeaseBlock = &block

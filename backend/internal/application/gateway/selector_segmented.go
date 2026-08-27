@@ -97,14 +97,18 @@ func segmentedSelectorCohortBetter(left, right segmentedSelectorCohort) bool {
 	if left.capabilityKnown != right.capabilityKnown {
 		return left.capabilityKnown
 	}
+	// preferFreeBuild dinilai sebelum quota (konsisten dengan
+	// candidateScoreBetter patch #25) — strategi pengguna mengatasi quota
+	// awareness supaya akaun Free tidak dikalahkan oleh akaun paid hanya
+	// kerana akaun paid itu ada data quota.
+	if left.preferFreeBuild != right.preferFreeBuild {
+		return left.preferFreeBuild
+	}
 	if left.quotaAvailable != right.quotaAvailable {
 		return left.quotaAvailable
 	}
 	if left.quotaKnown != right.quotaKnown {
 		return left.quotaKnown
-	}
-	if left.preferFreeBuild != right.preferFreeBuild {
-		return left.preferFreeBuild
 	}
 	if left.tier != right.tier {
 		return left.tier < right.tier

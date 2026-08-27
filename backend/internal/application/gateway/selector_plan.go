@@ -85,6 +85,13 @@ func candidateScoreBetter(values []account.RoutingCandidate, leftScore, rightSco
 	if leftKnown != rightKnown {
 		return leftKnown
 	}
+	// preferFreeBuild ialah strategi pengguna — ia dinilai sebelum quota
+	// supaya akaun Free yang disahkan tidak dikalahkan oleh akaun paid hanya
+	// kerana akaun paid itu ada data quota. Akaun Free tanpa QuotaWindow
+	// (tiada data) bukan "tiada quota"; dia hanya "tiada data".
+	if leftScore.preferFreeBuild != rightScore.preferFreeBuild {
+		return leftScore.preferFreeBuild
+	}
 	// A synced remote window with remaining quota is a stronger routing signal
 	// than priority or tier. Unknown windows remain eligible as a fallback, but
 	// cannot displace an account whose requested mode is known to be available.
@@ -93,9 +100,6 @@ func candidateScoreBetter(values []account.RoutingCandidate, leftScore, rightSco
 	}
 	if leftScore.quotaKnown != rightScore.quotaKnown {
 		return leftScore.quotaKnown
-	}
-	if leftScore.preferFreeBuild != rightScore.preferFreeBuild {
-		return leftScore.preferFreeBuild
 	}
 	if leftScore.tier != rightScore.tier {
 		return leftScore.tier < rightScore.tier

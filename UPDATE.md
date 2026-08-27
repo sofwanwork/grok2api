@@ -147,7 +147,50 @@ tinggi untuk gain rendah. Hint di Lapisan A adalah seimbang yang betul.
 satu body + read untouched); 17 ujian total. Full suite 64 pakej,
 0 gagal.
 
-### Hallucinated-edit detector (patch #24, 27 Ogos)
+### Build quota awareness in routing (patch #25, 27 Ogos)
+
+**Masalah (data pool 27 Ogos):** akaun 4 (grok_build) hang 300s pada
+header HTTP/2 kerana upstream throttle senyap apabila quota habis
+(usagePercent 164.9% dalam window 22-29 Ogos). Selector terus memilihnya
+kerana `failureCount: 0` dan `priority: 1` — dan 169 akaun lain
+dibiarkan tidak digunakan kerana selector **tiada QuotaWindow untuk
+provider Build sama sekali**.
+
+**Punca reka bentuk (disahkan dalam kod):** `getRoutingQuotaWindows`
+hanya memuat `account_quota_windows` untuk provider Web; Build
+menggunakan `QuotaBilling` (`account_billing_snapshots`) tetapi tiada
+mekanisme menukarkannya menjadi `QuotaWindow` untuk routing. Comparator
+quota (`quotaKnown`/`quotaAvailable`) tidak pernah aktif untuk Build —
+selector memilih buta mengikut priority dan failureCount. Ini mencipta
+loop kematian: akaun beban tinggi → tiada quota data → terus dipilih
+→ hang quota → failureCount kekal 0 → dipilih lagi.
+
+**Reka bentuk:**
+- `BuildBillingQuotaWindow(credential, billing)` dalam
+  `domain/account/quota_build.go` — menukar Billing snapshot menjadi
+  QuotaWindow sintetik (`Remaining`, `Total`, `UsagePercent`, `ResetAt`,
+  `Source: upstream`). **PENTING:** MonthlyLimit <= 0 menghasilkan nil
+  — 0 bermakna "tiada data limit", BUKAN "tiada quota" — supaya akaun
+  tanpa data kekal fallback (priority/failureCount) seperti sebelumnya.
+- Wire dalam `ListRoutingCandidates` DAN `ListRoutingAccountBases`
+  (kedua-dua laluan routing mesti konsisten).
+- Comparator: `preferFreeBuild` dipindahkan **sebelum** `quotaKnown`/
+  `quotaAvailable` — strategi pengguna (utamakan Free) mengatasi quota
+  awareness supaya akaun Free tanpa QuotaWindow (tiada data) tidak
+  dikalahkan oleh akaun paid hanya kerana akaun paid itu ada data.
+  Konsisten dalam `candidateScoreBetter` dan `segmentedSelectorCohortBetter`.
+
+**Konflik design yang diselesaikan:** `IsBuildSuper()` menggunakan
+`billing.IsPaid()` yang menganggap `MonthlyLimit > 0` sebagai paid —
+ini bermakna fixture test dengan MonthlyLimit > 0 mengubah tier Free
+kepada Super secara tidak sengaja. Penyelesaian: converter nil window
+untuk MonthlyLimit <= 0 mengekalkan `IsKnownFreeBuild` untuk billing
+Free sebenar (MonthlyLimit 0 = tiada data), dan comparator
+preferFreeBuild-first mengekalkan strategi pengguna.
+
+**Ujian:** 6 ujian converter (remaining, computed percent, over-quota,
+missing reset, nil for zero/negative limit) + 3 regression test
+diselaraskan. Full suite 64 pakej, 0 gagal.
 
 **Masalah (round 6, 07:40–07:58):** model claim DUA KALI berturut-turut
 "Wah gila, landing page dah siap guna. Aku dah replace dengan design
