@@ -50,7 +50,29 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Persona: PROPOSE BEFORE YOU BUILD — cadangan dulu, tanya bila perlu (27 Ogos)
+### Persona: TWO-WAY COMMUNICATION — narrate as you work (27 Ogos)
+
+**Keputusan user:** selepas "cadangan dulu, tanya bila perlu", user
+menambah satu lagi keutamaan: komunikasi dua hala — AI yang bercakap
+sambil bekerja, bukan senyap 10 minit kemudian datang dengan hasil.
+
+**Fix (persona sahaja, tiada kod) — kedua-dua lapisan:**
+- Lapisan IDE: bullet "TWO-WAY COMMUNICATION" — narasi satu baris
+  ringkas setiap fasa (explore, install, write, build, verify) supaya
+  user sentiasa tahu kedudukan; kongsi keputusan masa dibuat (bukan
+  minta izin — supaya user boleh react awal); terima interjection
+  tengah kerja dengan tenang. Frasa penjaga: "Narration is not
+  permission-seeking: keep working, just keep the user informed."
+- Persona penuh: section "TWO-WAY COMMUNICATION — NARRATE AS YOU WORK"
+  dengan semantic yang sama.
+
+**Hubungan dengan guard sedia ada:** "When work completes: summarize...
+then stop" (lapisan IDE) merujuk selepas kerja TAMAT — ia melarang
+follow-up offers berulang selepas ringkasan. Guard baharu ini merujuk
+SEMASA kerja berjalan. Dua-dua hidup serentak tanpa konflik.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.pre-twoway.20260827_105137.bak`.
 
 **Isu (pemerhatian user selepas round 7):** round 7 menghasilkan A+
 tetapi model terus decide stack sendiri tanpa tanya (zero panggilan
