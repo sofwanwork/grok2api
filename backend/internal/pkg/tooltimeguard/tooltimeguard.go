@@ -186,8 +186,19 @@ func slowToolCommandKind(command string) string {
 // Command ini tidak boleh dijalankan sebagai foreground bash — tool akan
 // membunuhnya pada timeout walaupun timeout besar, dan user nampak halaman
 // kosong dalam browser. Ia mesti dimulakan sebagai proses background.
+// Patch #21 v6: juga kesan wrapper bypass seperti "cmd.exe /c npm run dev"
+// atau "bash -c 'npm run dev'" — model boleh cuba wrap command untuk
+// mengelak deteksi langsung.
 func isDevServerCommand(command string) bool {
-	fields := strings.Fields(strings.ToLower(command))
+	lc := strings.ToLower(command)
+	// Strip common wrappers: cmd.exe /c, powershell -c, bash -c, sh -c
+	for _, prefix := range []string{"cmd.exe /c ", "cmd /c ", "powershell -c ", "pwsh -c ", "bash -c ", "sh -c "} {
+		if strings.HasPrefix(lc, prefix) {
+			lc = strings.Trim(lc[len(prefix):], "'\" ")
+			break
+		}
+	}
+	fields := strings.Fields(lc)
 	if len(fields) == 0 {
 		return false
 	}
@@ -198,9 +209,6 @@ func isDevServerCommand(command string) bool {
 	case "npm", "pnpm", "yarn", "bun":
 		return strings.Contains(rest, "run dev") || strings.HasPrefix(rest, "dev")
 	case "next", "vite", "astro", "nuxt", "remix":
-		// next dev / vite [args] — tapi bukan next build.
-		// "vite --port 3000" → rest = "--port 3000", tiada "dev" →
-		// treat sebagai dev server juga (vite tanpa subcommand = serve).
 		if strings.Contains(rest, "build") {
 			return false
 		}
@@ -208,11 +216,11 @@ func isDevServerCommand(command string) bool {
 	case "python", "python3", "py":
 		return strings.Contains(rest, "-m http.server") || strings.Contains(rest, "manage.py runserver")
 	case "flask":
-		return strings.Contains(rest, "run") // flask run --debug
+		return strings.Contains(rest, "run")
 	case "php":
 		return strings.Contains(rest, "artisan serve") || strings.Contains(rest, "-s ")
 	case "go":
-		return strings.Contains(rest, "run .") && strings.Contains(rest, "air") // air live reload (jarang)
+		return strings.Contains(rest, "run .") && strings.Contains(rest, "air")
 	}
 	return false
 }
