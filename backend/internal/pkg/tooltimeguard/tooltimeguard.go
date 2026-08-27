@@ -367,20 +367,50 @@ func EnlargeToolTimeout(toolName, arguments string) (string, bool) {
 	return string(updated), true
 }
 
-// InterceptNoOpEdit (patch #26) mengesan edit tool calls di mana
-// oldString == newString — model menyalin kandungan fail tanpa membuat
-// sebarang perubahan, menyebabkan loop 6+ edit kosong yang membazirkan
-// token dan memburu user. Fungsi ini:
+// noopEditCount ialah jumlah no-op edit berturut-turut untuk sesi stream
+// semasa (per-converter, patch #26 v2). Reset apabila edit sah berjaya.
+// 3 no-op = circuit breaker trips — model perlu STOP dan tukar strategi.
+const (
+	noOpEditSoftLimit   = 1
+	noOpEditHardLimit   = 2
+)
+
+// InterceptNoOpEdit (patch #26 v2) mengesan edit tool calls di mana
+// oldString == newString. Berbanding v1 yang hanya tampal marker, v2:
 //
-//  1. Mengesan tool bernama "edit"/"str_replace_editor"/"replace_in_file"
-//     (edit tools dari pelbagai IDE) dengan oldString == newString
-//  2. Menulis semula newString dengan marker yang jelas untuk model:
-//     "BLOCKED: This edit is a no-op..." supaya model baca dan fix
-//
-// Pulangkan arguments yang mungkin telah ditulis semula dan bool sama ada
-// perubahan dibuat. Idempoten — tidak menyentuh edit yang sah.
+//  1. No-op pertama: inject marker dengan 4 strategi konkrit untuk keluar
+//     dari masalah (edit betul / write overwrite / pecah kecil / skip)
+//  2. No-op kedua dan ketiga: marker lebih kuat — "DO NOT RETRY THIS EDIT"
+//  3. Selepas 3 kali: injector berhenti — arahan sudah sampai, kalau model
+//     masih loop itu isu model-level di luar kawalan gateway
 func InterceptNoOpEdit(toolName, arguments string) (string, bool) {
+	return interceptNoOpEditWithState(toolName, arguments, nil)
+}
+
+// InterceptNoOpEditStateful ialah versi stateful untuk session converter —
+// menjejaki bilangan no-op berturut-turut supaya marker makin kuat setiap
+// retry. state slice [int] dikongsi antara pemanggil.
+func InterceptNoOpEditStateful(toolName, arguments string, state []int) (string, bool) {
+	if len(state) == 0 {
+		state = make([]int, 1)
+	}
+	result, changed := interceptNoOpEditWithState(toolName, arguments, state)
+	if changed && len(state) > 0 {
+		state[0]++
+	}
+	// Reset counter bila edit sah berlaku (old != new)
+	if !changed && isEditToolName(toolName) {
+		state[0] = 0
+	}
+	return result, changed
+}
+
+func interceptNoOpEditWithState(toolName, arguments string, state []int) (string, bool) {
 	if !isEditToolName(toolName) {
+		// Reset counter untuk non-edit tool calls — bincang berakhir.
+		if len(state) > 0 {
+			state[0] = 0
+		}
 		return arguments, false
 	}
 	arguments = strings.TrimSpace(arguments)
@@ -391,23 +421,66 @@ func InterceptNoOpEdit(toolName, arguments string) (string, bool) {
 	if json.Unmarshal([]byte(arguments), &args) != nil {
 		return arguments, false
 	}
-	// oldString dan newString boleh berada di akar atau dalam sub-objek.
 	oldStr, _ := args["oldString"].(string)
 	newStr, _ := args["newString"].(string)
 	if oldStr == "" || newStr == "" {
 		return arguments, false
 	}
-	// Jika bukan identical, ini edit yang sah — jangan sentuh.
 	if oldStr != newStr {
+		// Edit sah — reset counter.
+		if len(state) > 0 {
+			state[0] = 0
+		}
 		return arguments, false
 	}
-	// No-op detected: tukar newString menjadi marker yang jelas untuk model.
-	args["newString"] = oldStr + "\n<!-- BLOCKED by gateway (patch #26): This edit is a no-op — oldString equals newString. You copied the file content but forgot to make the actual change. Re-read the file, identify what you want to change, put the CHANGED version in newString. Do NOT repeat this edit. -->"
+
+	attempt := 0
+	if len(state) > 0 {
+		attempt = state[0]
+	}
+
+	var marker string
+	switch {
+	case attempt >= noOpEditHardLimit:
+		// Circuit breaker: arahan keras STOP + alternatif jelas
+		marker = "\n<!-- ⛔ GATEWAY CIRCUIT BREAKER (patch #26 v2) — DO NOT RETRY THIS EDIT. This is attempt " + fmt_Sprint(attempt+1) + " of an identical no-op. The problem will NOT fix itself with another retry.\nChoose ONE different strategy NOW:\n  STRATEGY A: Use the write tool to replace the ENTIRE file with the final content you want (write overwrites completely).\n  STRATEGY B: Break the change into SMALLER edits — target a unique short snippet, not the whole file.\n  STRATEGY C: Skip this specific change entirely and continue with other work — note the skipped item in your final summary so the user can do it manually.\nRetrying this exact edit again wastes tokens and time for everyone. -->"
+	case attempt >= noOpEditSoftLimit:
+		// Retry #2: arahan lebih tegas, senaraikan strategi
+		marker = "\n<!-- 🔴 GATEWAY (patch #26 v2): SECOND identical no-op detected. Do NOT send the same edit again — it will fail identically. Switch strategy:\n  A: use write tool to replace the entire file\n  B: make a smaller, more targeted edit with unique context\n  C: skip this change and continue with other work -->"
+	default:
+		// No-op pertama: edukatif dengan 4 strategi konkrit
+		marker = "\n<!-- BLOCKED by gateway (patch #26 v2): This edit is a no-op — oldString equals newString. You copied the file content but forgot to make the actual change. Four ways forward:\n  1. Re-read the file, identify EXACTLY what should change, and write the CHANGED version into newString.\n  2. If diffing is hard, use the write tool to replace the ENTIRE file with your intended final content.\n  3. Make a SMALLER edit targeting a unique short snippet instead of the whole block.\n  4. If this section cannot be fixed, SKIP it and continue with other work. -->"
+	}
+
+	args["newString"] = oldStr + marker
 	updated, err := json.Marshal(args)
 	if err != nil {
 		return arguments, false
 	}
 	return string(updated), true
+}
+
+// fmt_Sprint pengganti ringkas strconv.Itoa untuk elak import tambahan.
+func fmt_Sprint(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }
 
 // editToolNames ialah nama edit tool dari pelbagai IDE (patch #26).

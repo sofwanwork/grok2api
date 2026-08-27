@@ -106,9 +106,10 @@ func (c *streamConverter) toolArgumentsDoneChat(itemID, arguments string) error 
 			if corrected, changed := tooltimeguard.EnlargeToolTimeout(tool.Name, arguments); changed {
 				arguments = corrected
 			}
-			// Patch #26: no-op edit interceptor — oldString == newString
-			// ditulis semula dengan marker supaya model sedar dan fix.
-			if corrected, changed := tooltimeguard.InterceptNoOpEdit(tool.Name, arguments); changed {
+			// Patch #26 v2: no-op edit interceptor dengan state — no-op
+			// pertama dapat marker edukatif, kedua lebih tegas, ketiga
+			// circuit breaker STOP. Edit sah reset counter.
+			if corrected, changed := tooltimeguard.InterceptNoOpEditStateful(tool.Name, arguments, c.noOpEditState); changed {
 				arguments = corrected
 			}
 			if err := c.chatDelta(map[string]any{"tool_calls": []any{map[string]any{"index": tool.Index, "function": map[string]any{"arguments": arguments}}}}); err != nil {

@@ -80,6 +80,9 @@ type streamConverter struct {
 	activeReasoningID string
 	nextIndex         int
 	tools             map[string]streamTool
+	// noOpEditState menjejaki bilangan no-op edit berturut-turut dalam stream
+	// ini (patch #26 v2) — marker makin tegas setiap retry, reset pada edit sah.
+	noOpEditState    []int
 	webSearch         []webSearchCall
 	webSearchEmitted  map[string]bool
 	deferSearchText   bool
