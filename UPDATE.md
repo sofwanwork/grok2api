@@ -50,7 +50,33 @@ buffer/stop-filter/suppressed reasoning); kaedah emisi tidak menjejaki semula.
 (placeholder CoT). `config.yaml` kekal `requestRetry.holdTimeout: 10s` —
 default upstream baharu 30s tidak diterima (kita mahu rotate benak pantas).
 
-### Question tool options hint v2 (patch #22 v2, 27 Ogos)
+### Persona: PROPOSE BEFORE YOU BUILD — cadangan dulu, tanya bila perlu (27 Ogos)
+
+**Isu (pemerhatian user selepas round 7):** round 7 menghasilkan A+
+tetapi model terus decide stack sendiri tanpa tanya (zero panggilan
+question tool). Lapisan IDE persona TIADA ask-first workflow — hanya
+ada "propose then confirm" untuk improve/refactor/redesign, dan task
+"build new from scratch" jatuh dalam lubang itu. END-TO-END OWNERSHIP
+(guard baru) mengisi lubang — maka model tak tanya.
+
+**Keputusan user:** suka cadangan dulu sebagai default, tetapi TAK NAK
+ditanya setiap kali ("renyah jugak") — hanya tanya bila clarification
+sebenar diperlukan.
+
+**Fix (persona sahaja, tiada kod) — kedua-dua lapisan:**
+- Lapisan IDE (`systemPromptWhenClientHasSystem`): bullet baharu
+  "PROPOSE BEFORE YOU BUILD" — untuk task mencipta benda baru, jawapan
+  PERTAMA ialah 1-3 pilihan stack dengan trade-off + cadangan, kemudian
+  biarkan user pilih sebelum tulis apa-apa. Tanya soalan hanya bila
+  benar-benar tak boleh terus (stack ambigous, detail produk tak jelas);
+  pilihan yang jelas terbaik boleh dijadikan cadangan dalam proposal
+  itu sendiri. Task refine/iteration ("cantikkan", "tambah X",
+  "betulkan Y", "sambung") TIDAK perlu tanya semula.
+- Persona penuh (`systemPrompt` ASK-FIRST WORKFLOW): dikemas kini
+  dengan semantic yang sama supaya kedua-dua lapisan selaras.
+
+**Nota:** config.yaml adalah gitignored (rahsia). Backup:
+`backups/config.yaml.pre-propose-build.20260827_110000.bak`.
 
 **Isu (pemerhatian user):** selepas patch #22, cadangan dalam tool
 question jadi "pendek perkataan" — label sangat ringkas ("HTML +
