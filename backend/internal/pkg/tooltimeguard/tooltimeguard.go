@@ -366,3 +366,60 @@ func EnlargeToolTimeout(toolName, arguments string) (string, bool) {
 	}
 	return string(updated), true
 }
+
+// InterceptNoOpEdit (patch #26) mengesan edit tool calls di mana
+// oldString == newString — model menyalin kandungan fail tanpa membuat
+// sebarang perubahan, menyebabkan loop 6+ edit kosong yang membazirkan
+// token dan memburu user. Fungsi ini:
+//
+//  1. Mengesan tool bernama "edit"/"str_replace_editor"/"replace_in_file"
+//     (edit tools dari pelbagai IDE) dengan oldString == newString
+//  2. Menulis semula newString dengan marker yang jelas untuk model:
+//     "BLOCKED: This edit is a no-op..." supaya model baca dan fix
+//
+// Pulangkan arguments yang mungkin telah ditulis semula dan bool sama ada
+// perubahan dibuat. Idempoten — tidak menyentuh edit yang sah.
+func InterceptNoOpEdit(toolName, arguments string) (string, bool) {
+	if !isEditToolName(toolName) {
+		return arguments, false
+	}
+	arguments = strings.TrimSpace(arguments)
+	if arguments == "" {
+		return arguments, false
+	}
+	var args map[string]any
+	if json.Unmarshal([]byte(arguments), &args) != nil {
+		return arguments, false
+	}
+	// oldString dan newString boleh berada di akar atau dalam sub-objek.
+	oldStr, _ := args["oldString"].(string)
+	newStr, _ := args["newString"].(string)
+	if oldStr == "" || newStr == "" {
+		return arguments, false
+	}
+	// Jika bukan identical, ini edit yang sah — jangan sentuh.
+	if oldStr != newStr {
+		return arguments, false
+	}
+	// No-op detected: tukar newString menjadi marker yang jelas untuk model.
+	args["newString"] = oldStr + "\n<!-- BLOCKED by gateway (patch #26): This edit is a no-op — oldString equals newString. You copied the file content but forgot to make the actual change. Re-read the file, identify what you want to change, put the CHANGED version in newString. Do NOT repeat this edit. -->"
+	updated, err := json.Marshal(args)
+	if err != nil {
+		return arguments, false
+	}
+	return string(updated), true
+}
+
+// editToolNames ialah nama edit tool dari pelbagai IDE (patch #26).
+var editToolNames = map[string]bool{
+	"edit":               true, // OpenCode
+	"str_replace_editor": true, // Claude Code
+	"replace_in_file":    true, // Cline
+	"write":              false, // write bukan edit (create new file)
+	"apply_patch":        true, // Generic patch
+	"edit_file":          true, // Generic
+}
+
+func isEditToolName(name string) bool {
+	return editToolNames[name]
+}
