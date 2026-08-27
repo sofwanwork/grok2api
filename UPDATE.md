@@ -147,7 +147,31 @@ tinggi untuk gain rendah. Hint di Lapisan A adalah seimbang yang betul.
 satu body + read untouched); 17 ujian total. Full suite 64 pakej,
 0 gagal.
 
-### Build quota awareness in routing (patch #25, 27 Ogos)
+### Multi-IDE terminal tool support (patch #21 v5, 27 Ogos)
+
+**Masalah:** Lapisan A (schema hint) dan Lapisan B (timeout raise + dev
+server rewrite) hanya mengenali tool bernama `bash` atau `shell`. IDE
+yang lain menggunakan nama berbeza:
+
+| IDE | Nama terminal tool | Sebelum v5 |
+|---|---|---|
+| OpenCode | `bash` | ✅ berfungsi |
+| Claude Code | `Bash` (huruf besar) | ❌ |
+| Cursor | `run_terminal_cmd` | ❌ |
+| Cline | `execute_command` | ❌ |
+| Aider | `run` | ❌ |
+| Gemini CLI | `run_shell_command` | ❌ |
+
+Maksudnya: guard timeout + dev server rewrite **tidak pernah aktif**
+untuk IDE selain OpenCode, walaupun request melalui gateway yang sama.
+
+**Reka bentuk:** `terminalToolNames` map (case-sensitive, sengaja) dalam
+`tooltimeguard.go` — 15 nama tool dari semua IDE utama. `isTerminalToolName()`
+menggantikan `name != "bash" && name != "shell"` dalam kedua-dua laluan:
+`ApplySchemaHints` (Lapisan A) dan `EnlargeToolTimeout` (Lapisan B).
+
+**Ujian:** 16 ujian baharu — nama setiap IDE, non-terminal tools ditolak,
+hint/rewrite untuk Cursor/Claude Code/Cline. Full suite 64 pakej, 0 gagal.
 
 **Masalah (data pool 27 Ogos):** akaun 4 (grok_build) hang 300s pada
 header HTTP/2 kerana upstream throttle senyap apabila quota habis

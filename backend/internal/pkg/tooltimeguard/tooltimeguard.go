@@ -48,6 +48,35 @@ const (
 	maxInspectionBytes = 1 << 20 // 1 MiB
 )
 
+// terminalToolNames ialah nama tool terminal/shell yang digunakan oleh
+// berbagai IDE dan coding agent (patch #21 v5). Hint timeout + dev server +
+// shell contract mesti sampai kepada SEMUA IDE — bukan sahaja OpenCode.
+var terminalToolNames = map[string]bool{
+	"bash":                 true, // OpenCode, Anthropic convention
+	"Bash":                 true, // Claude Code (huruf besar)
+	"shell":                true,
+	"Shell":                true,
+	"terminal":             true,
+	"Terminal":             true,
+	"run_terminal_cmd":     true, // Cursor
+	"execute_command":      true, // Cline
+	"run_command":          true,
+	"run":                  true, // Aider
+	"command":              true,
+	"exec":                 true,
+	"execute_bash":         true,
+	"run_shell_command":    true, // Gemini CLI
+	"codebase_run_terminal": true,
+}
+
+// isTerminalToolName melaporkan sama ada nama tool ini adalah terminal/shell
+// tool menurut konvensyen mana-mana IDE yang dikenali. Perbandingan adalah
+// case-sensitive secara sengaja — nama seperti "Bash" (Claude Code) dan
+// "bash" (OpenCode) kedua-duanya disenaraikan.
+func isTerminalToolName(name string) bool {
+	return terminalToolNames[name]
+}
+
 // ApplySchemaHints melaksanakan Lapisan A (kini merangkumi patch #21 dan
 // #22): tulis semula description tool "bash"/"shell" (unit timeout) dan
 // tool "question" (options wajib berstruktur) dalam request body supaya
@@ -83,11 +112,11 @@ func ApplySchemaHints(body []byte) []byte {
 		name, _ := target["name"].(string)
 		description, _ := target["description"].(string)
 		var hint, marker string
-		switch name {
-		case "bash", "shell":
+		switch {
+		case isTerminalToolName(name):
 			hint = Hint
 			marker = "MILLISECONDS"
-		case "question":
+		case name == "question":
 			hint = questionHint
 			marker = "STRUCTURED ARRAY"
 		default:
@@ -283,7 +312,7 @@ func splitCommandForStartProcess(command string) []string {
 // dibetulkan dan bool sama ada perubahan dibuat. Idempoten dan
 // behavior-neutral untuk arguments yang bukan JSON sah.
 func EnlargeToolTimeout(toolName, arguments string) (string, bool) {
-	if toolName != "bash" && toolName != "shell" {
+	if !isTerminalToolName(toolName) {
 		return arguments, false
 	}
 	arguments = strings.TrimSpace(arguments)
