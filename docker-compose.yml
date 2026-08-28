@@ -24,13 +24,10 @@ services:
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
-    # S3: Resource limits — container tidak boleh makan semua RAM/CPU host.
-    # 512MB RAM + 0.5 CPU cukup untuk gateway ini (audit menunjukkan 42MB usage).
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.50"
+    # S3: Resource limits — docker compose (v2) sokong mem_limit/cpus
+    # secara terus (deploy.resources hanya untuk swarm).
+    mem_limit: 512m
+    cpus: 0.50
     # Belt-and-suspenders with the Dockerfile HEALTHCHECK: makes service_healthy
     # in depends_on work even when the image is swapped (e.g. upstream ghcr image).
     healthcheck:
