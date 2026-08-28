@@ -37,6 +37,7 @@ $patches = @(
     @{ f = "backend/internal/application/gateway/selector.go"; m = "NoteThinking|thinkingScore"; d = "Patch 17: soft thinking-score ordering"; regex = $true },
     @{ f = "backend/internal/application/gateway/selector.go"; m = "SeedThinkingScores|thinkingScorePenaltySeed"; d = "Patch 18: persist thinking score seeding"; regex = $true },
     @{ f = "backend/internal/application/gateway/selector_plan.go"; m = "benakAvoid"; d = "Patch 19: preemptive benak avoidance"; regex = $false },
+    @{ f = "backend/internal/infra/provider/conversation/stream.go"; m = "normalizeContentDelta|checkWindowRepetition|contentWindow"; d = "Patch 28: fuzzy doom-loop detection (whitespace normalize + rolling window)"; regex = $true },
     @{ f = "backend/internal/application/gateway/quality_retry.go"; m = "errQualityHeaderBudget|qualityHeaderBudget"; d = "Patch 20: early header abort (instrument-first)"; regex = $true },
     @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "ApplyTimeoutHint|EnlargeToolTimeout|isDevServerCommand|rewriteDevServerBackground|InterceptNoOpEdit|StreamActivityGuard"; d = "Patch 21: bash tool timeout guard + dev server background rewrite + no-op edit interceptor + activity guard (A+B)"; regex = $true },
     @{ f = "backend/internal/pkg/tooltimeguard/tooltimeguard.go"; m = "questionHint|ApplySchemaHints"; d = "Patch 22: question tool options hint (structured choices)"; regex = $true },

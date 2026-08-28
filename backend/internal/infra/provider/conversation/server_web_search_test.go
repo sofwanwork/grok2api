@@ -657,9 +657,23 @@ func TestStreamCapsWebSearchCallsBeforeEmission(t *testing.T) {
 
 func TestStreamRejectsOversizedDeferredSearchText(t *testing.T) {
 	converter := newStreamConverter(io.Discard, OperationMessages, ResponseOptions{AnthropicWebSearch: true})
+	// Patch #28: avoid doom-loop rolling window false positive by using
+	// a single very large delta (the test checks size rejection, not
+	// repetition). The content window check only fires at >200 bytes,
+	// so a single large delta won't trigger repetition — BUT the rolling
+	// signature check compares the last 80 chars of the window against
+	// the previous 320 chars. For a repeated-character string, "aaaa..."
+	// will have the same 80-char signature everywhere. Use a random-like
+	// pattern instead.
+	var sb strings.Builder
+	seed := uint64(12345)
+	for i := 0; i < (8<<20)+1; i++ {
+		seed = seed*6364136223846793005 + 1442695040888963407
+		sb.WriteByte(byte('a' + int(seed%26)))
+	}
 	data, err := json.Marshal(map[string]any{
 		"type":  "response.output_text.delta",
-		"delta": strings.Repeat("x", (8<<20)+1),
+		"delta": sb.String(),
 	})
 	if err != nil {
 		t.Fatal(err)

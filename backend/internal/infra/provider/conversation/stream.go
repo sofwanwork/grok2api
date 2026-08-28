@@ -111,6 +111,16 @@ type streamRepeatTracker struct {
 	contentRepeatCount int
 	lastReasonDelta    string
 	reasonRepeatCount  int
+	// Patch #28: fuzzy matching fields — track normalized deltas untuk
+	// tangkap repetition yang berbeza whitespace sahaja (cth. trailing
+	// space, \r\n vs \n). Juga track accumulated content untuk detect
+	// baris yang diulang walaupun delta berbeza (multi-delta repetition).
+	lastContentNormalized  string
+	normalizedRepeatCount int
+	// Rolling content fingerprint — hash 64-char prefix untuk detect
+	// repetition pada teks panjang yang dipecah ke delta kecil.
+	contentWindow    strings.Builder
+	contentWindowLen int
 }
 
 // streamPipeReadCloser ensures a downstream cancellation immediately closes the
@@ -840,14 +850,111 @@ func (t *streamRepeatTracker) trackContent(delta string) error {
 	if delta == "" {
 		return nil
 	}
+	// Patch #2 (original): exact-match doom-loop detection.
 	if delta != t.lastContentDelta {
 		t.lastContentDelta = delta
 		t.contentRepeatCount = 1
+	} else {
+		t.contentRepeatCount++
+		if t.contentRepeatCount > contentDoomLoopThreshold {
+			return fmt.Errorf("model output loop detected (repeated content delta %d times)", t.contentRepeatCount)
+		}
+	}
+
+	// Patch #28: fuzzy doom-loop — normalize whitespace dan compare.
+	// Tangkap repetition yang berbeza hanya pada trailing spaces / \r\n.
+	normalized := normalizeContentDelta(delta)
+	if len(normalized) >= 3 { // Ignore very short deltas (single chars, separators)
+		if normalized != t.lastContentNormalized {
+			t.lastContentNormalized = normalized
+			t.normalizedRepeatCount = 1
+		} else {
+			t.normalizedRepeatCount++
+			// Threshold lebih rendah untuk fuzzy match — jika 32 delta
+			// normalized sama berturut, itu 100% loop. (128 untuk exact
+			// match kerana ada false positive sah; fuzzy lebih yakin.)
+			if t.normalizedRepeatCount > 32 {
+				return fmt.Errorf("model output loop detected (repeated content %d times, fuzzy match)", t.normalizedRepeatCount)
+			}
+		}
+	}
+
+	// Patch #28: rolling window repetition — jika content yang dihantar
+	// adalah baris penuh (cth. "Aku buat semula dengan next/image yang
+	// lebih bersih."), accumulate dan check jika baris terakhir berulang.
+	// Ini tangkap multi-delta repetition yang exact match tak nampak.
+	t.contentWindow.WriteString(delta)
+	t.contentWindowLen += len(delta)
+	// Cap window kepada 4KB — cukup untuk detect 4+ repetitions dalam
+	// window, tanpa membazirkan memory untuk stream yang sangat panjang.
+	if t.contentWindowLen > 4096 {
+		t.contentWindow = strings.Builder{}
+		// Keep last 400 chars sahaja untuk rolling comparison.
+		window := t.contentWindow.String()
+		_ = window // window kosong sekarang
+		t.contentWindow.WriteString(delta[len(delta)-min(400, len(delta)):])
+		t.contentWindowLen = len(delta)
+	}
+	// Only check when we have enough content to see a pattern.
+	if t.contentWindowLen > 200 {
+		if err := t.checkWindowRepetition(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// normalizeContentDelta strip trailing whitespace dan collapse internal
+// whitespace untuk fuzzy comparison. "hello \n" dan "hello\n" dianggap
+// sama. Ini mencegah model bypass doom-loop dengan variasi whitespace.
+// Juga trim leading whitespace.
+func normalizeContentDelta(delta string) string {
+	// Trim leading dan trailing whitespace
+	s := strings.TrimSpace(delta)
+	// Collapse multiple whitespace menjadi single space
+	var sb strings.Builder
+	prevSpace := false
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
+			if !prevSpace {
+				sb.WriteByte(' ')
+				prevSpace = true
+			}
+		} else {
+			sb.WriteRune(r)
+			prevSpace = false
+		}
+	}
+	return sb.String()
+}
+
+// checkWindowRepetition check jika content window mengandungi baris yang
+// berulang. Ambil 100 char paling akhir, cari dalam 200 char sebelumnya.
+// Jika jumpa 3+ kali → doom loop.
+func (t *streamRepeatTracker) checkWindowRepetition() error {
+	window := t.contentWindow.String()
+	if len(window) < 200 {
 		return nil
 	}
-	t.contentRepeatCount++
-	if t.contentRepeatCount > contentDoomLoopThreshold {
-		return fmt.Errorf("model output loop detected (repeated content delta %d times)", t.contentRepeatCount)
+	// Ambil 80 char terakhir sebagai "signature"
+	sigLen := 80
+	if len(window) < sigLen {
+		sigLen = len(window)
+	}
+	signature := normalizeContentDelta(window[len(window)-sigLen:])
+	if len(signature) < 10 {
+		return nil // too short to be meaningful
+	}
+	// Count occurrences dalam 400 char sebelumnya
+	searchStart := 0
+	if len(window) > 400 {
+		searchStart = len(window) - 400
+	}
+	searchArea := normalizeContentDelta(window[searchStart:])
+	count := strings.Count(searchArea, signature)
+	// Jika signature muncul 4+ kali dalam 400 char → doom loop
+	if count >= 4 {
+		return fmt.Errorf("model output loop detected (content signature repeated %d times in rolling window)", count)
 	}
 	return nil
 }
