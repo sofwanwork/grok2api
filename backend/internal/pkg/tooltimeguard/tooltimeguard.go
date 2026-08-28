@@ -43,9 +43,12 @@ const (
 	// installTimeoutMs digunakan untuk command install (muat turun pakej).
 	installTimeoutMs = 300000
 
+	// testTimeoutMs digunakan untuk command test (npm test, pytest, go test).
+	testTimeoutMs = 300000
+
 	// maxInspectionBytes hadkan pemeriksaan body supaya request gergasi
 	// tidak membazir CPU parse.
-	maxInspectionBytes = 1 << 20 // 1 MiB
+	maxInspectionBytes = 4 << 20 // 4 MiB (sesi panjang dengan banyak tools)
 )
 
 // terminalToolNames ialah nama tool terminal/shell yang digunakan oleh
@@ -173,11 +176,25 @@ func slowToolCommandKind(command string) string {
 			return "install"
 		case strings.Contains(rest, "run build"), strings.HasPrefix(rest, "build"):
 			return "build"
+		case strings.Contains(rest, "test"), strings.Contains(rest, "run test"), strings.HasPrefix(rest, "test"):
+			return "test"
 		}
 	case "npx", "pnpx", "bunx":
 		return "install" // npx hampir selalu memuat turun sesuatu
 	case "uv", "pip", "pip3", "composer", "cargo", "mvn", "gradle":
 		return "install"
+	case "pytest", "python", "python3", "py":
+		if strings.Contains(rest, "test") || strings.Contains(rest, "pytest") {
+			return "test"
+		}
+		return "install"
+	case "go":
+		if strings.Contains(rest, "test") {
+			return "test"
+		}
+		return "install"
+	case "tsc", "jest", "vitest", "playwright", "cypress":
+		return "test"
 	}
 	return ""
 }
@@ -195,6 +212,19 @@ func isDevServerCommand(command string) bool {
 	for _, prefix := range []string{"cmd.exe /c ", "cmd /c ", "powershell -c ", "pwsh -c ", "bash -c ", "sh -c "} {
 		if strings.HasPrefix(lc, prefix) {
 			lc = strings.Trim(lc[len(prefix):], "'\" ")
+			break
+		}
+	}
+	// Strip ; separator prefix: 'Set-Location x; npm run dev' → 'npm run dev'
+	// Model boleh prepend cd/Set-Location sebelum dev server command.
+	for strings.Contains(lc, ";") {
+		idx := strings.Index(lc, ";")
+		prefix := lc[:idx]
+		// Hanya strip jika prefix kelihatan seperti Set-Location/cd/echo
+		if strings.HasPrefix(prefix, "set-location ") || strings.HasPrefix(prefix, "cd ") ||
+			strings.HasPrefix(prefix, "echo ") || strings.HasPrefix(prefix, "chdir ") {
+			lc = strings.TrimSpace(lc[idx+1:])
+		} else {
 			break
 		}
 	}
@@ -357,6 +387,8 @@ func EnlargeToolTimeout(toolName, arguments string) (string, bool) {
 	}
 	if kind == "install" {
 		args["timeout"] = float64(installTimeoutMs)
+	} else if kind == "test" {
+		args["timeout"] = float64(testTimeoutMs)
 	} else {
 		args["timeout"] = float64(buildTimeoutMs)
 	}

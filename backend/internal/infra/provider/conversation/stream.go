@@ -164,6 +164,10 @@ func newStreamConverter(writer io.Writer, operation string, options ResponseOpti
 		reasoningItems:   make(map[string]*reasoningStreamState),
 		deferSearchText:  operation == OperationMessages && options.AnthropicWebSearch,
 		options:          options, stopFilter: newAnthropicStreamStopFilter(options.StopSequences),
+		// Patch #26 v2: init no-op edit counter untuk stateful tracking.
+		noOpEditState: make([]int, 1),
+		// Patch #27: init activity guard untuk dev server reminder tracking.
+		activityGuard: tooltimeguard.NewStreamActivityGuard(),
 	}
 }
 

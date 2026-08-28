@@ -100,10 +100,10 @@ func (c *streamConverter) toolArgumentsDoneChat(itemID, arguments string) error 
 		}
 		if arguments != "" {
 			// Patch #27: track tool call activity untuk dev server reminder.
-			if c.activityGuard == nil {
-				c.activityGuard = tooltimeguard.NewStreamActivityGuard()
+			// Guard di-init dalam newStreamConverter — tiada lazy-init perlu.
+			if c.activityGuard != nil {
+				c.activityGuard.NoteToolCall(tool.Name, arguments)
 			}
-			c.activityGuard.NoteToolCall(tool.Name, arguments)
 
 			// Patch #21 lapisan B: bila model jana timeout terlalu kecil untuk
 			// command lambat (npm install/build dll) — naikkan nilai itu ke

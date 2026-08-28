@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/chenyme/grok2api/backend/internal/pkg/tooltimeguard"
 )
 
 func (c *streamConverter) startMessages() error {
@@ -199,6 +201,18 @@ func (c *streamConverter) toolArgumentsDoneMessages(itemID, arguments string) er
 			arguments = tool.Arguments
 		}
 		if arguments != "" {
+			// Patch #27: track tool call activity untuk dev server reminder.
+			if c.activityGuard != nil {
+				c.activityGuard.NoteToolCall(tool.Name, arguments)
+			}
+			// Patch #21 lapisan B: timeout raise + dev server rewrite.
+			if corrected, changed := tooltimeguard.EnlargeToolTimeout(tool.Name, arguments); changed {
+				arguments = corrected
+			}
+			// Patch #26 v2: no-op edit interceptor dengan state.
+			if corrected, changed := tooltimeguard.InterceptNoOpEditStateful(tool.Name, arguments, c.noOpEditState); changed {
+				arguments = corrected
+			}
 			if err := c.writeEvent("content_block_delta", map[string]any{
 				"type": "content_block_delta", "index": tool.Index,
 				"delta": map[string]any{"type": "input_json_delta", "partial_json": arguments},
@@ -283,6 +297,27 @@ func (c *streamConverter) doneMessages(status string) error {
 		if err := c.writeEvent("content_block_delta", map[string]any{
 			"type": "content_block_delta", "index": c.nextIndex,
 			"delta": map[string]any{"type": "thinking_delta", "thinking": placeholder},
+		}); err != nil {
+			return err
+		}
+		if err := c.writeEvent("content_block_stop", map[string]any{"type": "content_block_stop", "index": c.nextIndex}); err != nil {
+			return err
+		}
+		c.nextIndex++
+	}
+	// Patch #27: dev server reminder — jika model run build tool tapi tak
+	// pernah start dev server atau verify HTTP, inject reminder sebagai
+	// thinking block (Anthropic equivalent of reasoning_content).
+	if c.activityGuard != nil && c.activityGuard.ShouldRemindDevServer() {
+		if err := c.writeEvent("content_block_start", map[string]any{
+			"type": "content_block_start", "index": c.nextIndex,
+			"content_block": map[string]any{"type": "thinking", "thinking": ""},
+		}); err != nil {
+			return err
+		}
+		if err := c.writeEvent("content_block_delta", map[string]any{
+			"type": "content_block_delta", "index": c.nextIndex,
+			"delta": map[string]any{"type": "thinking_delta", "thinking": tooltimeguard.DevServerReminderText},
 		}); err != nil {
 			return err
 		}
