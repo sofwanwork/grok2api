@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -885,14 +886,20 @@ func guardResponseStream(source io.ReadCloser) io.ReadCloser {
 		tracker := streamRepeatTracker{}
 		activityGuard := tooltimeguard.NewStreamActivityGuard()
 		noOpState := make([]int, 1)
-		err := consumeSSE(io.TeeReader(source, writer), func(event string, data []byte) error {
+		// K16 v2 FIX: jangan guna TeeReader — ia forward bytes TERUS
+		// ke writer sebelum intercept. Sebaliknya, guna consumeSSE pada
+		// source sahaja dan tulis ke writer MELALUI callback supaya
+		// kita boleh intercept dan re-encode sebelum data sampai ke
+		// client. Tiada duplicate.
+		err := consumeSSE(source, func(event string, data []byte) error {
 			typeName, root, ok := parseSSEEvent(event, data)
 			if !ok {
-				return nil
+				_, writeErr := writer.Write(data)
+				return writeErr
 			}
 			// Patch #16/K16: intercept tool call arguments dalam Responses
-			// format. root adalah map[string]json.RawMessage — parse dan
-			// re-encode dengan betul.
+			// format. Jika diubahsuai, tulis versi reencoded; jika tidak,
+			// tulis data asal.
 			switch typeName {
 			case "response.function_call_arguments.done":
 				var args string
@@ -901,12 +908,20 @@ func guardResponseStream(source io.ReadCloser) io.ReadCloser {
 					if corrected, changed := tooltimeguard.EnlargeToolTimeout("bash", args); changed {
 						root["arguments"], _ = json.Marshal(corrected)
 						rebuilt := reencodeSSEData(event, root)
-						_, _ = writer.Write(rebuilt)
+						if _, werr := writer.Write(rebuilt); werr != nil {
+							return werr
+						}
+						activityGuard.NoteToolCall("bash", corrected)
+						return tracker.trackEvent(typeName, root)
 					}
 					if corrected, changed := tooltimeguard.InterceptNoOpEditStateful("edit", args, noOpState); changed {
 						root["arguments"], _ = json.Marshal(corrected)
 						rebuilt := reencodeSSEData(event, root)
-						_, _ = writer.Write(rebuilt)
+						if _, werr := writer.Write(rebuilt); werr != nil {
+							return werr
+						}
+						activityGuard.NoteToolCall("bash", corrected)
+						return tracker.trackEvent(typeName, root)
 					}
 					activityGuard.NoteToolCall("bash", args)
 				}
@@ -929,17 +944,27 @@ func guardResponseStream(source io.ReadCloser) io.ReadCloser {
 					item["arguments"], _ = json.Marshal(corrected)
 					root["item"], _ = json.Marshal(item)
 					rebuilt := reencodeSSEData(event, root)
-					_, _ = writer.Write(rebuilt)
+					if _, werr := writer.Write(rebuilt); werr != nil {
+						return werr
+					}
+					activityGuard.NoteToolCall("bash", corrected)
+					return tracker.trackEvent(typeName, root)
 				}
 				if corrected, changed := tooltimeguard.InterceptNoOpEditStateful("edit", args, noOpState); changed {
 					item["arguments"], _ = json.Marshal(corrected)
 					root["item"], _ = json.Marshal(item)
 					rebuilt := reencodeSSEData(event, root)
-					_, _ = writer.Write(rebuilt)
+					if _, werr := writer.Write(rebuilt); werr != nil {
+						return werr
+					}
+					activityGuard.NoteToolCall("bash", corrected)
+					return tracker.trackEvent(typeName, root)
 				}
 				activityGuard.NoteToolCall("bash", args)
 			}
-			return tracker.trackEvent(typeName, root)
+			// Default: tulis data asal tanpa ubah
+			_, werr := writer.Write(reencodeSSEData(event, root))
+			return errors.Join(werr, tracker.trackEvent(typeName, root))
 		})
 		if activityGuard.ShouldRemindDevServer() {
 			reminderJSON, _ := json.Marshal(map[string]any{

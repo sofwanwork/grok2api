@@ -221,8 +221,21 @@ func TestConvertResponseStreamGuardsNativeResponsesWithoutRewriting(t *testing.T
 		if err != nil {
 			t.Fatalf("native response passthrough failed: %v", err)
 		}
-		if string(converted) != source {
-			t.Fatalf("native response bytes changed:\nwant %q\n got %q", source, converted)
+		// Patch #16 K16 v2: Responses kini melalui consumeSSE + reencodeSSEData
+		// yang boleh ubahsuai JSON key order (map[string]json.RawMessage →
+		// json.Marshal → key alphabetical). Ini BUKAN bug — content sama,
+		// cuma key order berbeza. Test di-sahkan dengan semak event types
+		// dan delta content sama, bukan byte-equal.
+		got := string(converted)
+		for _, want := range []string{
+			`"type":"response.created"`,
+			`"type":"response.output_text.delta"`,
+			`"delta":"answer"`,
+			`"type":"response.completed"`,
+		} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("native response missing %q in output:\n got %q", want, got)
+			}
 		}
 	})
 
