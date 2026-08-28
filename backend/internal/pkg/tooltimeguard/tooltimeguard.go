@@ -37,6 +37,12 @@ const (
 	// questionHint dilampirkan pada description tool question (patch #22 v2).
 	questionHint = " IMPORTANT: the 'options' field is a STRUCTURED ARRAY, not optional decoration. For every question you must fill options with 2-4 concrete choices as objects ({\"label\": \"short text (1-5 words)\", \"description\": \"one line explaining the choice\"}) so the user can CLICK them. Writing the suggestions only inside the question text while leaving options [] is a failed call — the popup renders nothing clickable. The question TEXT should still explain your recommendations fully (what you recommend and why) — options are the clickable shortcut, not a replacement for a complete explanation. Open-ended questions with no meaningful choices are the ONLY exception."
 
+	// editHint dilampirkan pada description tool edit (patch #28 K19).
+	editHint = " IMPORTANT: ALWAYS read the file with the read tool IMMEDIATELY before editing — never edit from memory. Copy oldString from the actual file read, never from what you remember. If oldString equals newString, the edit is a no-op and will be blocked. NEVER edit a file you have not read in this turn."
+
+	// fileHint dilampirkan pada description tool read/write (patch #28 K19).
+	fileHint = " IMPORTANT: Before writing a file, read it first if it exists. Large files (10000+ lines) may need multiple reads. If write fails, check the directory exists. This tool does not need a timeout parameter — it is not a terminal tool."
+
 	// buildTimeoutMs ialah nilai selamat untuk command build.
 	buildTimeoutMs = 120000
 
@@ -122,6 +128,12 @@ func ApplySchemaHints(body []byte) []byte {
 		case name == "question":
 			hint = questionHint
 			marker = "STRUCTURED ARRAY"
+		case isEditToolName(name):
+			hint = editHint
+			marker = "READ BEFORE EDIT"
+		case name == "write", name == "read":
+			hint = fileHint
+			marker = "READ BEFORE WRITE"
 		default:
 			continue
 		}

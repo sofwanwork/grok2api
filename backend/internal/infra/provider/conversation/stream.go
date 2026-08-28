@@ -868,21 +868,112 @@ func (t *streamRepeatTracker) trackReasoning(delta, message string) error {
 }
 
 // guardResponseStream 保持 native Responses SSE 的原始字节不变，同时在读取时
-// 解析事件并在检测到循环时关闭上游。
+// 解析事件并在检测到循环时关闭上游。 Responses 是 pass-through — tool call
+// arguments tetap dalam format Responses (function_call output items), jadi
+// tooltimeguard enforcement (timeout raise, no-op edit, dev server rewrite)
+// tidak boleh dilakukan pada response stream ini kerana ia TIDAK di-convert.
+// Arahan kepada model (schema hints dalam request body) tetap berlaku kerana
+// ApplySchemaHints beroperasi pada request, bukan response.
+//
+// Patch #27 (K16): activity guard untuk Responses path — track tool calls
+// dalam response stream supaya reminder tetap di-inject pada hujung.
 func guardResponseStream(source io.ReadCloser) io.ReadCloser {
 	reader, writer := io.Pipe()
 	stream := newStreamPipeReadCloser(reader, source)
 	go func() {
 		defer stream.closeSource()
 		tracker := streamRepeatTracker{}
+		activityGuard := tooltimeguard.NewStreamActivityGuard()
+		noOpState := make([]int, 1)
 		err := consumeSSE(io.TeeReader(source, writer), func(event string, data []byte) error {
 			typeName, root, ok := parseSSEEvent(event, data)
 			if !ok {
 				return nil
 			}
+			// Patch #16/K16: intercept tool call arguments dalam Responses
+			// format. root adalah map[string]json.RawMessage — parse dan
+			// re-encode dengan betul.
+			switch typeName {
+			case "response.function_call_arguments.done":
+				var args string
+				_ = json.Unmarshal(root["arguments"], &args)
+				if args != "" {
+					if corrected, changed := tooltimeguard.EnlargeToolTimeout("bash", args); changed {
+						root["arguments"], _ = json.Marshal(corrected)
+						rebuilt := reencodeSSEData(event, root)
+						_, _ = writer.Write(rebuilt)
+					}
+					if corrected, changed := tooltimeguard.InterceptNoOpEditStateful("edit", args, noOpState); changed {
+						root["arguments"], _ = json.Marshal(corrected)
+						rebuilt := reencodeSSEData(event, root)
+						_, _ = writer.Write(rebuilt)
+					}
+					activityGuard.NoteToolCall("bash", args)
+				}
+			case "response.output_item.done":
+				var item map[string]json.RawMessage
+				if err := json.Unmarshal(root["item"], &item); err != nil {
+					break
+				}
+				var itemType string
+				_ = json.Unmarshal(item["type"], &itemType)
+				if itemType != "function_call" {
+					break
+				}
+				var args string
+				_ = json.Unmarshal(item["arguments"], &args)
+				if args == "" {
+					break
+				}
+				if corrected, changed := tooltimeguard.EnlargeToolTimeout("bash", args); changed {
+					item["arguments"], _ = json.Marshal(corrected)
+					root["item"], _ = json.Marshal(item)
+					rebuilt := reencodeSSEData(event, root)
+					_, _ = writer.Write(rebuilt)
+				}
+				if corrected, changed := tooltimeguard.InterceptNoOpEditStateful("edit", args, noOpState); changed {
+					item["arguments"], _ = json.Marshal(corrected)
+					root["item"], _ = json.Marshal(item)
+					rebuilt := reencodeSSEData(event, root)
+					_, _ = writer.Write(rebuilt)
+				}
+				activityGuard.NoteToolCall("bash", args)
+			}
 			return tracker.trackEvent(typeName, root)
 		})
+		if activityGuard.ShouldRemindDevServer() {
+			reminderJSON, _ := json.Marshal(map[string]any{
+				"type": "response.completed",
+				"response": map[string]any{
+					"output": []any{map[string]any{
+						"type": "reasoning",
+						"summary": []any{map[string]any{
+							"type": "summary_text",
+							"text": tooltimeguard.DevServerReminderText,
+						}},
+					}},
+				},
+			})
+			_, _ = writer.Write([]byte("event: response.completed\ndata: " + string(reminderJSON) + "\n\n"))
+		}
 		_ = writer.CloseWithError(err)
 	}()
 	return stream
+}
+
+func reencodeSSEData(event string, root map[string]json.RawMessage) []byte {
+	encoded, err := json.Marshal(root)
+	if err != nil {
+		return nil
+	}
+	var sb strings.Builder
+	if event != "" {
+		sb.WriteString("event: ")
+		sb.WriteString(event)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("data: ")
+	sb.Write(encoded)
+	sb.WriteString("\n\n")
+	return []byte(sb.String())
 }

@@ -1877,6 +1877,10 @@ attemptLoop:
 				}
 				if verdict == QualityToolDegraded && !degradedDeliver {
 					toolDegradedAttempts++
+					// Patch #21 (K21): reset consecutiveWithholds — tool degradation
+					// is a different failure mode; circuit breaker should not
+					// accumulate across verdict types.
+					consecutiveWithholds = 0
 					if DecideToolDegradationRetry(toolDegradedAttempts-1, holdCfg.ToolDegradationMaxAttempts, hasNextAccount) == QualityActionRetry {
 						_ = response.Body.Close()
 						lease.Release()
@@ -1899,6 +1903,10 @@ attemptLoop:
 				// last body when it runs out.
 				if verdict == QualitySilentThinking {
 					silentThinkingAttempts++
+					// Patch #21 (K21): reset consecutiveWithholds — a non-withhold
+					// verdict breaks the withhold storm; the circuit breaker
+					// should not fire across different verdict types.
+					consecutiveWithholds = 0
 					if DecideSilentThinkingRetry(silentThinkingAttempts-1, holdCfg.SilentThinkingMaxAttempts, hasNextAccount) == QualityActionRetry {
 						_ = response.Body.Close()
 						lease.Release()

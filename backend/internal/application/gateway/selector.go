@@ -1075,7 +1075,24 @@ func (s *Selector) NoteThinking(accountID uint64, hadThinking bool) {
 		current = max(thinkingScoreMin, current-thinkingScoreDown)
 	}
 	s.thinkingScore[accountID] = current
+	// Patch #28 (K18): decay semua score lain ke default supaya score lama
+	// tidak kekal selamanya — akaun yang pernah sihat tetapi kini benak
+	// akan turun ke default dalam beberapa request.
+	for id, score := range s.thinkingScore {
+		if id == accountID {
+			continue
+		}
+		if score > thinkingScoreDefault {
+			s.thinkingScore[id] = score - thinkingScoreDecayStep
+		} else if score < thinkingScoreDefault {
+			s.thinkingScore[id] = score + thinkingScoreDecayStep
+		}
+	}
 }
+
+// thinkingScoreDecayStep ialah jumlah decay per NoteThinking call untuk
+// akaun yang TIDAK sedang dinilai — score lama beransur pulih ke default.
+const thinkingScoreDecayStep = 2
 
 // thinkingScoreOf returns the current soft score for an account; accounts
 // with no observations get the neutral default.

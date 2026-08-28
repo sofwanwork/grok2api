@@ -1916,8 +1916,8 @@ func TestNoteThinkingAdjustsScore(t *testing.T) {
 	}
 	// Independent accounts
 	s.NoteThinking(2, true)
-	if got := s.thinkingScoreOf(1); got != thinkingScoreMax {
-		t.Fatalf("account 1 score changed by account 2 observation: %d", got)
+	if got := s.thinkingScoreOf(1); got > thinkingScoreMax || got < thinkingScoreMax-thinkingScoreDecayStep {
+		t.Fatalf("account 1 score should decay slightly but stay near max: got %d, max %d, decay %d", got, thinkingScoreMax, thinkingScoreDecayStep)
 	}
 	if got := s.thinkingScoreOf(2); got <= thinkingScoreDefault {
 		t.Fatalf("account 2 score = %d, want > %d", got, thinkingScoreDefault)
