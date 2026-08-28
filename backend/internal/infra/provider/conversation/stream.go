@@ -929,8 +929,14 @@ func normalizeContentDelta(delta string) string {
 }
 
 // checkWindowRepetition check jika content window mengandungi baris yang
-// berulang. Ambil 100 char paling akhir, cari dalam 200 char sebelumnya.
-// Jika jumpa 3+ kali → doom loop.
+// berulang. Ambil 80 char paling akhir sebagai "signature", cari dalam
+// 400 char sebelumnya. Jika jumpa 4+ kali → doom loop.
+//
+// Patch #28 v2: guard terhadap false positive pada uniform content
+// (cth. "----", "aaaa", base64 padding). Jika signature mengandungi
+// ≤ 3 unique chars, skip — itu bukan "baris yang berulang" tetapi
+// "karakter yang sama berulang", yang sudah ditangkap oleh exact match
+// atau fuzzy match dengan threshold yang lebih tinggi.
 func (t *streamRepeatTracker) checkWindowRepetition() error {
 	window := t.contentWindow.String()
 	if len(window) < 200 {
@@ -945,6 +951,14 @@ func (t *streamRepeatTracker) checkWindowRepetition() error {
 	if len(signature) < 10 {
 		return nil // too short to be meaningful
 	}
+	// Patch #28 v2: skip jika signature mengandungi terlalu sedikit unique
+	// chars — itu uniform content (separator, padding, table border), bukan
+	// baris teks berulang. Exact/fuzzy match dengan threshold tinggi sudah
+	// cover repetition uniform.
+	uniqueChars := countUniqueChars(signature)
+	if uniqueChars <= 4 {
+		return nil
+	}
 	// Count occurrences dalam 400 char sebelumnya
 	searchStart := 0
 	if len(window) > 400 {
@@ -957,6 +971,16 @@ func (t *streamRepeatTracker) checkWindowRepetition() error {
 		return fmt.Errorf("model output loop detected (content signature repeated %d times in rolling window)", count)
 	}
 	return nil
+}
+
+// countUniqueChars mengira bilangan karakter unik dalam string.
+// "hello" = 4 (h,e,l,o). "---" = 1. "aaaa" = 1.
+func countUniqueChars(s string) int {
+	seen := make(map[rune]struct{})
+	for _, r := range s {
+		seen[r] = struct{}{}
+	}
+	return len(seen)
 }
 
 func (t *streamRepeatTracker) trackReasoning(delta, message string) error {
