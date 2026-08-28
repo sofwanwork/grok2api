@@ -367,6 +367,60 @@ func EnlargeToolTimeout(toolName, arguments string) (string, bool) {
 	return string(updated), true
 }
 
+// StreamActivityGuard (patch #27) menjejaki aktiviti dalam satu stream
+// converter — adakah model pernah (a) run build, (b) start dev server,
+// (c) verify dengan HTTP. Digunakan dalam doneChat untuk inject reminder
+// jika model claim siap tanpa dev server yang aktif.
+type StreamActivityGuard struct {
+	HasBuild    bool     // model run npm run build / next build / vite build
+	HasDevStart bool     // model run Start-Process npm run dev / Start-Process ...
+	HasHTTPVerify bool    // model run Invoke-WebRequest / curl ke localhost
+	UsedTools   bool     // model gunakan mana-mana tool
+}
+
+// NewStreamActivityGuard mencipta guard untuk satu stream converter.
+func NewStreamActivityGuard() *StreamActivityGuard {
+	return &StreamActivityGuard{}
+}
+
+// NoteToolCall merekodkan aktiviti tool call — command yang dijalankan.
+func (g *StreamActivityGuard) NoteToolCall(toolName, command string) {
+	if g == nil {
+		return
+	}
+	if isTerminalToolName(toolName) {
+		g.UsedTools = true
+		lc := strings.ToLower(command)
+		if strings.Contains(lc, "run build") || strings.Contains(lc, " build") ||
+			strings.Contains(lc, "next build") || strings.Contains(lc, "tsc ") {
+			g.HasBuild = true
+		}
+		if strings.Contains(lc, "start-process") || strings.Contains(lc, "start-job") {
+			g.HasDevStart = true
+		}
+		if strings.Contains(lc, "invoke-webrequest") || strings.Contains(lc, "curl") ||
+			strings.Contains(lc, "invoke-restmethod") || strings.Contains(lc, "wget") {
+			if strings.Contains(lc, "localhost") || strings.Contains(lc, "127.0.0.1") ||
+				strings.Contains(lc, "http://") {
+				g.HasHTTPVerify = true
+			}
+		}
+	}
+	if isEditToolName(toolName) || toolName == "write" || toolName == "read" {
+		g.UsedTools = true
+	}
+}
+
+// ShouldRemindDevServer melaporkan sama ada reminder perlu di-inject
+// sebelum stream tamat: model dah gunakan tools (kerja projek web) dan
+// run build, tapi tak pernah start dev server atau verify HTTP.
+func (g *StreamActivityGuard) ShouldRemindDevServer() bool {
+	if g == nil {
+		return false
+	}
+	return g.UsedTools && g.HasBuild && !g.HasDevStart && !g.HasHTTPVerify
+}
+
 // noopEditCount ialah jumlah no-op edit berturut-turut untuk sesi stream
 // semasa (per-converter, patch #26 v2). Reset apabila edit sah berjaya.
 // 3 no-op = circuit breaker trips — model perlu STOP dan tukar strategi.
@@ -374,6 +428,11 @@ const (
 	noOpEditSoftLimit   = 1
 	noOpEditHardLimit   = 2
 )
+
+// DevServerReminderText ialah text yang di-inject sebagai reasoning_content
+// delta sebelum stream tamat — model akan nampak ini dalam konteks dan
+// dapat reminder yang jelas.
+const DevServerReminderText = "\n\n[⚠️ GATEWAY REMINDER (patch #27): You ran a build tool but never started the dev server as a background process or verified with an HTTP request. \"Build passes\" does NOT mean the website works — the user sees an empty browser. Start the dev server NOW with Start-Process (background), wait 5-8 seconds, then verify with Invoke-WebRequest to http://localhost:3000. Only claim \"siap/done\" after you see HTTP 200 with your content.]"
 
 // InterceptNoOpEdit (patch #26 v2) mengesan edit tool calls di mana
 // oldString == newString. Berbanding v1 yang hanya tampal marker, v2:

@@ -99,6 +99,12 @@ func (c *streamConverter) toolArgumentsDoneChat(itemID, arguments string) error 
 			// the done payload is authoritative (it carries the final value).
 		}
 		if arguments != "" {
+			// Patch #27: track tool call activity untuk dev server reminder.
+			if c.activityGuard == nil {
+				c.activityGuard = tooltimeguard.NewStreamActivityGuard()
+			}
+			c.activityGuard.NoteToolCall(tool.Name, arguments)
+
 			// Patch #21 lapisan B: bila model jana timeout terlalu kecil untuk
 			// command lambat (npm install/build dll) — naikkan nilai itu ke
 			// minimum selamat sebelum delta sampai ke client. Idempoten dan
@@ -135,6 +141,15 @@ func (c *streamConverter) doneChat(status string) error {
 	if !c.reasoningEmitted && c.usage.OutputTokensDetails.ReasoningTokens > 0 {
 		placeholder := fmt.Sprintf("[thinking: %d tokens — trace withheld by upstream]", c.usage.OutputTokensDetails.ReasoningTokens)
 		if err := c.chatDelta(map[string]any{"reasoning_content": placeholder}); err != nil {
+			return err
+		}
+	}
+	// Patch #27: dev server reminder — jika model run build tool tapi tak
+	// pernah start dev server atau verify HTTP, inject reminder sebagai
+	// reasoning_content delta supaya model nampak dalam konteks seterusnya
+	// dan user nampak amaran dalam jawapan.
+	if c.activityGuard != nil && c.activityGuard.ShouldRemindDevServer() {
+		if err := c.chatDelta(map[string]any{"reasoning_content": tooltimeguard.DevServerReminderText}); err != nil {
 			return err
 		}
 	}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chenyme/grok2api/backend/internal/pkg/tooltimeguard"
 )
 
 const (
@@ -83,6 +85,9 @@ type streamConverter struct {
 	// noOpEditState menjejaki bilangan no-op edit berturut-turut dalam stream
 	// ini (patch #26 v2) — marker makin tegas setiap retry, reset pada edit sah.
 	noOpEditState    []int
+	// activityGuard (patch #27) menjejaki adakah model run build, start dev
+	// server, atau verify HTTP — untuk inject reminder di doneChat.
+	activityGuard     *tooltimeguard.StreamActivityGuard
 	webSearch         []webSearchCall
 	webSearchEmitted  map[string]bool
 	deferSearchText   bool
