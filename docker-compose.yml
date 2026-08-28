@@ -5,7 +5,9 @@ services:
     container_name: grok2api
     image: "${GROK2API_IMAGE:-ghcr.io/chenyme/grok2api:latest}"
     ports:
-      - "${GROK2API_PORT:-8000}:8000"
+      # S1: Bind ke 127.0.0.1 sahaja — gateway tidak lagi accessible dari luar network.
+      # Kalau perlu akses dari device lain, tukar balik ke "${GROK2API_PORT:-8000}:8000"
+      - "127.0.0.1:${GROK2API_PORT:-8000}:8000"
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
       # When non-empty, overrides the PostgreSQL DSN in config.yaml and enables postgres automatically.
@@ -22,6 +24,13 @@ services:
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
+    # S3: Resource limits — container tidak boleh makan semua RAM/CPU host.
+    # 512MB RAM + 0.5 CPU cukup untuk gateway ini (audit menunjukkan 42MB usage).
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.50"
     # Belt-and-suspenders with the Dockerfile HEALTHCHECK: makes service_healthy
     # in depends_on work even when the image is swapped (e.g. upstream ghcr image).
     healthcheck:
