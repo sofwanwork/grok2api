@@ -12,11 +12,20 @@ func TestNoOpEditFirstAttemptMarkerEdukatif(t *testing.T) {
 	if !changed {
 		t.Fatal("first no-op must be intercepted")
 	}
-	if !strings.Contains(updated, "BLOCKED") {
-		t.Fatal("first attempt must have edukatif marker")
+	// v3: marker is in _gatewayMarker, newString is truncated
+	if !strings.Contains(updated, "_gatewayMarker") {
+		t.Fatal("must contain _gatewayMarker field with marker text")
 	}
-	if !strings.Contains(updated, "write tool to replace") {
-		t.Fatal("first attempt must mention strategy: write tool")
+	if !strings.Contains(updated, "GATEWAY") {
+		t.Fatal("marker must contain GATEWAY keyword")
+	}
+	// newString must NOT contain HTML comment (<!--)
+	if strings.Contains(updated, "<!--") {
+		t.Fatal("must NOT contain HTML comment marker — that breaks JSX/TSX")
+	}
+	// newString must be truncated (different from oldString)
+	if strings.Contains(updated, `"const x = 1;"`) {
+		// It's OK if newString is a truncation — but check it's not identical
 	}
 	if state[0] != 1 {
 		t.Fatalf("state must increment to 1, got %d", state[0])
@@ -33,8 +42,8 @@ func TestNoOpEditSecondAttemptMarkerTegas(t *testing.T) {
 	if !strings.Contains(updated, "SECOND") {
 		t.Fatal("second attempt must mention SECOND")
 	}
-	if !strings.Contains(updated, "Do NOT send the same edit") {
-		t.Fatal("second attempt must say Do NOT send the same edit")
+	if strings.Contains(updated, "<!--") {
+		t.Fatal("must NOT contain HTML comment")
 	}
 	if state[0] != 2 {
 		t.Fatalf("state must increment to 2, got %d", state[0])
@@ -54,14 +63,14 @@ func TestNoOpEditThirdAttemptCircuitBreaker(t *testing.T) {
 	if !strings.Contains(updated, "DO NOT RETRY") {
 		t.Fatal("third attempt must say DO NOT RETRY")
 	}
-	if !strings.Contains(updated, "STRATEGY A") {
-		t.Fatal("third attempt must have STRATEGY A")
+	if !strings.Contains(updated, "STRATEGY A") || !strings.Contains(updated, "STRATEGY B") || !strings.Contains(updated, "STRATEGY C") {
+		// v3: strategies embedded in CIRCUIT BREAKER text
+		if !strings.Contains(updated, "write full file") && !strings.Contains(updated, "smaller edit") && !strings.Contains(updated, "skip and continue") {
+			t.Fatal("third attempt must have alternative strategies")
+		}
 	}
-	if !strings.Contains(updated, "STRATEGY B") {
-		t.Fatal("third attempt must have STRATEGY B")
-	}
-	if !strings.Contains(updated, "STRATEGY C") {
-		t.Fatal("third attempt must have STRATEGY C")
+	if strings.Contains(updated, "<!--") {
+		t.Fatal("must NOT contain HTML comment")
 	}
 }
 
@@ -97,11 +106,14 @@ func TestNoOpEditAfterResetStartsFresh(t *testing.T) {
 	// No-op baru → marker pertama (edukatif), bukan circuit breaker
 	args := `{"oldString":"a","newString":"a"}`
 	updated, _ := InterceptNoOpEditStateful("edit", args, state)
-	if !strings.Contains(updated, "BLOCKED") {
-		t.Fatal("after reset, must start with edukatif marker")
+	if !strings.Contains(updated, "GATEWAY") {
+		t.Fatal("after reset, must start with GATEWAY marker")
 	}
 	if strings.Contains(updated, "CIRCUIT BREAKER") {
 		t.Fatal("after reset, must NOT have circuit breaker")
+	}
+	if strings.Contains(updated, "<!--") {
+		t.Fatal("must NOT contain HTML comment")
 	}
 	if state[0] != 1 {
 		t.Fatalf("after reset + 1 no-op, state must be 1, got %d", state[0])

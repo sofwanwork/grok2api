@@ -16,9 +16,14 @@ func TestInterceptNoOpEditDetectsIdenticalStrings(t *testing.T) {
 	if json.Unmarshal([]byte(updated), &result) != nil {
 		t.Fatal("updated must be valid JSON")
 	}
+	// v3: marker is in _gatewayMarker, newString is truncated
+	marker, _ := result["_gatewayMarker"].(string)
+	if !strings.Contains(marker, "GATEWAY") {
+		t.Fatal("must contain _gatewayMarker with GATEWAY keyword")
+	}
 	newStr, _ := result["newString"].(string)
-	if !strings.Contains(newStr, "BLOCKED") {
-		t.Fatal("newString must contain BLOCKED marker")
+	if strings.Contains(newStr, "<!--") {
+		t.Fatal("must NOT contain HTML comment in newString — breaks JSX/TSX")
 	}
 	oldStr, _ := result["oldString"].(string)
 	if oldStr != "import { SITE } from '@/lib/site';" {
@@ -86,8 +91,6 @@ func TestInterceptNoOpEditLeavesInvalidJSON(t *testing.T) {
 }
 
 func TestInterceptNoOpEditFullFileNoOp(t *testing.T) {
-	// Simulasi dari audit sebenar: model copy seluruh fail tanpa ubah
-	// Gunakan JSON marshal untuk handle escape dengan betul
 	largeStr := strings.Repeat("const x = 1;\n", 50)
 	body := map[string]any{
 		"filePath":  "layout.tsx",
@@ -99,7 +102,16 @@ func TestInterceptNoOpEditFullFileNoOp(t *testing.T) {
 	if !changed {
 		t.Fatal("full-file no-op must be intercepted")
 	}
-	if !strings.Contains(updated, "BLOCKED") {
-		t.Fatal("must contain BLOCKED marker")
+	var result map[string]any
+	if json.Unmarshal([]byte(updated), &result) != nil {
+		t.Fatal("must be valid JSON")
+	}
+	// v3: no HTML comment, marker in _gatewayMarker
+	if strings.Contains(updated, "<!--") {
+		t.Fatal("must NOT contain HTML comment")
+	}
+	marker, _ := result["_gatewayMarker"].(string)
+	if !strings.Contains(marker, "GATEWAY") {
+		t.Fatal("must have _gatewayMarker field")
 	}
 }

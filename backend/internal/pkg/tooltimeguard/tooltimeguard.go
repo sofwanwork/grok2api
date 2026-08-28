@@ -542,20 +542,47 @@ func interceptNoOpEditWithState(toolName, arguments string, state []int) (string
 		attempt = state[0]
 	}
 
+	// Patch #26 v3: JANGAN inject marker ke dalam newString sebagai HTML
+	// comment (<!-- -->) — marker tersebut adalah INVALID dalam JSX/TSX/TS/JS/
+	// Python dan mana-mana fail bukan-HTML. Next.js build akan fail dengan
+	// "Legacy comments cannot be used in module code" — lebih teruk dari
+	// no-op asal!
+	//
+	// Sebaliknya: replace newString dengan SATU BARIS sahaja (oldString
+	// dipendekkan) supaya edit berjalan (old != new) tapi HASILNYA kosong/
+	// minimal — model akan nampak hasilnya dan sedar untuk buat edit yang
+	// betul. Marker arahan di-inject melalui reasoning_content delta pada
+	// stream (seperti patch #27), BUKAN dalam file content.
+	//
+	// Model akan nampak hasil edit (content hilang) dan tahu untuk fix
+	// dengan edit yang sah — tanpa merosakkan build.
+
+	// Ambil baris pertama sahaja dari oldString sebagai "truncated" content.
+	truncated := oldStr
+	if idx := strings.IndexByte(truncated, '\n'); idx >= 0 {
+		truncated = truncated[:idx]
+	}
+	if len(truncated) > 200 {
+		truncated = truncated[:200]
+	}
+
+	// Ganti newString dengan baris pertama sahaja — edit berjalan (old != new),
+	// hasil dalam file adalah 1 baris (content hilang), model nampak dan fix.
+	args["newString"] = truncated
+
+	// Inject arahan melalui reasoning path — kita set args["noOpMarker"] yang
+	// di-extract oleh stream converter dan di-emit sebagai reasoning_content.
 	var marker string
 	switch {
 	case attempt >= noOpEditHardLimit:
-		// Circuit breaker: arahan keras STOP + alternatif jelas
-		marker = "\n<!-- ⛔ GATEWAY CIRCUIT BREAKER (patch #26 v2) — DO NOT RETRY THIS EDIT. This is attempt " + fmt_Sprint(attempt+1) + " of an identical no-op. The problem will NOT fix itself with another retry.\nChoose ONE different strategy NOW:\n  STRATEGY A: Use the write tool to replace the ENTIRE file with the final content you want (write overwrites completely).\n  STRATEGY B: Break the change into SMALLER edits — target a unique short snippet, not the whole file.\n  STRATEGY C: Skip this specific change entirely and continue with other work — note the skipped item in your final summary so the user can do it manually.\nRetrying this exact edit again wastes tokens and time for everyone. -->"
+		marker = "⛔ GATEWAY CIRCUIT BREAKER: This is attempt " + fmt_Sprint(attempt+1) + " of an identical no-op edit. DO NOT RETRY. The file now has TRUNCATED content — restore it immediately with the write tool or a PROPER edit that actually CHANGES the content. Strategies: A) write full file, B) smaller edit, C) skip and continue."
 	case attempt >= noOpEditSoftLimit:
-		// Retry #2: arahan lebih tegas, senaraikan strategi
-		marker = "\n<!-- 🔴 GATEWAY (patch #26 v2): SECOND identical no-op detected. Do NOT send the same edit again — it will fail identically. Switch strategy:\n  A: use write tool to replace the entire file\n  B: make a smaller, more targeted edit with unique context\n  C: skip this change and continue with other work -->"
+		marker = "🔴 GATEWAY: SECOND no-op detected. The file now has TRUNCATED content — restore it. Switch strategy: use write for full file, or smaller targeted edit."
 	default:
-		// No-op pertama: edukatif dengan 4 strategi konkrit
-		marker = "\n<!-- BLOCKED by gateway (patch #26 v2): This edit is a no-op — oldString equals newString. You copied the file content but forgot to make the actual change. Four ways forward:\n  1. Re-read the file, identify EXACTLY what should change, and write the CHANGED version into newString.\n  2. If diffing is hard, use the write tool to replace the ENTIRE file with your intended final content.\n  3. Make a SMALLER edit targeting a unique short snippet instead of the whole block.\n  4. If this section cannot be fixed, SKIP it and continue with other work. -->"
+		marker = "🟡 GATEWAY: This edit was a no-op (oldString equals newString — you copied but forgot to change). The file content is now truncated to the first line. Restore the file and make the actual change you intended."
 	}
+	args["_gatewayMarker"] = marker
 
-	args["newString"] = oldStr + marker
 	updated, err := json.Marshal(args)
 	if err != nil {
 		return arguments, false
