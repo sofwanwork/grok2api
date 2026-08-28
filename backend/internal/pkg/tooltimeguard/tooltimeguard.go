@@ -537,11 +537,6 @@ func interceptNoOpEditWithState(toolName, arguments string, state []int) (string
 		return arguments, false
 	}
 
-	attempt := 0
-	if len(state) > 0 {
-		attempt = state[0]
-	}
-
 	// Patch #26 v3: JANGAN inject marker ke dalam newString sebagai HTML
 	// comment (<!-- -->) — marker tersebut adalah INVALID dalam JSX/TSX/TS/JS/
 	// Python dan mana-mana fail bukan-HTML. Next.js build akan fail dengan
@@ -569,19 +564,6 @@ func interceptNoOpEditWithState(toolName, arguments string, state []int) (string
 	// Ganti newString dengan baris pertama sahaja — edit berjalan (old != new),
 	// hasil dalam file adalah 1 baris (content hilang), model nampak dan fix.
 	args["newString"] = truncated
-
-	// Inject arahan melalui reasoning path — kita set args["noOpMarker"] yang
-	// di-extract oleh stream converter dan di-emit sebagai reasoning_content.
-	var marker string
-	switch {
-	case attempt >= noOpEditHardLimit:
-		marker = "⛔ GATEWAY CIRCUIT BREAKER: This is attempt " + fmt_Sprint(attempt+1) + " of an identical no-op edit. DO NOT RETRY. The file now has TRUNCATED content — restore it immediately with the write tool or a PROPER edit that actually CHANGES the content. Strategies: A) write full file, B) smaller edit, C) skip and continue."
-	case attempt >= noOpEditSoftLimit:
-		marker = "🔴 GATEWAY: SECOND no-op detected. The file now has TRUNCATED content — restore it. Switch strategy: use write for full file, or smaller targeted edit."
-	default:
-		marker = "🟡 GATEWAY: This edit was a no-op (oldString equals newString — you copied but forgot to change). The file content is now truncated to the first line. Restore the file and make the actual change you intended."
-	}
-	args["_gatewayMarker"] = marker
 
 	updated, err := json.Marshal(args)
 	if err != nil {

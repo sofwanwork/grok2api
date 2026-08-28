@@ -16,14 +16,16 @@ func TestInterceptNoOpEditDetectsIdenticalStrings(t *testing.T) {
 	if json.Unmarshal([]byte(updated), &result) != nil {
 		t.Fatal("updated must be valid JSON")
 	}
-	// v3: marker is in _gatewayMarker, newString is truncated
-	marker, _ := result["_gatewayMarker"].(string)
-	if !strings.Contains(marker, "GATEWAY") {
-		t.Fatal("must contain _gatewayMarker with GATEWAY keyword")
+	// v3: no _gatewayMarker, no HTML comment — just truncated newString
+	if _, hasMarker := result["_gatewayMarker"]; hasMarker {
+		t.Fatal("must NOT have _gatewayMarker field — it corrupts tool call arguments")
 	}
 	newStr, _ := result["newString"].(string)
 	if strings.Contains(newStr, "<!--") {
 		t.Fatal("must NOT contain HTML comment in newString — breaks JSX/TSX")
+	}
+	if newStr == "" {
+		t.Fatal("newString must not be empty")
 	}
 	oldStr, _ := result["oldString"].(string)
 	if oldStr != "import { SITE } from '@/lib/site';" {
@@ -106,12 +108,15 @@ func TestInterceptNoOpEditFullFileNoOp(t *testing.T) {
 	if json.Unmarshal([]byte(updated), &result) != nil {
 		t.Fatal("must be valid JSON")
 	}
-	// v3: no HTML comment, marker in _gatewayMarker
+	// v3: no HTML comment, no _gatewayMarker
 	if strings.Contains(updated, "<!--") {
 		t.Fatal("must NOT contain HTML comment")
 	}
-	marker, _ := result["_gatewayMarker"].(string)
-	if !strings.Contains(marker, "GATEWAY") {
-		t.Fatal("must have _gatewayMarker field")
+	if _, hasMarker := result["_gatewayMarker"]; hasMarker {
+		t.Fatal("must NOT have _gatewayMarker field")
+	}
+	newStr, _ := result["newString"].(string)
+	if newStr == "" {
+		t.Fatal("newString must not be empty (truncated to first line)")
 	}
 }
